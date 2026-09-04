@@ -42,13 +42,25 @@ export function agySyncTextToMap() {
   }
   agyAliasMap.value = map
 }
-// 文本框编辑 → agyAliasText（仅内置 ID；留空 = 不映射，不写入文本）
+// 别名行文本的映射源 key（首个分隔符之前）。非 agy 内置 ID 的行（其它客户端的
+// 别名、通配别名 gemini-* 等）面板不展示，但 aliases 是路由器全局配置、被所有
+// 客户端共用——行编辑必须原样保留它们，否则一次编辑+保存会把整台路由器的
+// 其它别名清空。
+function agyLineKey(line) {
+  const sep = ['=', '→', '->'].find(s => line.includes(s))
+  if (!sep) return ''
+  return line.slice(0, line.indexOf(sep)).trim()
+}
+// 载入时从全部别名行中筛出的「非 agy 内置 ID」行（已带 @服务商 后缀，保存可无损回写）。
+export const agyOtherLines = ref([])
+// 文本框编辑 → agyAliasText（内置 ID 行随编辑更新；非内置行原样保留；
+// 留空 = 不映射，不写入文本）
 export function agySetAlias(k, v) {
   agyAliasMap.value = { ...agyAliasMap.value, [k]: String(v || '') }
-  agyAliasText.value = agyBuiltinModels.value
+  const rows = agyBuiltinModels.value
     .filter(m => String(agyAliasMap.value[m] || '').trim())
     .map(m => m + ' = ' + String(agyAliasMap.value[m]).trim())
-    .join('\n')
+  agyAliasText.value = [...agyOtherLines.value.filter(l => String(l).trim()), ...rows].join('\n')
 }
 // 映射目标文本框下拉：聚焦展开接入方式返回的模型列表，按输入过滤，首字母分组 + 字母键定位
 export const agyToOpenFor = ref('')   // 当前展开下拉的内置 ID（同一时刻仅一个）
@@ -132,8 +144,18 @@ export async function agyFetchAliasesMerged() {
     }
     agyAliasText.value = lines.join('\n')
     agySyncTextToMap()
+    // 非内置 ID 的别名行（其它客户端别名 / 通配别名等）单独保留，行编辑不清除
+    const builtin = new Set(agyBuiltinModels.value)
+    agyOtherLines.value = lines.filter(l => {
+      const k = agyLineKey(l)
+      return k !== '' && !builtin.has(k)
+    })
     anyOk = true
-  } catch (e) { agyAliasText.value = ''; agySyncTextToMap() }
+  } catch (e) {
+    agyAliasText.value = ''
+    agyOtherLines.value = []
+    agySyncTextToMap()
+  }
   return anyOk
 }
 // 接入方式返回的权威「模型 → 服务商」归属（载入下拉时构建；覆盖运行时拉取/聚合的

@@ -3,6 +3,12 @@ import { onMounted, computed, ref } from 'vue'
 import { t, i18nState } from '../i18n'
 import { copyText, jsonErrorPos, repairJsonText, pruneIllegalTemplateKeys } from '../utils'
 import { toast } from '../toast'
+import { OPT_KEYS } from './sync/optmap'
+// 下拉/单选选项显示本地化:命中 OPT_KEYS 走词典,未命中(模型名/品牌/协议标识等)回退原文
+const optTxt = v => {
+  const k = v != null ? OPT_KEYS[v] : undefined
+  return k ? t(k) : String(v ?? '')
+}
 import CodeArea from './CodeArea.vue'
 import PermList from './sync/PermList.vue'
 
@@ -434,12 +440,12 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                       <label>{{ t('sync.claude.x.' + f.key) }} <span class="tip"><i>?</i><em>{{ f.key }}</em></span></label>
                       <select v-if="f.type==='bool'" v-model="claudeExtra[f.key]">
                         <option value="">{{ t('sync.default') }}</option>
-                        <option value="true">true</option>
-                        <option value="false">false</option>
+                        <option value="true">{{ t('sync.opt.true') }}</option>
+                        <option value="false">{{ t('sync.opt.false') }}</option>
                       </select>
                       <select v-else-if="f.type==='select'" v-model="claudeExtra[f.key]">
                         <option value=""></option>
-                        <option v-for="o in f.options" :key="o" :value="o">{{ o }}</option>
+                        <option v-for="o in f.options" :key="o" :value="o">{{ optTxt(o) }}</option>
                       </select>
                       <textarea v-else-if="f.type==='list'" v-model="claudeExtra[f.key]" rows="2" class="perm-ta" @wheel="taWheelStop"></textarea>
                       <input v-else :type="f.type==='number' ? 'number' : 'text'" v-model="claudeExtra[f.key]" />
@@ -487,7 +493,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     </div>
                     <div class="field fw-m"><label>{{ t('sync.name') }}</label><input v-model="row.name" :placeholder="t('sync.namePh')" /></div>
                     <div class="field fw-s"><label>{{ t('sync.thinking') }}</label>
-                      <select v-model="row.thinkingLevel"><option value="">{{ t('sync.default') }}</option><option value="low">low</option><option value="high">high</option><option value="max">max</option></select>
+                      <select v-model="row.thinkingLevel"><option value="">{{ t('sync.default') }}</option><option value="low">{{ t('sync.opt.low') }}</option><option value="high">{{ t('sync.opt.high') }}</option><option value="max">{{ t('sync.opt.max') }}</option></select>
                     </div>
                     <div class="field fw-s"><label>{{ t('sync.contextLen') }}</label>
                       <select v-model="row.contextWindow"><option value=""></option><option v-for="v in PI_CONTEXT_OPTIONS" :key="v" :value="String(v)">{{ v }}</option></select>
@@ -495,13 +501,13 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                   <div class="field-row">
                     <div class="field fw-s"><label>{{ t('sync.thinking') }}</label>
-                      <select v-model="row.reasoning"><option :value="true">true</option><option :value="false">false</option></select>
+                      <select v-model="row.reasoning"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
                     </div>
                     <div class="field fw-s"><label>{{ t('sync.supportsTools') }}</label>
-                      <select v-model="row.supportsTools"><option :value="true">true</option><option :value="false">false</option></select>
+                      <select v-model="row.supportsTools"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
                     </div>
                     <div class="field fw-s"><label>{{ t('sync.supportsVision') }}</label>
-                      <select v-model="row.supportsVision"><option :value="true">true</option><option :value="false">false</option></select>
+                      <select v-model="row.supportsVision"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
                     </div>
                   </div>
                 </div>
@@ -526,7 +532,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 </div>
                 <div class="field-row">
                   <div class="field fw-m"><label>{{ t('sync.defaultThinkingLevel') }}</label>
-                    <select v-model="piSettings.defaultThinkingLevel"><option value=""></option><option v-for="o in PI_SETTINGS_THINKING_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="piSettings.defaultThinkingLevel"><option value=""></option><option v-for="o in PI_SETTINGS_THINKING_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                 </div>
               </section>
@@ -538,7 +544,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <div class="pcl-head">
                       <span class="pcl-key">{{ t('sync.steeringMode') }}</span>
                       <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.steeringMode')">
-                        <button v-for="o in PI_STEERING_OPTIONS" :key="o" type="button" class="pcl-opt rules" role="radio" :class="{on: piSettings.steeringMode===o}" :aria-checked="piSettings.steeringMode===o" @click="piSettings.steeringMode = piSettings.steeringMode===o ? '' : o">{{ o }}</button>
+                        <button v-for="o in PI_STEERING_OPTIONS" :key="o" type="button" class="pcl-opt rules" role="radio" :class="{on: piSettings.steeringMode===o}" :aria-checked="piSettings.steeringMode===o" @click="piSettings.steeringMode = piSettings.steeringMode===o ? '' : o">{{ optTxt(o) }}</button>
                       </div>
                     </div>
                   </div>
@@ -546,7 +552,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <div class="pcl-head">
                       <span class="pcl-key">{{ t('sync.followUpMode') }}</span>
                       <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.followUpMode')">
-                        <button v-for="o in PI_STEERING_OPTIONS" :key="o" type="button" class="pcl-opt rules" role="radio" :class="{on: piSettings.followUpMode===o}" :aria-checked="piSettings.followUpMode===o" @click="piSettings.followUpMode = piSettings.followUpMode===o ? '' : o">{{ o }}</button>
+                        <button v-for="o in PI_STEERING_OPTIONS" :key="o" type="button" class="pcl-opt rules" role="radio" :class="{on: piSettings.followUpMode===o}" :aria-checked="piSettings.followUpMode===o" @click="piSettings.followUpMode = piSettings.followUpMode===o ? '' : o">{{ optTxt(o) }}</button>
                       </div>
                     </div>
                   </div>
@@ -554,7 +560,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <div class="pcl-head">
                       <span class="pcl-key">{{ t('sync.defaultProjectTrust') }}</span>
                       <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.defaultProjectTrust')">
-                        <button v-for="o in PI_TRUST_OPTIONS" :key="o" type="button" class="pcl-opt rules" role="radio" :class="{on: piSettings.defaultProjectTrust===o}" :aria-checked="piSettings.defaultProjectTrust===o" @click="piSettings.defaultProjectTrust = piSettings.defaultProjectTrust===o ? '' : o">{{ o }}</button>
+                        <button v-for="o in PI_TRUST_OPTIONS" :key="o" type="button" class="pcl-opt rules" role="radio" :class="{on: piSettings.defaultProjectTrust===o}" :aria-checked="piSettings.defaultProjectTrust===o" @click="piSettings.defaultProjectTrust = piSettings.defaultProjectTrust===o ? '' : o">{{ optTxt(o) }}</button>
                       </div>
                     </div>
                   </div>
@@ -565,7 +571,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <section class="card cfg-card oc-card" id="pi-panel-style">
                 <div class="field-row">
                   <div class="field fw-m"><label>{{ t('sync.theme') }}</label>
-                    <select v-model="piSettings.theme"><option value=""></option><option v-for="o in PI_THEME_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="piSettings.theme"><option value=""></option><option v-for="o in PI_THEME_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.lastChangelog') }} <span class="tip"><i>?</i><em>{{ t('sync.pi.lastChangelogTip') }}</em></span></label><input v-model="piSettings.lastChangelogVersion" placeholder="0.74.0" /></div>
                 </div>
@@ -616,9 +622,9 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m"><label>{{ t('sync.thinking') }}</label>
                     <select v-model="grokForm.reasoningEffort">
                       <option value="">{{ t('sync.default') }}</option>
-                      <option value="low">low</option>
-                      <option value="high">high</option>
-                      <option value="max">max</option>
+                      <option value="low">{{ t('sync.opt.low') }}</option>
+                      <option value="high">{{ t('sync.opt.high') }}</option>
+                      <option value="max">{{ t('sync.opt.max') }}</option>
                     </select>
                   </div>
                 </div>
@@ -640,7 +646,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-s"><label>{{ t('sync.topP') }}</label><input v-model="grokForm.topP" type="number" step="0.05" min="0" max="1" placeholder="0.95" /></div>
                   <div class="field fw-s"><label>{{ t('sync.maxTokens') }}</label><input v-model="grokForm.maxTokens" type="number" min="1" placeholder="8192" /></div>
                   <div class="field fw-s"><label>{{ t('sync.grok.supportsBackendSearch') }}</label>
-                    <select v-model="grokForm.supportsBackendSearch"><option value="">{{ t('sync.default') }}</option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.supportsBackendSearch"><option value="">{{ t('sync.default') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                 </div>
                 <div class="field-row">
@@ -656,37 +662,37 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <section class="card cfg-card" id="grok-panel-ui">
                 <div class="cfg-grid">
                   <div class="field fw-m"><label>{{ t('sync.theme') }}</label>
-                    <select v-model="grokForm.uiTheme"><option value=""></option><option value="auto">auto</option><option value="dark">dark</option><option value="light">light</option></select>
+                    <select v-model="grokForm.uiTheme"><option value=""></option><option value="auto">{{ t('sync.opt.auto') }}</option><option value="dark">{{ t('sync.opt.dark') }}</option><option value="light">{{ t('sync.opt.light') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.simpleMode') }}</label>
-                    <select v-model="grokForm.uiSimpleMode"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiSimpleMode"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.vimMode') }}</label>
-                    <select v-model="grokForm.uiVim"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiVim"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.scrollSpeed') }}</label><input type="number" v-model="grokForm.uiScrollSpeed" placeholder="50" />
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.compactMode') }}</label>
-                    <select v-model="grokForm.uiCompact"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiCompact"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.grok.showThinking') }}</label>
-                    <select v-model="grokForm.uiThinking"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiThinking"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.maxThoughtsWidth') }}</label><input type="number" v-model="grokForm.uiMaxThoughtsWidth" placeholder="120" />
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.grok.defaultPerm') }}</label><input v-model="grokForm.uiDefaultPerm" placeholder="always_allow_all_sessions" />
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.rememberApprovals') }}</label>
-                    <select v-model="grokForm.uiRememberApprovals"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiRememberApprovals"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.groupVerbs') }}</label>
-                    <select v-model="grokForm.uiGroupVerbs"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiGroupVerbs"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.collapsedEdit') }}</label>
-                    <select v-model="grokForm.uiCollapsedEdit"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiCollapsedEdit"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.pageFlip') }}</label>
-                    <select v-model="grokForm.uiPageFlip"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.uiPageFlip"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.grok.screenMode') }}</label><input v-model="grokForm.uiScreenMode" placeholder="fullscreen" />
                   </div>
@@ -711,7 +717,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <section class="card cfg-card" id="grok-panel-other">
                 <div class="cfg-grid">
                   <div class="field fw-m"><label>{{ t('sync.grok.autoUpdate') }}</label>
-                    <select v-model="grokForm.autoUpdate"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.autoUpdate"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.grok.autoCompact') }}</label><input type="number" v-model="grokForm.autoCompactThreshold" placeholder="85" /></div>
                 </div>
@@ -721,22 +727,22 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <section class="card cfg-card" id="grok-panel-features">
                 <div class="cfg-grid">
                   <div class="field fw-s"><label>{{ t('sync.grok.telemetry') }}</label>
-                    <select v-model="grokForm.featTelemetry"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.featTelemetry"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.feedback') }}</label>
-                    <select v-model="grokForm.featFeedback"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.featFeedback"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.lspTools') }}</label>
-                    <select v-model="grokForm.featLsp"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.featLsp"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.codebaseIndexing') }}</label>
-                    <select v-model="grokForm.featIndexing"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.featIndexing"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.twoPassCompaction') }}</label>
-                    <select v-model="grokForm.featTwoPass"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.featTwoPass"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.remoteFetch') }}</label>
-                    <select v-model="grokForm.featRemoteFetch"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.featRemoteFetch"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                 </div>
               </section>
@@ -745,10 +751,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <section class="card cfg-card" id="grok-panel-compat">
                 <div class="cfg-grid">
                   <div class="field fw-s"><label>{{ t('sync.grok.compatClaudeMcps') }}</label>
-                    <select v-model="grokForm.compatClaudeMcps"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.compatClaudeMcps"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.grok.compatCursorMcps') }}</label>
-                    <select v-model="grokForm.compatCursorMcps"><option value=""></option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="grokForm.compatCursorMcps"><option value=""></option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                 </div>
               </section>
@@ -822,10 +828,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.gemini.authType') }}</label>
                     <select v-model="geminiForm.selectedAuthType">
-                      <option value="gemini-api-key">gemini-api-key</option>
-                      <option value="vertex-ai">vertex-ai</option>
-                      <option value="oauth-personal">oauth-personal</option>
-                      <option value="cloud-shell">cloud-shell</option>
+                      <option value="gemini-api-key">{{ t('sync.opt.geminiApiKey') }}</option>
+                      <option value="vertex-ai">{{ t('sync.opt.vertexAi') }}</option>
+                      <option value="oauth-personal">{{ t('sync.opt.oauthPersonal') }}</option>
+                      <option value="cloud-shell">{{ t('sync.opt.cloudShell') }}</option>
                     </select>
                   </div>
                 </div>
@@ -836,20 +842,20 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <select v-model="geminiForm.thinking">
                       <option value="">{{ t('sync.default') }}</option>
                       <option value="off">{{ t('sync.gemini.optOff') }}</option>
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
+                      <option value="low">{{ t('sync.opt.low') }}</option>
+                      <option value="medium">{{ t('sync.opt.medium') }}</option>
+                      <option value="high">{{ t('sync.opt.high') }}</option>
                     </select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.gemini.effortOpenai') }}</label>
                     <select v-model="geminiForm.effortOpenai">
                       <option value="">{{ t('sync.default') }}</option>
-                      <option value="none">none</option>
-                      <option value="minimal">minimal</option>
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
-                      <option value="xhigh">xhigh</option>
+                      <option value="none">{{ t('sync.opt.none') }}</option>
+                      <option value="minimal">{{ t('sync.opt.minimal') }}</option>
+                      <option value="low">{{ t('sync.opt.low') }}</option>
+                      <option value="medium">{{ t('sync.opt.medium') }}</option>
+                      <option value="high">{{ t('sync.opt.high') }}</option>
+                      <option value="xhigh">{{ t('sync.opt.xhigh') }}</option>
                     </select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.gemini.budgetAnthropic') }}</label>
@@ -901,15 +907,15 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <section class="card cfg-card">
                 <div class="cfg-grid">
                   <div class="field fw-m"><label>{{ t('sync.theme') }}</label>
-                    <select v-model="geminiForm.theme"><option value=""></option><option value="dark">dark</option><option value="light">light</option><option value="auto">auto</option></select>
+                    <select v-model="geminiForm.theme"><option value=""></option><option value="dark">{{ t('sync.opt.dark') }}</option><option value="light">{{ t('sync.opt.light') }}</option><option value="auto">{{ t('sync.opt.auto') }}</option></select>
                   </div>
-                  <div class="field fw-m"><label>{{ t('sync.gemini.hideTitle') }}</label><select v-model="geminiForm.hideWindowTitle"><option :value="true">true</option><option :value="false">false</option></select></div>
+                  <div class="field fw-m"><label>{{ t('sync.gemini.hideTitle') }}</label><select v-model="geminiForm.hideWindowTitle"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select></div>
                 </div>
 
                 <div class="cfg-grid">
-                  <div class="field fw-s"><label>{{ t('sync.gemini.vimMode') }}</label><select v-model="geminiForm.vimMode"><option :value="true">true</option><option :value="false">false</option></select></div>
-                  <div class="field fw-m"><label>{{ t('sync.gemini.disableUpdate') }}</label><select v-model="geminiForm.disableAutoUpdate"><option :value="true">true</option><option :value="false">false</option></select></div>
-                  <div class="field fw-s"><label>{{ t('sync.gemini.debugMode') }}</label><select v-model="geminiForm.debugMode"><option :value="true">true</option><option :value="false">false</option></select></div>
+                  <div class="field fw-s"><label>{{ t('sync.gemini.vimMode') }}</label><select v-model="geminiForm.vimMode"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select></div>
+                  <div class="field fw-m"><label>{{ t('sync.gemini.disableUpdate') }}</label><select v-model="geminiForm.disableAutoUpdate"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select></div>
+                  <div class="field fw-s"><label>{{ t('sync.gemini.debugMode') }}</label><select v-model="geminiForm.debugMode"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select></div>
                 </div>
               </section>
             </template>
@@ -992,10 +998,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m"><label>{{ t('sync.agy.toolPermission') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.toolPermissionTip') }}</em></span></label>
                     <select v-model="agyForm.toolPermission">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="strict">strict</option>
-                      <option value="request-review">request-review</option>
-                      <option value="always-proceed">always-proceed</option>
-                      <option value="proceed-in-sandbox">proceed-in-sandbox</option>
+                      <option value="strict">{{ t('sync.opt.strict') }}</option>
+                      <option value="request-review">{{ t('sync.opt.requestReview') }}</option>
+                      <option value="always-proceed">{{ t('sync.opt.alwaysProceed') }}</option>
+                      <option value="proceed-in-sandbox">{{ t('sync.opt.proceedInSandbox') }}</option>
                     </select>
                   </div>
                 </div>
@@ -1015,9 +1021,9 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 <div class="perm-list">
                   <div class="perm-row-wrap" :class="{ on: agyForm.enableTerminalSandbox }">
                     <div class="pcl-head">
-                      <span class="pcl-key">enableTerminalSandbox</span>
+                      <span class="pcl-key">{{ t('sync.agy.enableTerminalSandbox') }}</span>
                       <span class="tip"><i>?</i><em>{{ t('sync.agy.sandboxTip') }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" aria-label="enableTerminalSandbox">
+                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.enableTerminalSandbox')">
                         <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.enableTerminalSandbox==='true'}" :aria-checked="agyForm.enableTerminalSandbox==='true'" @click="agyForm.enableTerminalSandbox = agyForm.enableTerminalSandbox==='true' ? '' : 'true'">true</button>
                         <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.enableTerminalSandbox==='false'}" :aria-checked="agyForm.enableTerminalSandbox==='false'" @click="agyForm.enableTerminalSandbox = agyForm.enableTerminalSandbox==='false' ? '' : 'false'">false</button>
                       </div>
@@ -1025,8 +1031,8 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                   <div class="perm-row-wrap" :class="{ on: agyForm.allowNonWorkspaceAccess }">
                     <div class="pcl-head">
-                      <span class="pcl-key">allowNonWorkspaceAccess</span>
-                      <div class="pcl-opts" role="radiogroup" aria-label="allowNonWorkspaceAccess">
+                      <span class="pcl-key">{{ t('sync.agy.allowNonWorkspaceAccess') }}</span>
+                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.allowNonWorkspaceAccess')">
                         <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.allowNonWorkspaceAccess==='true'}" :aria-checked="agyForm.allowNonWorkspaceAccess==='true'" @click="agyForm.allowNonWorkspaceAccess = agyForm.allowNonWorkspaceAccess==='true' ? '' : 'true'">true</button>
                         <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.allowNonWorkspaceAccess==='false'}" :aria-checked="agyForm.allowNonWorkspaceAccess==='false'" @click="agyForm.allowNonWorkspaceAccess = agyForm.allowNonWorkspaceAccess==='false' ? '' : 'false'">false</button>
                       </div>
@@ -1034,8 +1040,8 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                   <div class="perm-row-wrap" :class="{ on: agyForm.useG1Credits }">
                     <div class="pcl-head">
-                      <span class="pcl-key">useG1Credits</span>
-                      <div class="pcl-opts" role="radiogroup" aria-label="useG1Credits">
+                      <span class="pcl-key">{{ t('sync.agy.useG1Credits') }}</span>
+                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.useG1Credits')">
                         <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.useG1Credits==='true'}" :aria-checked="agyForm.useG1Credits==='true'" @click="agyForm.useG1Credits = agyForm.useG1Credits==='true' ? '' : 'true'">true</button>
                         <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.useG1Credits==='false'}" :aria-checked="agyForm.useG1Credits==='false'" @click="agyForm.useG1Credits = agyForm.useG1Credits==='false' ? '' : 'false'">false</button>
                       </div>
@@ -1043,8 +1049,8 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                   <div class="perm-row-wrap" :class="{ on: agyForm.enableTelemetry }">
                     <div class="pcl-head">
-                      <span class="pcl-key">enableTelemetry</span>
-                      <div class="pcl-opts" role="radiogroup" aria-label="enableTelemetry">
+                      <span class="pcl-key">{{ t('sync.agy.enableTelemetry') }}</span>
+                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.enableTelemetry')">
                         <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.enableTelemetry==='true'}" :aria-checked="agyForm.enableTelemetry==='true'" @click="agyForm.enableTelemetry = agyForm.enableTelemetry==='true' ? '' : 'true'">true</button>
                         <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.enableTelemetry==='false'}" :aria-checked="agyForm.enableTelemetry==='false'" @click="agyForm.enableTelemetry = agyForm.enableTelemetry==='false' ? '' : 'false'">false</button>
                       </div>
@@ -1059,9 +1065,9 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m"><label>{{ t('sync.theme') }}</label>
                     <select v-model="agyForm.colorScheme">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="terminal">terminal</option>
-                      <option value="dark">dark</option>
-                      <option value="light">light</option>
+                      <option value="terminal">{{ t('sync.opt.terminal') }}</option>
+                      <option value="dark">{{ t('sync.opt.dark') }}</option>
+                      <option value="light">{{ t('sync.opt.light') }}</option>
                       <option value="solarized dark">solarized dark</option>
                       <option value="solarized light">solarized light</option>
                       <option value="tokyo night">tokyo night</option>
@@ -1070,28 +1076,28 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m"><label>{{ t('sync.agy.altScreenMode') }}</label>
                     <select v-model="agyForm.altScreenMode">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="default">default</option>
-                      <option value="always">always</option>
-                      <option value="never">never</option>
+                      <option value="default">{{ t('sync.opt.default') }}</option>
+                      <option value="always">{{ t('sync.opt.always') }}</option>
+                      <option value="never">{{ t('sync.opt.never') }}</option>
                     </select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.agy.runningLightSpeed') }}</label>
                     <select v-model="agyForm.runningLightSpeed">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option v-for="o in ['fast','medium','slow','off']" :key="o" :value="o">{{ o }}</option>
+                      <option v-for="o in ['fast','medium','slow','off']" :key="o" :value="o">{{ optTxt(o) }}</option>
                     </select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.agy.verbosity') }}</label>
                     <select v-model="agyForm.verbosity">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="high">high</option>
-                      <option value="low">low</option>
+                      <option value="high">{{ t('sync.opt.high') }}</option>
+                      <option value="low">{{ t('sync.opt.low') }}</option>
                     </select>
                   </div>
                   <div class="field fw-l"><label>{{ t('sync.agy.editor') }}</label>
                     <select v-model="agyForm.editor">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="auto">auto</option>
+                      <option value="auto">{{ t('sync.opt.auto') }}</option>
                       <option value="vim">vim</option>
                       <option value="emacs">emacs</option>
                     </select>
@@ -1105,16 +1111,16 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m"><label>{{ t('sync.agy.subagentsEnabled') }}</label>
                     <select v-model="agyForm.subagentsEnabled">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="true">true</option>
-                      <option value="false">false</option>
+                      <option value="true">{{ t('sync.opt.true') }}</option>
+                      <option value="false">{{ t('sync.opt.false') }}</option>
                     </select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.agy.subagentsMaxSteps') }}</label><input type="number" min="1" v-model="agyForm.subagentsMaxSteps" placeholder="如 10" /></div>
                   <div class="field fw-m"><label>{{ t('sync.agy.subagentsAuto') }}</label>
                     <select v-model="agyForm.subagentsAutoExecuteTools">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="true">true</option>
-                      <option value="false">false</option>
+                      <option value="true">{{ t('sync.opt.true') }}</option>
+                      <option value="false">{{ t('sync.opt.false') }}</option>
                     </select>
                   </div>
                 </div>
@@ -1151,7 +1157,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     </div>
                     <div class="field fw-m"><label>{{ t('sync.oc.displayName') }}</label><input v-model="row.name" /></div>
                     <div class="field fw-s"><label>{{ t('sync.thinking') }}</label>
-                      <select v-model="row.reasoning"><option value="">{{ t('sync.default') }}</option><option value="minimal">minimal</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>
+                      <select v-model="row.reasoning"><option value="">{{ t('sync.default') }}</option><option value="minimal">{{ t('sync.opt.minimal') }}</option><option value="low">{{ t('sync.opt.low') }}</option><option value="medium">{{ t('sync.opt.medium') }}</option><option value="high">{{ t('sync.opt.high') }}</option></select>
                     </div>
                     <div class="field fw-s"><label>{{ t('sync.temperature') }} <span class="tip"><i>?</i><em>{{ t('sync.samplingTemp') }}</em></span></label><input type="number" step="0.1" min="0" max="2" v-model="row.temperature" placeholder="如 0.7" /></div>
                     <button type="button" class="btn btn-xs btn-ghost row-del" @click="ocModels.splice(i,1)">×</button>
@@ -1252,20 +1258,20 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <div class="field-row">
                       <div class="field fw-m"><label>{{ t('sync.oc.displayName') }}</label><input v-model="row.name" /></div>
                       <div class="field fw-s"><label>{{ t('sync.kilo.reasoning') }}</label>
-                        <select v-model="row.reasoning"><option value="">{{ t('sync.default') }}</option><option value="true">true</option><option value="false">false</option></select>
+                        <select v-model="row.reasoning"><option value="">{{ t('sync.default') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                       </div>
                       <div class="field fw-s"><label>{{ t('sync.kilo.effort') }} <span class="tip"><i>?</i><em>options.reasoningEffort</em></span></label>
                         <select v-model="row.effort">
                           <option value="">{{ t('sync.default') }}</option>
-                          <option value="minimal">minimal</option>
-                          <option value="low">low</option>
-                          <option value="medium">medium</option>
-                          <option value="high">high</option>
-                          <option value="max">max</option>
+                          <option value="minimal">{{ t('sync.opt.minimal') }}</option>
+                          <option value="low">{{ t('sync.opt.low') }}</option>
+                          <option value="medium">{{ t('sync.opt.medium') }}</option>
+                          <option value="high">{{ t('sync.opt.high') }}</option>
+                          <option value="max">{{ t('sync.opt.max') }}</option>
                         </select>
                       </div>
                       <div class="field fw-s"><label>{{ t('sync.kilo.vision') }}</label>
-                        <select v-model="row.vision"><option value="">{{ t('sync.default') }}</option><option value="true">true</option><option value="false">false</option></select>
+                        <select v-model="row.vision"><option value="">{{ t('sync.default') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                       </div>
                       <div class="field fw-l"><label>{{ t('sync.id') }}</label>
                         <div class="pi-sel">
@@ -1339,10 +1345,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m"><label>{{ t('sync.thinking') }} <span class="tip"><i>?</i><em>model_reasoning_effort</em></span></label>
                     <select v-model="codexForm.reasoning">
                       <option value="">{{ t('sync.default') }}</option>
-                      <option value="minimal">minimal</option>
-                      <option value="low">low</option>
-                      <option value="medium">medium</option>
-                      <option value="high">high</option>
+                      <option value="minimal">{{ t('sync.opt.minimal') }}</option>
+                      <option value="low">{{ t('sync.opt.low') }}</option>
+                      <option value="medium">{{ t('sync.opt.medium') }}</option>
+                      <option value="high">{{ t('sync.opt.high') }}</option>
                     </select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.temperature') }} <span class="tip"><i>?</i><em>model_temperature</em></span></label><input type="number" step="0.1" min="0" max="2" v-model="codexForm.temperature" placeholder="如 0.7" /></div>
@@ -1443,10 +1449,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                   <div class="field-row">
                     <div class="field fw-s"><label>{{ t('sync.thinking') }} {{ t('sync.enabled') }}</label>
-                      <select v-model="row.reasoningEnabled"><option :value="false">false</option><option :value="true">true</option></select>
+                      <select v-model="row.reasoningEnabled"><option :value="false">{{ t('sync.opt.false') }}</option><option :value="true">{{ t('sync.opt.true') }}</option></select>
                     </div>
                     <div class="field fw-m"><label>{{ t('sync.clineEffort') }}</label>
-                      <select v-model="row.reasoningEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                      <select v-model="row.reasoningEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                     </div>
                   </div>
                 </div>
@@ -1483,7 +1489,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <select v-model="clineLastUsed"><option value=""></option><option v-for="k in clineProviderKeys" :key="k" :value="k">{{ k }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.cline.connTokenSource') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.connTokenSourceTip') }}</em></span></label>
-                    <select v-model="clineConnForm.tokenSource"><option value=""></option><option value="manual">manual</option><option value="migration">migration</option><option value="env">env</option></select>
+                    <select v-model="clineConnForm.tokenSource"><option value=""></option><option value="manual">{{ t('sync.opt.manual') }}</option><option value="migration">{{ t('sync.opt.migration') }}</option><option value="env">{{ t('sync.opt.env') }}</option></select>
                   </div>
                   <div class="field fw-l"><label>{{ t('sync.cline.connUpdatedAt') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.connUpdatedAtTip') }}</em></span></label><input :value="clineConnForm.updatedAt" readonly /></div>
                 </div>
@@ -1508,10 +1514,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 </div>
                 <div class="field-row">
                   <div class="field fw-s"><label>{{ t('sync.enabled') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.connReasoningTip') }}</em></span></label>
-                    <select v-model="clineConnForm.reasoningEnabled"><option :value="false">false</option><option :value="true">true</option></select>
+                    <select v-model="clineConnForm.reasoningEnabled"><option :value="false">{{ t('sync.opt.false') }}</option><option :value="true">{{ t('sync.opt.true') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.effort') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.connReasoningTip') }}</em></span></label>
-                    <select v-model="clineConnForm.reasoningEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="clineConnForm.reasoningEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                 </div>
                 <div class="field-row">
@@ -1561,16 +1567,16 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 </div>
                 <div class="field-row">
                   <div class="field fw-m"><label>{{ t('sync.cline.actEffort') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.actEffortTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.actEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="clineGlobalForm.actEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.cline.planEffort') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.planEffortTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.planEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="clineGlobalForm.planEffort"><option value="">{{ t('sync.default') }}</option><option v-for="o in CLINE_REASONING_EFFORT_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                 </div>
                 <div class="cline-subhead">{{ t('sync.cline.gTitle') }}</div>
                 <div class="field-row">
                   <div class="field fw-m"><label>{{ t('sync.cline.gMode') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gModeTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.mode"><option value=""></option><option value="act">act</option><option value="plan">plan</option></select>
+                    <select v-model="clineGlobalForm.mode"><option value=""></option><option value="act">{{ t('sync.opt.act') }}</option><option value="plan">{{ t('sync.opt.plan') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.cline.gActProvider') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gActProviderTip') }}</em></span></label>
                     <select v-model="clineGlobalForm.actProvider"><option value=""></option><option v-for="o in CLINE_GLOBAL_PROVIDER_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
@@ -1584,13 +1590,13 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 </div>
                 <div class="field-row">
                   <div class="field fw-m"><label>{{ t('sync.cline.gMcpDisplay') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gMcpDisplayTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.mcpDisplayMode"><option value=""></option><option value="rich">rich</option><option value="compact">compact</option></select>
+                    <select v-model="clineGlobalForm.mcpDisplayMode"><option value=""></option><option value="rich">{{ t('sync.opt.rich') }}</option><option value="compact">{{ t('sync.opt.compact') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.cline.gTelemetry') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gTelemetryTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.telemetrySetting"><option value=""></option><option value="enabled">enabled</option><option value="disabled">disabled</option></select>
+                    <select v-model="clineGlobalForm.telemetrySetting"><option value=""></option><option value="enabled">{{ t('sync.opt.enabled') }}</option><option value="disabled">{{ t('sync.opt.disabled') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.cline.gTerminalExec') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gTerminalExecTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.vscodeTerminalExec"><option value=""></option><option v-for="o in CLINE_GLOBAL_TERMINAL_EXEC_OPTIONS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="clineGlobalForm.vscodeTerminalExec"><option value=""></option><option v-for="o in CLINE_GLOBAL_TERMINAL_EXEC_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.cline.gMaxRequests') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gMaxRequestsTip') }}</em></span></label><input type="number" min="1" v-model="clineGlobalForm.maxRequests" placeholder="20" /></div>
                 </div>
@@ -1600,16 +1606,16 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 </div>
                 <div class="field-row">
                   <div class="field fw-s"><label>{{ t('sync.cline.gAutoApprove') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gAutoApproveTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.autoApproveEnabled"><option value="">{{ t('sync.notWrite') }}</option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="clineGlobalForm.autoApproveEnabled"><option value="">{{ t('sync.notWrite') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.cline.gSubagents') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gSubagentsTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.subagentsEnabled"><option value="">{{ t('sync.notWrite') }}</option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="clineGlobalForm.subagentsEnabled"><option value="">{{ t('sync.notWrite') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.cline.gBackgroundEdit') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gBackgroundEditTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.backgroundEditEnabled"><option value="">{{ t('sync.notWrite') }}</option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="clineGlobalForm.backgroundEditEnabled"><option value="">{{ t('sync.notWrite') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.cline.gFeatureTips') }} <span class="tip"><i>?</i><em>{{ t('sync.cline.gFeatureTipsTip') }}</em></span></label>
-                    <select v-model="clineGlobalForm.showFeatureTips"><option value="">{{ t('sync.notWrite') }}</option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="clineGlobalForm.showFeatureTips"><option value="">{{ t('sync.notWrite') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                 </div>
                 <div class="field">
@@ -1667,7 +1673,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     </div>
                   </div>
                   <div class="field"><label>{{ t('sync.cc.globalTier') }} <span class="tip"><i>?</i><em>{{ t('sync.cc.globalTierTip') }}</em></span></label>
-                    <select v-model="ccForm.globalEffort"><option value="">{{ t('sync.none') }}</option><option v-for="o in CC_EFFORT_LEVELS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="ccForm.globalEffort"><option value="">{{ t('sync.none') }}</option><option v-for="o in CC_EFFORT_LEVELS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                   <div class="field"><label>{{ t('sync.noLogin') }} <span class="tip"><i>?</i><em>{{ t('sync.cc.nologinTip') }}</em></span></label>
                     <button type="button" class="cc-toggle" :class="{ on: ccNoLogin }" @click="ccNoLogin = !ccNoLogin; ccToggleNoLogin()">{{ ccNoLogin ? t('sync.enabled') : t('sync.disabled') }}</button>
@@ -1688,7 +1694,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     </div>
                   </div>
                   <div class="field"><label>{{ t('sync.cc.tierLabel') }}</label>
-                    <select v-model="row.level"><option value="">{{ t('sync.none') }}</option><option v-for="o in CC_EFFORT_LEVELS" :key="o" :value="o">{{ o }}</option></select>
+                    <select v-model="row.level"><option value="">{{ t('sync.none') }}</option><option v-for="o in CC_EFFORT_LEVELS" :key="o" :value="o">{{ optTxt(o) }}</option></select>
                   </div>
                   <button type="button" class="cc-del-pill" @click="ccForm.effortRows.splice(i,1)">{{ t('common.delete') }}</button>
                 </div>
@@ -1759,10 +1765,10 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-s"><label>{{ t('sync.maxTokens') }}</label><input type="number" min="1" v-model="hermesForm.maxOutputTokens" placeholder="如 8192" /></div>
                   <div class="field fw-s"><label>{{ t('sync.maxCtxTokens') }}</label><input type="number" min="1" v-model="hermesForm.maxCtxTokens" placeholder="如 128000" /></div>
                   <div class="field fw-s"><label>{{ t('sync.thinkingFlag') }}</label>
-                    <select v-model="hermesForm.thinking"><option value="">{{ t('sync.notWrite') }}</option><option value="true">true</option><option value="false">false</option></select>
+                    <select v-model="hermesForm.thinking"><option value="">{{ t('sync.notWrite') }}</option><option value="true">{{ t('sync.opt.true') }}</option><option value="false">{{ t('sync.opt.false') }}</option></select>
                   </div>
                   <div class="field fw-m"><label>{{ t('sync.thinkingEffort') }} <span class="tip"><i>?</i><em>thinking=true 时生效</em></span></label>
-                    <select v-model="hermesForm.thinkingEffort"><option value="">{{ t('sync.default') }}</option><option value="low">low</option><option value="medium">medium</option><option value="high">high</option></select>
+                    <select v-model="hermesForm.thinkingEffort"><option value="">{{ t('sync.default') }}</option><option value="low">{{ t('sync.opt.low') }}</option><option value="medium">{{ t('sync.opt.medium') }}</option><option value="high">{{ t('sync.opt.high') }}</option></select>
                   </div>
                 </div>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.hermes.paramsTip') }}</em></div>
@@ -1843,7 +1849,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <div class="field fw-m"><label>{{ t('sync.kimi.modelEffort') }} <span class="tip"><i>?</i><em>{{ t('sync.kimi.modelEffortTip') }}</em></span></label>
                       <select v-model="row.effort">
                         <option value="">{{ t('sync.default') }}</option>
-                        <option v-for="o in KIMI_EFFORT_LEVELS" :key="o" :value="o">{{ o }}</option>
+                        <option v-for="o in KIMI_EFFORT_LEVELS" :key="o" :value="o">{{ optTxt(o) }}</option>
                       </select>
                     </div>
                     <div class="field fw-m"><label>{{ t('sync.displayName') }} <span class="tip"><i>?</i><em>{{ t('sync.kimi.displayTip') }}</em></span></label><input v-model="row.display" :placeholder="t('sync.kimi.displayPh')" /></div>
@@ -1859,21 +1865,21 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-s"><label>{{ t('sync.kimi.thinkingEnabled') }} <span class="tip"><i>?</i><em>{{ t('sync.kimi.thinkingEnabledTip') }}</em></span></label>
                     <select v-model="kimiThinking.enabled">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="true">true</option>
-                      <option value="false">false</option>
+                      <option value="true">{{ t('sync.opt.true') }}</option>
+                      <option value="false">{{ t('sync.opt.false') }}</option>
                     </select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.kimi.thinkingEffort') }} <span class="tip"><i>?</i><em>{{ t('sync.kimi.thinkingEffortTip') }}</em></span></label>
                     <select v-model="kimiThinking.effort">
                       <option value="">{{ t('sync.default') }}</option>
-                      <option v-for="o in KIMI_EFFORT_LEVELS" :key="o" :value="o">{{ o }}</option>
+                      <option v-for="o in KIMI_EFFORT_LEVELS" :key="o" :value="o">{{ optTxt(o) }}</option>
                     </select>
                   </div>
                   <div class="field fw-s"><label>{{ t('sync.kimi.thinkingKeep') }} <span class="tip"><i>?</i><em>{{ t('sync.kimi.thinkingKeepTip') }}</em></span></label>
                     <select v-model="kimiThinking.keep">
                       <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="all">all</option>
-                      <option value="off">off</option>
+                      <option value="all">{{ t('sync.opt.all') }}</option>
+                      <option value="off">{{ t('sync.opt.off') }}</option>
                     </select>
                   </div>
                 </div>
@@ -1885,9 +1891,9 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 <div class="field" style="max-width:280px"><label>{{ t('sync.kimi.permMode') }} <span class="tip"><i>?</i><em>{{ t('sync.kimi.permModeTip') }}</em></span></label>
                   <select v-model="kimiForm.permMode">
                     <option value="">{{ t('sync.notWrite') }}</option>
-                    <option value="manual">manual</option>
-                    <option value="yolo">yolo</option>
-                    <option value="auto">auto</option>
+                    <option value="manual">{{ t('sync.opt.manual') }}</option>
+                    <option value="yolo">{{ t('sync.opt.yolo') }}</option>
+                    <option value="auto">{{ t('sync.opt.auto') }}</option>
                   </select>
                 </div>
                 <div class="perm-list">
@@ -2111,13 +2117,13 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 <div class="field fw-m"><label>effortLevel <span class="tip"><i>?</i><em>{{ t('sync.copilot.effortTip') }}</em></span></label>
                   <select v-model="copilotEffort">
                     <option value="">{{ t('sync.notWrite') }}</option>
-                    <option v-for="o in COPILOT_EFFORT_OPTIONS" :key="o" :value="o">{{ o }}</option>
+                    <option v-for="o in COPILOT_EFFORT_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option>
                   </select>
                 </div>
                 <div class="field fw-m"><label>permissions.disableBypassPermissionsMode <span class="tip"><i>?</i><em>{{ t('sync.copilot.bypassTip') }}</em></span></label>
                   <select v-model="copilotBypass">
                     <option value="">{{ t('sync.notWrite') }}</option>
-                    <option v-for="o in COPILOT_BYPASS_OPTIONS" :key="o" :value="o">{{ o }}</option>
+                    <option v-for="o in COPILOT_BYPASS_OPTIONS" :key="o" :value="o">{{ optTxt(o) }}</option>
                   </select>
                 </div>
               </div>
@@ -2134,22 +2140,22 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 <div class="field fw-m"><label>sandbox.enabled <span class="tip"><i>?</i><em>{{ t('sync.copilot.sandboxTip') }}</em></span></label>
                   <select v-model="copilotSandboxEna">
                     <option value="">{{ t('sync.notWrite') }}</option>
-                    <option value="true">true</option>
-                    <option value="false">false</option>
+                    <option value="true">{{ t('sync.opt.true') }}</option>
+                    <option value="false">{{ t('sync.opt.false') }}</option>
                   </select>
                 </div>
                 <div class="field fw-m"><label>sandbox.allowBypass <span class="tip"><i>?</i><em>{{ t('sync.copilot.sandboxBypassTip') }}</em></span></label>
                   <select v-model="copilotSandboxBypass">
                     <option value="">{{ t('sync.notWrite') }}</option>
-                    <option value="true">true</option>
-                    <option value="false">false</option>
+                    <option value="true">{{ t('sync.opt.true') }}</option>
+                    <option value="false">{{ t('sync.opt.false') }}</option>
                   </select>
                 </div>
                 <div class="field fw-m"><label>sandbox.userPolicy.network.allowLocalNetwork <span class="tip"><i>?</i><em>{{ t('sync.copilot.allowLocalTip') }}</em></span></label>
                   <select v-model="copilotSandboxNet">
                     <option value="">{{ t('sync.notWrite') }}</option>
-                    <option value="true">true</option>
-                    <option value="false">false</option>
+                    <option value="true">{{ t('sync.opt.true') }}</option>
+                    <option value="false">{{ t('sync.opt.false') }}</option>
                   </select>
                 </div>
               </div>
