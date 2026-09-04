@@ -1,0 +1,23 @@
+# 依赖
+vendor/
+node_modules/
+frontend/node_modules/
+
+# 构建产物
+frontend/dist/
+build/
+*.exe
+
+# 运行时生成
+logs.json
+config.json
+config.json.bak
+
+# 编辑器
+.vscode/
+.idea/
+
+# 本地工作数据
+.workbuddy/
+.commandcode/
+.env

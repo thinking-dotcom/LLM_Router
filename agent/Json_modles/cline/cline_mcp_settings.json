@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "hello": {
+      "type": "stdio"
+    }
+  }
+}

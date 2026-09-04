@@ -1,0 +1,9 @@
+{
+  "name": "llm-router",
+  "outputfilename": "llm-router",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "http://localhost:5173",
+  "author": { "name": "LLM Router", "email": "" }
+}

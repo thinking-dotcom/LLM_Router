@@ -1,0 +1,126 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "shell": "",
+  "logLevel": "",
+  "server": {
+    "port": null,
+    "hostname": "",
+    "mdns": null,
+    "mdnsDomain": "",
+    "cors": []
+  },
+  "command": {},
+  "skills": {
+    "paths": [],
+    "urls": []
+  },
+  "references": {},
+  "watcher": {
+    "ignore": []
+  },
+  "snapshot": null,
+  "plugin": [],
+  "share": "",
+  "autoupdate": null,
+  "disabled_providers": [],
+  "enabled_providers": [],
+  "model": "",
+  "small_model": "",
+  "subagent_model": "",
+  "default_agent": "",
+  "subagent_depth": null,
+  "subagent_variant_overrides": {},
+  "provider": {
+    "": {
+      "name": "",
+      "npm": "",
+      "api": "",
+      "env": [],
+      "whitelist": [],
+      "blacklist": [],
+      "options": {
+        "apiKey": "",
+        "baseURL": "",
+        "timeout": null,
+        "headerTimeout": null,
+        "chunkTimeout": null
+      },
+      "models": {
+        "": {
+          "id": "",
+          "name": "",
+          "reasoning": null,
+          "tool_call": null,
+          "temperature": null,
+          "modalities": {
+            "input": [],
+            "output": []
+          },
+          "limit": {
+            "context": null,
+            "input": null,
+            "output": null
+          },
+          "cost": {
+            "input": null,
+            "output": null,
+            "cache_read": null,
+            "cache_write": null
+          },
+          "options": {},
+          "headers": {},
+          "variants": {}
+        }
+      }
+    }
+  },
+  "permission": {
+    "bash": "",
+    "edit": "",
+    "read": "",
+    "external_directory": "",
+    "webfetch": "",
+    "websearch": "",
+    "skill": ""
+  },
+  "agent": {
+    "": {
+      "model": "",
+      "variant": "",
+      "temperature": null,
+      "top_p": null,
+      "prompt": "",
+      "description": "",
+      "mode": "",
+      "hidden": null,
+      "color": "",
+      "steps": null,
+      "permission": {}
+    }
+  },
+  "mcp": {
+    "": {
+      "type": "",
+      "command": [],
+      "url": "",
+      "cwd": "",
+      "environment": {},
+      "headers": {},
+      "enabled": null,
+      "timeout": null,
+      "oauth": {}
+    }
+  },
+  "instructions": [],
+  "web_search": null,
+  "auto_collapse_reasoning": null,
+  "experimental": {
+    "batch_tool": null
+  },
+  "sandbox": {
+    "enabled": null,
+    "network": "",
+    "allowed_hosts": [],
+    "writable_paths": []
+  }
+}

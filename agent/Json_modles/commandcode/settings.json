@@ -1,0 +1,23 @@
+{
+  "model": "deepseek-v4-flash@go",
+  "permissions": {
+    "additionalDirectories": [],
+    "allow": [
+      "Bash",
+      "Bash(npm:*)",
+      "Bash(go:*)",
+      "Read",
+      "Grep",
+      "Write",
+      "WebFetch",
+      "Glob",
+      "Bash(pnpm:*)",
+      "Bash(git:*)",
+      "Edit",
+      "Bash(docker:*)"
+    ],
+    "ask": [],
+    "defaultMode": "bypass",
+    "deny": []
+  }
+}

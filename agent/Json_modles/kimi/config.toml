@@ -1,0 +1,16 @@
+# ~/.kimi-code/config.toml
+# Kimi Code 参考模版：供应商指向本路由器
+# 供应商类型：kimi / anthropic / openai / openai_responses / google-genai / vertexai
+
+default_model = "llm"
+
+[providers."llm-router"]
+type = "openai"
+base_url = "http://127.0.0.1:3000/router"
+api_key = ""                                                                    # 路由令牌（设置页 authToken）
+
+[models."llm"]
+provider = "llm-router"
+model = ""                                                                      # 上游模型 id（如 deepseek-v4-flash@go）
+max_context_size = 128000
+# display_name = ""                                                             # UI 显示名（可选）

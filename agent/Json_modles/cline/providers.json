@@ -1,0 +1,18 @@
+{
+  "lastUsedProvider": "openai-compatible",
+  "modes": {},
+  "providers": {
+    "openai-compatible": {
+      "settings": {
+        "apiKey": "2222222",
+        "baseUrl": "http://127.0.0.1:3000/router",
+        "headers": {},
+        "model": "deepseek-v4-flash@go",
+        "provider": "openai-compatible"
+      },
+      "tokenSource": "migration",
+      "updatedAt": "2026-08-14T19:08:55.664Z"
+    }
+  },
+  "version": 1
+}

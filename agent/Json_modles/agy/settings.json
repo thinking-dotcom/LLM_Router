@@ -1,0 +1,39 @@
+{
+  "modelProvider": "",
+  "baseUrl": "",
+  "apiKey": "",
+  "model": "",
+  "models": [
+    {
+      "id": "",
+      "name": "",
+      "description": ""
+    }
+  ],
+  "systemInstruction": "",
+  "parameters": {
+    "temperature": null,
+    "maxOutputTokens": null,
+    "topP": null,
+    "topK": null
+  },
+  "permissions": {
+    "toolPermission": "",
+    "allow": [],
+    "deny": []
+  },
+  "enableTerminalSandbox": null,
+  "allowNonWorkspaceAccess": null,
+  "useG1Credits": null,
+  "enableTelemetry": null,
+  "colorScheme": "",
+  "altScreenMode": "",
+  "runningLightSpeed": "",
+  "verbosity": "",
+  "editor": "",
+  "subagents": {
+    "enabled": null,
+    "maxSteps": null,
+    "autoExecuteTools": null
+  }
+}

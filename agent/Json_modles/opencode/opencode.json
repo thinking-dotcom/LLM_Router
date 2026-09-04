@@ -1,0 +1,29 @@
+{
+  "provider": {
+    "llm": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LLM",
+      "options": {
+        "baseURL": "http://127.0.0.1:3000/router",
+        "apiKey": "2"
+      },
+      "models": {
+        "glm-5.3-flash": {
+          "options": {
+            "reasoningEffort": "high"
+          }
+        },
+        "deepseek-v4-flash@go": {
+          "options": {
+            "reasoningEffort": "high"
+          }
+        }
+      }
+    }
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "webfetch": "allow"
+  }
+}

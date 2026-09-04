@@ -1,0 +1,10 @@
+{
+  "defaultModel": "big-pickle",
+  "defaultProjectTrust": "always",
+  "defaultProvider": "LLM",
+  "defaultThinkingLevel": "high",
+  "followUpMode": "alt-enter",
+  "lastChangelogVersion": "0.84.2",
+  "steeringMode": "alt-enter",
+  "theme": "light"
+}

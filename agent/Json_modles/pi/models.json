@@ -1,0 +1,22 @@
+{
+  "providers": {
+    "LLM": {
+      "api": "openai-completions",
+      "apiKey": "12222",
+      "baseUrl": "http://127.0.0.1:3000/oai",
+      "models": [
+        {
+          "id": "x-preview-f-free",
+          "name": "x-preview-f-free",
+          "contextWindow": 128000,
+          "input": [
+            "text"
+          ],
+          "reasoning": true,
+          "supportsTools": true,
+          "supportsVision": true
+        }
+      ]
+    }
+  }
+}

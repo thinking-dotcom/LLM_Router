@@ -1,0 +1,32 @@
+{
+  "id": "",
+  "baseUrl": "",
+  "apiType": "",
+  "apiKey": "",
+  "displayName": "",
+  "providerName": "",
+  "extraHeaders": {},
+  "extraBody": {},
+  "temperature": null,
+  "maxContextLength": null,
+  "primaryModel": {
+    "id": "",
+    "baseUrl": "",
+    "apiType": "",
+    "apiKey": "",
+    "extraHeaders": {},
+    "extraBody": {},
+    "temperature": null,
+    "maxContextLength": null
+  },
+  "fasterModel": {
+    "id": "",
+    "baseUrl": "",
+    "apiType": "",
+    "apiKey": "",
+    "extraHeaders": {},
+    "extraBody": {},
+    "temperature": null,
+    "maxContextLength": null
+  }
+}

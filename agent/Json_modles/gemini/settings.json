@@ -1,0 +1,31 @@
+{
+  "autoAccept": true,
+  "general": {
+    "debugMode": false,
+    "enableAutoUpdate": true,
+    "vimMode": false,
+    "disableAutoUpdate": false
+  },
+  "model": {
+    "generateContentConfig": {
+      "anthropicThinkingBudget": 24576,
+      "reasoningEffort": "high",
+      "thinkingConfig": {
+        "thinkingLevel": "HIGH"
+      }
+    },
+    "name": "x-preview-f-free"
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "security": {
+    "auth": {
+      "selectedType": "gemini-api-key"
+    }
+  },
+  "ui": {
+    "hideWindowTitle": true,
+    "theme": "dark"
+  }
+}

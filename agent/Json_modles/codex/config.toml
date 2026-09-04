@@ -1,0 +1,15 @@
+# ~/.codex/config.toml
+# Codex CLI 参考模版：模型提供商指向本路由器
+# 字段参考：https://developers.openai.com/codex/config-basic
+
+model = "x-preview-f-free"
+model_provider = "llmrouter"
+model_reasoning_effort = "high"
+
+[model_providers.llmrouter]
+name = "LLM Router"
+base_url = "http://127.0.0.1:3000/router"
+wire_api = "responses"
+
+[model_providers.llmrouter.http_headers]
+Authorization = "Bearer 1"

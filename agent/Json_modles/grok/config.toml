@@ -1,0 +1,72 @@
+[models]
+default = ""
+web_search = ""
+
+[model."grok-4.5"]
+model = ""
+base_url = ""
+name = ""
+description = ""
+env_key = ""
+api_backend = ""
+temperature = 0.0
+top_p = 0.0
+max_completion_tokens = 0
+context_window = 0
+extra_headers = {}
+supports_backend_search = false
+
+[mcp_servers.filesystem]
+command = ""
+args = []
+env = {}
+enabled = false
+startup_timeout_sec = 0
+tool_timeout_sec = 0
+
+[mcp_servers.linear]
+url = ""
+headers = {}
+
+[cli]
+auto_update = false
+
+[ui]
+simple_mode = false
+vim_mode = false
+scroll_speed = 0
+compact_mode = false
+theme = ""
+show_thinking_blocks = false
+max_thoughts_width = 0
+default_selected_permission = ""
+remember_tool_approvals = false
+group_tool_verbs = false
+collapsed_edit_blocks = false
+page_flip_on_send = false
+screen_mode = ""
+
+[session]
+auto_compact_threshold_percent = 0
+
+[toolset]
+file_toolset = ""
+
+[toolset.hashline]
+scheme = ""
+hash_len = 0
+chunk_size = 0
+
+[features]
+telemetry = false
+feedback = false
+lsp_tools = false
+codebase_indexing = false
+two_pass_compaction = false
+remote_fetch = false
+
+[compat.claude]
+mcps = false
+
+[compat.cursor]
+mcps = false
