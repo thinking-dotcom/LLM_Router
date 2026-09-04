@@ -804,10 +804,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
             <template v-else-if="cfgTarget?.id==='gemini'">
               <div class="panel-head ph-1">{{ t('sync.panelModel') }}</div>
               <section class="card cfg-card">
-                <div class="cfg-unmanaged">
-                  {{ t('sync.gemini.unmanaged') }}
-                </div>
-
                 <div class="cfg-grid">
                   <div class="field fw-l"><label>{{ t('sync.gemini.modelName') }}</label>
                     <div class="pi-sel">
@@ -923,9 +919,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
             <!-- agy (Antigravity CLI) -->
             <template v-else-if="cfgTarget?.id==='agy'">
               <section class="card cfg-card">
-                <div class="cfg-unmanaged">
-                  {{ t('sync.agy.unmanaged') }}
-                </div>
                 <div class="field-row">
                   <div class="field fw-l"><label>GOOGLE_GEMINI_BASE_URL <span class="tip"><i>?</i><em>{{ t('sync.agy.envBaseTip') }}</em></span></label>
                     <div class="ro-url">
@@ -2331,7 +2324,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .panel-head{font-size:11px;font-weight:800;letter-spacing:.6px;padding:5px 10px;background:linear-gradient(90deg,rgba(34,197,94,.26),rgba(34,197,94,.1));border:1px solid rgba(34,197,94,.55);border-left:3px solid rgba(74,222,128,.9);border-radius:var(--radius-sm);color:#86efac;margin:9px 0 3px}
 /* ph-1 ~ ph-5 仅保留类名兼容模板引用，颜色统一为绿色 */
 .panel-head.ph-1,.panel-head.ph-2,.panel-head.ph-3,.panel-head.ph-4,.panel-head.ph-5{background:linear-gradient(90deg,rgba(34,197,94,.26),rgba(34,197,94,.1));border-color:rgba(34,197,94,.55);border-left-color:rgba(74,222,128,.9);color:#86efac}
-.cfg-unmanaged{font-size:9.5px;color:#b45309;background:rgba(217,119,6,.08);border:1px dashed rgba(217,119,6,.4);border-radius:6px;padding:3px 6px;margin-bottom:4px;line-height:1.5}
 /* MCP 服务器（mcpServers）只读展示：已配置的服务器以胶囊列出，未配置显示占位 */
 .cfg-mcp-list{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:2px}
 .cfg-mcp-chip{font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:999px;background:rgba(212,167,44,.1);border:1px solid rgba(212,167,44,.3);color:var(--t2)}

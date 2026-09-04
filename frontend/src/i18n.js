@@ -429,7 +429,6 @@ export const I18N = {
     'sync.grok.compatCursorMcps': 'Cursor MCPs',
 
     // gemini
-    'sync.gemini.unmanaged': '⚠ 未列出的字段保存时原样保留',
     'sync.gemini.modelName': '模型名称',
     'sync.gemini.apiKeyTip': '保存到 ~/.gemini/.env',
     'sync.gemini.thinkingTip': '全部留空 = 跟随全局档位；任选一项即显式携带并优先于全局。',
@@ -442,7 +441,6 @@ export const I18N = {
     'sync.gemini.samplingTip': '全部留空 = 随模型默认；路由器自动映射上游协议参数。',
 
     // agy (Antigravity CLI)
-    'sync.agy.unmanaged': '⚠ 未列出的字段保存时原样保留',
     'sync.agy.modelProvider': '模型服务商',
     'sync.agy.modelProviderTip': 'official 仅接受 gemini：设置后 CLI 跳过账号登录，改走 GEMINI_API_KEY 环境变量',
     'sync.agy.model': '默认模型',
@@ -1334,7 +1332,6 @@ export const I18N = {
     'sync.grok.compatCursorMcps': 'Cursor MCPs',
 
     // gemini
-    'sync.gemini.unmanaged': '⚠ Unlisted fields are kept as-is on save',
     'sync.gemini.modelName': 'Model name',
     'sync.gemini.apiKeyTip': 'Saved to ~/.gemini/.env',
     'sync.gemini.thinkingTip': 'All empty = follow the global tier; any set = sent explicitly and takes priority.',
@@ -1347,7 +1344,6 @@ export const I18N = {
     'sync.gemini.samplingTip': 'All empty = model defaults; the router maps upstream protocol params automatically.',
 
     // agy (Antigravity CLI)
-    'sync.agy.unmanaged': '⚠ Unlisted fields are kept as-is on save',
     'sync.agy.modelProvider': 'Model provider',
     'sync.agy.modelProviderTip': 'official accepts only "gemini": skips account sign-in and uses the GEMINI_API_KEY env var',
     'sync.agy.model': 'Default model',
