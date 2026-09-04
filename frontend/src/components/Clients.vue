@@ -163,6 +163,15 @@ async function copilotClearConfirm() {
 const agyEnvShowClear = computed(() =>
   String(agyEnvBase.value || '').trim() !== '' && String(agyEnvKey.value || '') === String(agyEnvKeyLoaded.value || ''))
 
+// agy 安全区四枚布尔胶囊：默认(''，不接管) → 允许('true') → 拒绝('false') → 默认，点按循环
+const AGY_SAFE_KEYS = ['enableTerminalSandbox', 'allowNonWorkspaceAccess', 'useG1Credits', 'enableTelemetry']
+const agySafeCls = k => agyForm.value[k] === 'true' ? 'allow' : agyForm.value[k] === 'false' ? 'deny' : 'def'
+const agySafeState = k => agyForm.value[k] === 'true' ? t('sync.allow') : agyForm.value[k] === 'false' ? t('sync.deny') : t('sync.opt.default')
+function agySafeCycle(k) {
+  const v = agyForm.value[k]
+  agyForm.value[k] = v === 'true' ? 'false' : v === 'false' ? '' : 'true'
+}
+
 // 非 form 模式（json / claudemd / climodels 等源码页签）走源码编辑排版
 const isSrcMode = computed(() => cfgMode.value !== 'form')
 
@@ -1011,44 +1020,19 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 
               <div class="panel-head ph-5">{{ t('sync.agy.safetyPanel') }}</div>
               <section class="card cfg-card">
-                <div class="perm-list">
-                  <div class="perm-row-wrap" :class="{ on: agyForm.enableTerminalSandbox }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ t('sync.agy.enableTerminalSandbox') }}</span>
-                      <span class="tip"><i>?</i><em>{{ t('sync.agy.sandboxTip') }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.enableTerminalSandbox')">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.enableTerminalSandbox==='true'}" :aria-checked="agyForm.enableTerminalSandbox==='true'" @click="agyForm.enableTerminalSandbox = agyForm.enableTerminalSandbox==='true' ? '' : 'true'">true</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.enableTerminalSandbox==='false'}" :aria-checked="agyForm.enableTerminalSandbox==='false'" @click="agyForm.enableTerminalSandbox = agyForm.enableTerminalSandbox==='false' ? '' : 'false'">false</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="perm-row-wrap" :class="{ on: agyForm.allowNonWorkspaceAccess }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ t('sync.agy.allowNonWorkspaceAccess') }}</span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.allowNonWorkspaceAccess')">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.allowNonWorkspaceAccess==='true'}" :aria-checked="agyForm.allowNonWorkspaceAccess==='true'" @click="agyForm.allowNonWorkspaceAccess = agyForm.allowNonWorkspaceAccess==='true' ? '' : 'true'">true</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.allowNonWorkspaceAccess==='false'}" :aria-checked="agyForm.allowNonWorkspaceAccess==='false'" @click="agyForm.allowNonWorkspaceAccess = agyForm.allowNonWorkspaceAccess==='false' ? '' : 'false'">false</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="perm-row-wrap" :class="{ on: agyForm.useG1Credits }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ t('sync.agy.useG1Credits') }}</span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.useG1Credits')">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.useG1Credits==='true'}" :aria-checked="agyForm.useG1Credits==='true'" @click="agyForm.useG1Credits = agyForm.useG1Credits==='true' ? '' : 'true'">true</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.useG1Credits==='false'}" :aria-checked="agyForm.useG1Credits==='false'" @click="agyForm.useG1Credits = agyForm.useG1Credits==='false' ? '' : 'false'">false</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="perm-row-wrap" :class="{ on: agyForm.enableTelemetry }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ t('sync.agy.enableTelemetry') }}</span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.agy.enableTelemetry')">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: agyForm.enableTelemetry==='true'}" :aria-checked="agyForm.enableTelemetry==='true'" @click="agyForm.enableTelemetry = agyForm.enableTelemetry==='true' ? '' : 'true'">true</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: agyForm.enableTelemetry==='false'}" :aria-checked="agyForm.enableTelemetry==='false'" @click="agyForm.enableTelemetry = agyForm.enableTelemetry==='false' ? '' : 'false'">false</button>
-                      </div>
-                    </div>
-                  </div>
+                <div class="agy-safe-row">
+                  <button
+                    v-for="k in AGY_SAFE_KEYS" :key="k" type="button" role="switch"
+                    class="agy-safe-cap" :class="agySafeCls(k)"
+                    :aria-checked="agyForm[k] === 'true'"
+                    :aria-label="t('sync.agy.' + k)"
+                    :title="k === 'enableTerminalSandbox' ? t('sync.agy.sandboxTip') : t('sync.agy.' + k)"
+                    @click="agySafeCycle(k)"
+                  >
+                    <span class="agy-safe-dot"></span>
+                    <span class="agy-safe-name">{{ t('sync.agy.' + k) }}</span>
+                    <span class="agy-safe-state">{{ agySafeState(k) }}</span>
+                  </button>
                 </div>
               </section>
 
@@ -2394,6 +2378,23 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .perm-grid.perm-3{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
 /* 权限规则点选列表样式见 public/style.css（全局，供 opencode 与各客户端共用） */
 .perm-ta{font-family:var(--mono);resize:none;min-height:34px;max-height:110px;line-height:1.35}
+/* agy 安全区：一行四枚布尔开关胶囊。点按循环 默认(灰) → 允许(绿/true) → 拒绝(红/false) */
+.agy-safe-row{display:flex;gap:5px;flex-wrap:wrap;align-items:stretch}
+.agy-safe-cap{flex:1 1 0;min-width:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 4px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--t2);cursor:pointer;transition:var(--transition);font-family:inherit}
+.agy-safe-cap:hover{border-color:var(--border-hover);transform:translateY(-1px)}
+.agy-safe-cap .agy-safe-dot{width:8px;height:8px;border-radius:50%;background:var(--t3);flex:none}
+.agy-safe-cap .agy-safe-name{font-size:10px;font-weight:700;color:var(--text);text-align:center;line-height:1.3}
+.agy-safe-cap .agy-safe-state{font-size:9px;color:var(--t3)}
+.agy-safe-cap.allow{border-color:var(--green);background:var(--green-soft)}
+.agy-safe-cap.allow .agy-safe-dot{background:var(--green);box-shadow:0 0 6px rgba(52,211,153,.5)}
+.agy-safe-cap.allow .agy-safe-name{color:var(--green)}
+.agy-safe-cap.allow .agy-safe-state{color:var(--green)}
+.agy-safe-cap.deny{border-color:var(--red);background:var(--red-soft)}
+.agy-safe-cap.deny .agy-safe-dot{background:var(--red);box-shadow:0 0 6px rgba(251,113,133,.5)}
+.agy-safe-cap.deny .agy-safe-name{color:var(--red)}
+.agy-safe-cap.deny .agy-safe-state{color:var(--red)}
+/* 默认态：灰（不写入、走 CLI 默认） */
+.agy-safe-cap.def{border-style:dashed;opacity:.88}
 /* Claude 权限规则独立卡片：规则文本 + 允许/拒绝双态点选（预设常驻，自定义可删除） */
 .perm-rule-card{display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);transition:var(--transition)}
 .perm-rule-card:hover{border-color:var(--border-hover)}
