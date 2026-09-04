@@ -15,7 +15,7 @@ import PermList from './sync/PermList.vue'
 // ---- 共享工具与常量 ----
 import {
   ACCESS_OPTIONS, PERM_OPTIONS, getPath, setPath, srcObj, taWheelStop,
-  permToggleRule, permRuleOn, tq, targetLogo, permRowsFromLists, permRowsToLists,
+  permModeNext, tq, targetLogo, permRowsFromLists, permRowsToLists,
 } from './sync/shared'
 // ---- 中央状态与通用辅助 ----
 import {
@@ -52,7 +52,7 @@ import {
   KIMI_EFFORT_LEVELS, KIMI_PERM_RULES, kimiForm, kimiProviderRows, kimiModelRows, kimiThinking, kimiPermRows,
   kimiUnmanaged, kimiModelOpen, kimiCustomPattern, kimiAgentsContent, kimiAgentsExists, kimiAgentsFile,
   kimiTomlPreset, kimiReadToml, kimiBuildToml, kimiAddProvider, kimiAddModel, kimiDefaultCandidates,
-  kimiRuleDecision, kimiToggleRule, kimiCustomRows, kimiAddCustomRule, kimiPermDecision, initKimi,
+  kimiRuleDecision, kimiToggleRule, kimiCustomRows, kimiAddCustomRule, initKimi,
 } from './sync/kimi'
 import {
   geminiEnvContent, geminiEnvExists, geminiEnvFile, geminiAgentsContent, geminiAgentsExists, geminiAgentsFile,
@@ -68,7 +68,7 @@ import {
 } from './sync/copilot'
 import {
   ocAgentsContent, ocAgentsExists, ocAgentsFile, ocAccessMode, ocApiKey, ocNpm, ocName, ocModels,
-  OC_PERM_KEYS, ocPerms, ocPickMode, initOcForm, ocApplyToObj, initOpencode,
+  OC_PERM_KEYS, ocPerms, initOcForm, ocApplyToObj, initOpencode,
 } from './sync/opencode'
 import {
   clineModelsContent, clineModelsExists, clineModelsFile, clineProvidersContent, clineProvidersExists,
@@ -98,7 +98,7 @@ import {
   hermesForm, hermesModelOpen, HERMES_MODEL_KEYS, hermesInitFrom, hermesWriteYaml, hermesYamlPreset, initHermes,
 } from './sync/hermes'
 import {
-  kiloProviderKey, kiloApiKey, kiloNpm, kiloName, kiloModels, KILO_PERM_KEYS, kiloPerms, kiloPickMode,
+  kiloProviderKey, kiloApiKey, kiloNpm, kiloName, kiloModels, KILO_PERM_KEYS, kiloPerms,
   kiloModel, kiloSmallModel, kiloSubagentModel, kiloMcpServerNames, kiloQualifyModel, kiloProviderPrefix,
   kiloModelRowOpen, kiloModelOpen, kiloSmallOpen, kiloSubOpen, kiloAgentsContent, kiloAgentsFile,
   initKiloForm, kiloApplyToObj, initKilo,
@@ -170,6 +170,65 @@ const agySafeState = k => agyForm.value[k] === 'true' ? t('sync.allow') : agyFor
 function agySafeCycle(k) {
   const v = agyForm.value[k]
   agyForm.value[k] = v === 'true' ? 'false' : v === 'false' ? '' : 'true'
+}
+
+// ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
+// 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
+// → 询问(琥珀) → 拒绝(红) → 未设。写盘走各客户端既有模型，此处的 class/文案仅展示层。
+const permCapCls = m => (m === 'allow' || m === 'ask' || m === 'deny') ? m : 'def'
+const permCapWord = (m, obj) => obj ? t('sync.permObjShort') : m === 'allow' ? t('sync.allow') : m === 'ask' ? t('sync.ask') : m === 'deny' ? t('sync.deny') : t('sync.opt.default')
+// 布尔开关胶囊（gemini 权限区两行同款）：默认('') → 允许('true') → 拒绝('false') → 默认
+const GEMINI_PERM_SW = [
+  { k: 'usageStatisticsEnabled', label: 'sync.gemini.usageStats', tip: 'sync.gemini.usageStatsTip' },
+  { k: 'autoAccept', label: 'sync.gemini.autoAccept', tip: 'sync.gemini.autoAcceptTip' },
+]
+const geminiCapCls = k => geminiForm.value[k] === 'true' ? 'allow' : geminiForm.value[k] === 'false' ? 'deny' : 'def'
+const geminiCapWord = k => geminiForm.value[k] === 'true' ? t('sync.allow') : geminiForm.value[k] === 'false' ? t('sync.deny') : t('sync.opt.default')
+function geminiCapCycle(k) {
+  const v = geminiForm.value[k]
+  geminiForm.value[k] = v === 'true' ? 'false' : v === 'false' ? '' : 'true'
+}
+// 循环到「未设」等价旧版「再点一次已选项取消」：预设/自定义按各自数据模型清行
+function claudeRuleCycle(rule) {
+  const cur = claudeRuleMode(rule)
+  const next = permModeNext(cur)
+  if (next) claudeRulePick(rule, next)
+  else {
+    const i = claudePermRows.value.findIndex(r => String(r.text || '') === rule)
+    if (i >= 0) claudePermRows.value.splice(i, 1)
+  }
+}
+function grokRuleCycle(rule) {
+  const cur = grokRuleMode(rule)
+  const next = permModeNext(cur)
+  if (next) grokRulePick(rule, next)
+  else {
+    const i = grokPermRows.value.findIndex(r => String(r.text || '') === rule)
+    if (i >= 0) grokPermRows.value.splice(i, 1)
+  }
+}
+// opencode / kilo：固定权限键常驻胶囊，mode 直接落在受管 map（'' = 未设置不写盘）；
+// 原值是对象细粒度规则的键保持不可点选（obj=true），保存时原样保留
+function ocCyclePerm(k) {
+  const st = ocPerms.value[k]
+  if (!st || st.obj) return
+  st.mode = permModeNext(st.mode)
+}
+function kiloCyclePerm(k) {
+  const st = kiloPerms.value[k]
+  if (!st || st.obj) return
+  st.mode = permModeNext(st.mode)
+}
+// kimi：预设键循环到「未设」沿用 kimiToggleRule 的清除规则（无保留内容整行移除）；
+// 自定义行 decision 支持 ''（默认处置，行保留），继续点按可回到 允许
+function kimiRuleCycle(rule) {
+  const cur = kimiRuleDecision(rule)
+  const next = permModeNext(cur)
+  kimiToggleRule(rule, next || cur)
+}
+function kimiCustomCycle(row) {
+  if (!row) return
+  row.decision = permModeNext(String(row.decision || ''))
 }
 
 // 非 form 模式（json / claudemd / climodels 等源码页签）走源码编辑排版
@@ -409,24 +468,23 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </button>
                 </div>
                 <div class="field" style="margin:4px 0"><label>{{ t('sync.claude.permRulesLabel') }}</label>
-                  <div class="perm-grid">
-                    <div v-for="r in PERM_COMMON_RULES" :key="r.v" class="perm-rule-card" :class="{ on: claudeRuleMode(r.v) }">
-                      <span class="perm-rule-text" :title="r.tip()">{{ r.v }}</span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="r.v">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{ on: claudeRuleMode(r.v)==='allow' }" :aria-checked="claudeRuleMode(r.v)==='allow'" @click="claudeRulePick(r.v, 'allow')">{{ t('sync.allow') }}</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{ on: claudeRuleMode(r.v)==='deny' }" :aria-checked="claudeRuleMode(r.v)==='deny'" @click="claudeRulePick(r.v, 'deny')">{{ t('sync.deny') }}</button>
-                        <button type="button" class="pcl-opt ask" role="radio" :class="{ on: claudeRuleMode(r.v)==='ask' }" :aria-checked="claudeRuleMode(r.v)==='ask'" @click="claudeRulePick(r.v, 'ask')">{{ t('sync.ask') }}</button>
-                      </div>
-                    </div>
-                    <div v-for="row in customClaudeRows" :key="row" class="perm-rule-card" :class="{ on: row.mode }">
-                      <span class="perm-rule-text" :title="row.text">{{ row.text }}</span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="row.text">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{ on: row.mode === 'allow' }" :aria-checked="row.mode === 'allow'" @click="claudeRulePick(row.text, 'allow')">{{ t('sync.allow') }}</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{ on: row.mode === 'deny' }" :aria-checked="row.mode === 'deny'" @click="claudeRulePick(row.text, 'deny')">{{ t('sync.deny') }}</button>
-                        <button type="button" class="pcl-opt ask" role="radio" :class="{ on: row.mode === 'ask' }" :aria-checked="row.mode === 'ask'" @click="claudeRulePick(row.text, 'ask')">{{ t('sync.ask') }}</button>
-                      </div>
-                      <button type="button" class="pcl-del" :title="t('sync.delete')" @click="claudePermRows.splice(claudePermRows.indexOf(row),1)">×</button>
-                    </div>
+                  <div class="perm-caps" role="group" :aria-label="t('sync.claude.permRulesLabel')">
+                    <button v-for="r in PERM_COMMON_RULES" :key="r.v" type="button" class="perm-cap" role="radio"
+                      :class="permCapCls(claudeRuleMode(r.v))" :aria-checked="claudeRuleMode(r.v)!==''"
+                      :title="r.tip() + ' · ' + t('sync.permCapClick')" @click="claudeRuleCycle(r.v)">
+                      <span class="perm-cap-dot"></span>
+                      <span class="perm-cap-text">{{ r.v }}</span>
+                      <span class="perm-cap-state">{{ permCapWord(claudeRuleMode(r.v)) }}</span>
+                    </button>
+                    <template v-for="row in customClaudeRows" :key="row">
+                      <button type="button" class="perm-cap" :class="permCapCls(row.mode)"
+                        :title="row.text + ' · ' + t('sync.permCapClick')" @click="claudeRuleCycle(row.text)">
+                        <span class="perm-cap-dot"></span>
+                        <span class="perm-cap-text">{{ row.text }}</span>
+                        <span class="perm-cap-state">{{ permCapWord(row.mode) }}</span>
+                        <span class="perm-cap-x" :title="t('sync.delete')" @click.stop="claudePermRows.splice(claudePermRows.indexOf(row),1)">×</span>
+                      </button>
+                    </template>
                   </div>
                 </div>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.claude.permTip') }}</em></div>
@@ -781,27 +839,22 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   </div>
                 </div>
                 <div class="field" style="margin:4px 0"><label>{{ t('sync.permRules') }}</label>
-                  <div class="perm-grid">
-                    <template v-for="r in GROK_PERM_RULES" :key="r.v">
-                      <div class="perm-rule-card" :class="{ on: grokRuleMode(r.v) }">
-                        <span class="perm-rule-text" :title="r.tip()">{{ r.v }}</span>
-                        <div class="pcl-opts" role="radiogroup" :aria-label="r.v">
-                          <button type="button" class="pcl-opt allow" role="radio" :class="{ on: grokRuleMode(r.v)==='allow' }" :aria-checked="grokRuleMode(r.v)==='allow'" @click="grokRulePick(r.v, 'allow')">{{ t('sync.allow') }}</button>
-                          <button type="button" class="pcl-opt ask" role="radio" :class="{ on: grokRuleMode(r.v)==='ask' }" :aria-checked="grokRuleMode(r.v)==='ask'" @click="grokRulePick(r.v, 'ask')">{{ t('sync.ask') }}</button>
-                          <button type="button" class="pcl-opt deny" role="radio" :class="{ on: grokRuleMode(r.v)==='deny' }" :aria-checked="grokRuleMode(r.v)==='deny'" @click="grokRulePick(r.v, 'deny')">{{ t('sync.deny') }}</button>
-                        </div>
-                      </div>
-                    </template>
+                  <div class="perm-caps" role="group" :aria-label="t('sync.permRules')">
+                    <button v-for="r in GROK_PERM_RULES" :key="r.v" type="button" class="perm-cap" role="radio"
+                      :class="permCapCls(grokRuleMode(r.v))" :aria-checked="grokRuleMode(r.v)!==''"
+                      :title="r.tip() + ' · ' + t('sync.permCapClick')" @click="grokRuleCycle(r.v)">
+                      <span class="perm-cap-dot"></span>
+                      <span class="perm-cap-text">{{ r.v }}</span>
+                      <span class="perm-cap-state">{{ permCapWord(grokRuleMode(r.v)) }}</span>
+                    </button>
                     <template v-for="row in customGrokRows" :key="row">
-                      <div class="perm-rule-card" :class="{ on: row.mode }">
-                        <span class="perm-rule-text" :title="row.text">{{ row.text }}</span>
-                        <div class="pcl-opts" role="radiogroup" :aria-label="row.text">
-                          <button type="button" class="pcl-opt allow" role="radio" :class="{ on: row.mode === 'allow' }" :aria-checked="row.mode === 'allow'" @click="grokRulePick(row.text, 'allow')">{{ t('sync.allow') }}</button>
-                          <button type="button" class="pcl-opt ask" role="radio" :class="{ on: row.mode === 'ask' }" :aria-checked="row.mode === 'ask'" @click="grokRulePick(row.text, 'ask')">{{ t('sync.ask') }}</button>
-                          <button type="button" class="pcl-opt deny" role="radio" :class="{ on: row.mode === 'deny' }" :aria-checked="row.mode === 'deny'" @click="grokRulePick(row.text, 'deny')">{{ t('sync.deny') }}</button>
-                        </div>
-                        <button type="button" class="pcl-del" :title="t('sync.delete')" @click="grokPermRows.splice(grokPermRows.indexOf(row),1)">×</button>
-                      </div>
+                      <button type="button" class="perm-cap" :class="permCapCls(row.mode)"
+                        :title="row.text + ' · ' + t('sync.permCapClick')" @click="grokRuleCycle(row.text)">
+                        <span class="perm-cap-dot"></span>
+                        <span class="perm-cap-text">{{ row.text }}</span>
+                        <span class="perm-cap-state">{{ permCapWord(row.mode) }}</span>
+                        <span class="perm-cap-x" :title="t('sync.delete')" @click.stop="grokPermRows.splice(grokPermRows.indexOf(row),1)">×</span>
+                      </button>
                     </template>
                   </div>
                 </div>
@@ -884,27 +937,17 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 
               <div class="panel-head ph-2">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
-                <div class="perm-list">
-                  <div class="perm-row-wrap" :class="{ on: geminiForm.usageStatisticsEnabled }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ t('sync.gemini.usageStats') }}</span>
-                      <span class="tip"><i>?</i><em>{{ t('sync.gemini.usageStatsTip') }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.gemini.usageStats')">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: geminiForm.usageStatisticsEnabled==='true'}" :aria-checked="geminiForm.usageStatisticsEnabled==='true'" @click="geminiForm.usageStatisticsEnabled = geminiForm.usageStatisticsEnabled==='true' ? '' : 'true'">true</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: geminiForm.usageStatisticsEnabled==='false'}" :aria-checked="geminiForm.usageStatisticsEnabled==='false'" @click="geminiForm.usageStatisticsEnabled = geminiForm.usageStatisticsEnabled==='false' ? '' : 'false'">false</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="perm-row-wrap" :class="{ on: geminiForm.autoAccept }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ t('sync.gemini.autoAccept') }}</span>
-                      <span class="tip"><i>?</i><em>{{ t('sync.gemini.autoAcceptTip') }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="t('sync.gemini.autoAccept')">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: geminiForm.autoAccept==='true'}" :aria-checked="geminiForm.autoAccept==='true'" @click="geminiForm.autoAccept = geminiForm.autoAccept==='true' ? '' : 'true'">true</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: geminiForm.autoAccept==='false'}" :aria-checked="geminiForm.autoAccept==='false'" @click="geminiForm.autoAccept = geminiForm.autoAccept==='false' ? '' : 'false'">false</button>
-                      </div>
-                    </div>
-                  </div>
+                <div class="agy-safe-row" role="group" :aria-label="t('sync.panelPerm')">
+                  <button v-for="s in GEMINI_PERM_SW" :key="s.k" type="button" role="switch"
+                    class="agy-safe-cap" :class="geminiCapCls(s.k)"
+                    :aria-checked="geminiForm[s.k]==='true'"
+                    :aria-label="t(s.label)"
+                    :title="t(s.tip)"
+                    @click="geminiCapCycle(s.k)">
+                    <span class="agy-safe-dot"></span>
+                    <span class="agy-safe-name">{{ t(s.label) }}</span>
+                    <span class="agy-safe-state">{{ geminiCapWord(s.k) }}</span>
+                  </button>
                 </div>
               </section>
 
@@ -1144,18 +1187,14 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               </section>
               <div class="panel-head ph-2">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
-                <div class="perm-list">
-                  <div v-for="p in OC_PERM_KEYS" :key="p.k" class="perm-row-wrap" :class="{ on: ocPerms[p.k].mode }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ p.k }}</span>
-                      <span class="tip"><i>?</i><em>{{ t(p.hintKey) }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="p.k">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{ on: ocPerms[p.k].mode==='allow' }" :aria-checked="ocPerms[p.k].mode==='allow'" @click="ocPickMode(p.k, 'allow')">{{ t('sync.oc.optAllow') }}</button>
-                        <button type="button" class="pcl-opt ask" role="radio" :class="{ on: ocPerms[p.k].mode==='ask' }" :aria-checked="ocPerms[p.k].mode==='ask'" @click="ocPickMode(p.k, 'ask')">{{ t('sync.oc.optAsk') }}</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{ on: ocPerms[p.k].mode==='deny' }" :aria-checked="ocPerms[p.k].mode==='deny'" @click="ocPickMode(p.k, 'deny')">{{ t('sync.oc.optDeny') }}</button>
-                      </div>
-                    </div>
-                  </div>
+                <div class="perm-caps" role="group" :aria-label="t('sync.panelPerm')">
+                  <button v-for="p in OC_PERM_KEYS" :key="p.k" type="button" class="perm-cap" role="radio"
+                    :class="permCapCls(ocPerms[p.k].mode)" :aria-checked="ocPerms[p.k].mode!==''"
+                    :title="ocPerms[p.k].obj ? t('sync.permObjLock') : t(p.hintKey) + ' · ' + t('sync.permCapClick')" @click="ocCyclePerm(p.k)">
+                    <span class="perm-cap-dot"></span>
+                    <span class="perm-cap-text">{{ p.k }}</span>
+                    <span class="perm-cap-state">{{ permCapWord(ocPerms[p.k].mode, ocPerms[p.k].obj) }}</span>
+                  </button>
                 </div>
               </section>
             </template>
@@ -1270,18 +1309,14 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 
               <div class="panel-head ph-4">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
-                <div class="perm-list">
-                  <div v-for="p in KILO_PERM_KEYS" :key="p.k" class="perm-row-wrap" :class="{ on: kiloPerms[p.k].mode }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ p.k }}</span>
-                      <span class="tip"><i>?</i><em>{{ t(p.hintKey) }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="p.k">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{ on: kiloPerms[p.k].mode==='allow' }" :aria-checked="kiloPerms[p.k].mode==='allow'" @click="kiloPickMode(p.k, 'allow')">{{ t('sync.oc.optAllow') }}</button>
-                        <button type="button" class="pcl-opt ask" role="radio" :class="{ on: kiloPerms[p.k].mode==='ask' }" :aria-checked="kiloPerms[p.k].mode==='ask'" @click="kiloPickMode(p.k, 'ask')">{{ t('sync.oc.optAsk') }}</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{ on: kiloPerms[p.k].mode==='deny' }" :aria-checked="kiloPerms[p.k].mode==='deny'" @click="kiloPickMode(p.k, 'deny')">{{ t('sync.oc.optDeny') }}</button>
-                      </div>
-                    </div>
-                  </div>
+                <div class="perm-caps" role="group" :aria-label="t('sync.panelPerm')">
+                  <button v-for="p in KILO_PERM_KEYS" :key="p.k" type="button" class="perm-cap" role="radio"
+                    :class="permCapCls(kiloPerms[p.k].mode)" :aria-checked="kiloPerms[p.k].mode!==''"
+                    :title="kiloPerms[p.k].obj ? t('sync.permObjLock') : t(p.hintKey) + ' · ' + t('sync.permCapClick')" @click="kiloCyclePerm(p.k)">
+                    <span class="perm-cap-dot"></span>
+                    <span class="perm-cap-text">{{ p.k }}</span>
+                    <span class="perm-cap-state">{{ permCapWord(kiloPerms[p.k].mode, kiloPerms[p.k].obj) }}</span>
+                  </button>
                 </div>
               </section>
 
@@ -1873,32 +1908,24 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                     <option value="auto">{{ t('sync.opt.auto') }}</option>
                   </select>
                 </div>
-                <div class="perm-list">
-                  <div v-for="p in KIMI_PERM_RULES" :key="'p-' + p" class="perm-row-wrap" :class="{ on: kimiRuleDecision(p) }">
-                    <div class="pcl-head">
-                      <span class="pcl-key">{{ p }}</span>
-                      <span class="tip"><i>?</i><em>{{ t('sync.kimi.permRuleTip') }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="p">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: kimiRuleDecision(p)==='allow'}" :aria-checked="kimiRuleDecision(p)==='allow'" @click="kimiToggleRule(p,'allow')">{{ t('sync.allow') }}</button>
-                        <button type="button" class="pcl-opt ask" role="radio" :class="{on: kimiRuleDecision(p)==='ask'}" :aria-checked="kimiRuleDecision(p)==='ask'" @click="kimiToggleRule(p,'ask')">{{ t('sync.ask') }}</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: kimiRuleDecision(p)==='deny'}" :aria-checked="kimiRuleDecision(p)==='deny'" @click="kimiToggleRule(p,'deny')">{{ t('sync.deny') }}</button>
-                      </div>
-                    </div>
+                <div class="perm-caps" role="group" :aria-label="t('sync.kimi.permPanel')">
+                  <button v-for="p in KIMI_PERM_RULES" :key="'p-' + p" type="button" class="perm-cap" role="radio"
+                    :class="permCapCls(kimiRuleDecision(p))" :aria-checked="kimiRuleDecision(p)!==''"
+                    :title="t('sync.kimi.permRuleTip') + ' · ' + t('sync.permCapClick')" @click="kimiRuleCycle(p)">
+                    <span class="perm-cap-dot"></span>
+                    <span class="perm-cap-text">{{ p }}</span>
+                    <span class="perm-cap-state">{{ permCapWord(kimiRuleDecision(p)) }}</span>
+                  </button>
+                </div>
+                <div class="perm-cap-list">
+                  <div v-for="row in kimiCustomRows()" :key="row" class="perm-cap-row" :class="permCapCls(row.decision)">
+                    <span class="perm-cap-dot"></span>
+                    <input class="perm-cap-edit" v-model="row.pattern" :placeholder="t('sync.kimi.permPatternPh')" :title="t('sync.kimi.permRuleTip')" @wheel.stop />
+                    <button type="button" class="perm-cap-cycle" :class="permCapCls(row.decision)" :title="t('sync.permCapClick')" @click="kimiCustomCycle(row)">{{ permCapWord(row.decision) }}</button>
+                    <button type="button" class="perm-cap-x" :title="t('sync.delete')" @click="kimiPermRows.splice(kimiPermRows.indexOf(row), 1)">×</button>
                   </div>
-                  <div v-for="row in kimiCustomRows()" :key="row" class="perm-row-wrap" :class="{ on: row.decision }">
-                    <div class="pcl-head">
-                      <input class="pcl-input" v-model="row.pattern" :placeholder="t('sync.kimi.permPatternPh')" @wheel.stop />
-                      <span class="tip"><i>?</i><em>{{ t('sync.kimi.permRuleTip') }}</em></span>
-                      <div class="pcl-opts" role="radiogroup" :aria-label="row.pattern">
-                        <button type="button" class="pcl-opt allow" role="radio" :class="{on: row.decision==='allow'}" :aria-checked="row.decision==='allow'" @click="kimiPermDecision(row,'allow')">{{ t('sync.allow') }}</button>
-                        <button type="button" class="pcl-opt ask" role="radio" :class="{on: row.decision==='ask'}" :aria-checked="row.decision==='ask'" @click="kimiPermDecision(row,'ask')">{{ t('sync.ask') }}</button>
-                        <button type="button" class="pcl-opt deny" role="radio" :class="{on: row.decision==='deny'}" :aria-checked="row.decision==='deny'" @click="kimiPermDecision(row,'deny')">{{ t('sync.deny') }}</button>
-                      </div>
-                      <button type="button" class="pcl-del" :title="t('sync.delete')" @click="kimiPermRows.splice(kimiPermRows.indexOf(row), 1)">×</button>
-                    </div>
-                  </div>
-                  <div class="pcl-add">
-                    <input class="pcl-input" v-model="kimiCustomPattern" :placeholder="t('sync.kimi.permAddCustom')" @keyup.enter="kimiAddCustomRule" @wheel.stop />
+                  <div class="perm-cap-row perm-cap-add">
+                    <input class="perm-cap-edit" v-model="kimiCustomPattern" :placeholder="t('sync.kimi.permAddCustom')" @keyup.enter="kimiAddCustomRule" @wheel.stop />
                     <button type="button" class="btn btn-xs btn-ghost" @click="kimiAddCustomRule">{{ t('common.add') }}</button>
                   </div>
                 </div>

@@ -103,6 +103,11 @@ export function permRowToggleMode(row, mode) {
   if (!row) return
   row.mode = row.mode === mode ? '' : mode
 }
+// 单胶囊点按循环顺序：未设('') → allow → ask → deny → 未设。
+// 与「安全」区布尔胶囊同款交互；规则处置为四态循环。
+export function permModeNext(mode) {
+  return mode === 'allow' ? 'ask' : mode === 'ask' ? 'deny' : mode === 'deny' ? '' : 'allow'
+}
 
 // ============ 客户端 logo（frontend/public/logos/）============
 export const TARGET_LOGOS = {

@@ -528,6 +528,68 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .pcl-input:focus{outline:none;border-color:var(--accent-ring);box-shadow:0 0 0 3px var(--accent-soft)}
 .pcl-add .pcl-opts{margin-left:0}
 
+/* ===== 权限规则胶囊（各客户端权限面板统一：单胶囊点按循环 未设→允许→询问→拒绝） ===== */
+/* 常驻固定键/预设规则：一行胶囊 chips */
+.perm-caps{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.perm-cap{
+  display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;
+  padding:3px 7px;border:1px solid var(--border);border-radius:999px;
+  background:var(--bg);color:var(--t2);cursor:pointer;font-family:inherit;
+  transition:var(--transition);text-align:left;
+}
+.perm-cap:hover{border-color:var(--border-hover);transform:translateY(-1px)}
+.perm-cap:active{transform:scale(.97)}
+.perm-cap .perm-cap-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--t3)}
+.perm-cap .perm-cap-text{flex:0 1 auto;min-width:0;font-size:10px;font-family:var(--mono);color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.perm-cap .perm-cap-state{flex:none;font-size:8.5px;font-weight:700;line-height:1.6;padding:0 6px;border-radius:999px;background:rgba(128,128,128,.14);color:var(--t3);white-space:nowrap}
+.perm-cap .perm-cap-x{flex:none;width:14px;height:14px;line-height:1;padding:0;margin-right:-2px;border:1px solid transparent;border-radius:50%;background:transparent;color:var(--t3);cursor:pointer;font-size:11px;font-family:inherit;transition:var(--transition)}
+.perm-cap .perm-cap-x:hover{color:var(--red);border-color:var(--red);background:var(--red-soft)}
+/* 状态着色（chips 与行胶囊共用） */
+.perm-cap.allow,.perm-cap-row.allow{border-color:var(--green);background:var(--green-soft)}
+.perm-cap.allow .perm-cap-dot,.perm-cap-row.allow .perm-cap-dot{background:var(--green);box-shadow:0 0 6px rgba(52,211,153,.5)}
+.perm-cap.allow .perm-cap-state,.perm-cap-row.allow .perm-cap-state{background:var(--green-soft);color:var(--green)}
+.perm-cap.ask,.perm-cap-row.ask{border-color:var(--amber);background:rgba(251,191,36,.1)}
+.perm-cap.ask .perm-cap-dot,.perm-cap-row.ask .perm-cap-dot{background:var(--amber);box-shadow:0 0 6px rgba(251,191,36,.5)}
+.perm-cap.ask .perm-cap-state,.perm-cap-row.ask .perm-cap-state{background:rgba(251,191,36,.16);color:var(--amber)}
+.perm-cap.deny,.perm-cap-row.deny{border-color:var(--red);background:var(--red-soft)}
+.perm-cap.deny .perm-cap-dot,.perm-cap-row.deny .perm-cap-dot{background:var(--red);box-shadow:0 0 6px rgba(251,113,133,.5)}
+.perm-cap.deny .perm-cap-state,.perm-cap-row.deny .perm-cap-state{background:var(--red-soft);color:var(--red)}
+.perm-cap.def,.perm-cap-row.def{border-style:dashed;background:var(--bg);opacity:.9}
+/* 自由文本规则：每行一条胶囊（点按行循环，输入框/删除除外） */
+.perm-cap-list{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
+.perm-cap-list::-webkit-scrollbar{width:6px}
+.perm-cap-list::-webkit-scrollbar-thumb{background:var(--border-hover);border-radius:3px}
+.perm-cap-row{
+  display:flex;align-items:center;gap:6px;min-width:0;flex:none;
+  padding:2px 8px 2px 7px;border:1px solid var(--border);border-radius:999px;
+  background:var(--bg);color:var(--t2);cursor:pointer;transition:var(--transition);
+}
+.perm-cap-row:hover{border-color:var(--border-hover)}
+.perm-cap-row .perm-cap-edit{
+  flex:1 1 auto;min-width:0;padding:2px 0;background:transparent;border:0;outline:0;
+  color:var(--text);font-size:10px;font-family:var(--mono);
+}
+.perm-cap-row .perm-cap-edit:focus{box-shadow:none}
+.perm-cap-row .perm-cap-state{flex:none;font-size:8.5px;font-weight:700;padding:0 6px;border-radius:999px;white-space:nowrap}
+/* 行内独立循环钮（文本不可内联编辑/整行不可点的场景：状态词独立成一枚小胶囊） */
+.perm-cap-cycle{
+  flex:none;padding:1px 9px;font-size:8.5px;font-weight:700;line-height:1.7;
+  border:1px solid var(--border);border-radius:999px;background:var(--bg);color:var(--t2);
+  cursor:pointer;font-family:inherit;transition:var(--transition);
+}
+.perm-cap-cycle:hover{border-color:var(--border-hover);transform:translateY(-1px)}
+.perm-cap-cycle.allow{border-color:var(--green);color:var(--green);background:var(--green-soft)}
+.perm-cap-cycle.ask{border-color:var(--amber);color:var(--amber);background:rgba(251,191,36,.16)}
+.perm-cap-cycle.deny{border-color:var(--red);color:var(--red);background:var(--red-soft)}
+.perm-cap-cycle.def{border-style:dashed;color:var(--t3)}
+.perm-cap-row .perm-cap-x{flex:none;width:15px;height:15px;line-height:1;padding:0;border:1px solid transparent;border-radius:50%;background:transparent;color:var(--t3);cursor:pointer;font-size:12px;font-family:inherit;transition:var(--transition)}
+.perm-cap-row .perm-cap-x:hover{color:var(--red);border-color:var(--red);background:var(--red-soft)}
+/* 添加行：虚线中立胶囊 */
+.perm-cap-row.perm-cap-add{border-style:dashed;border-color:var(--border-hover);background:var(--surface);cursor:default}
+.perm-cap-row.perm-cap-add:hover{border-color:var(--border-hover)}
+.perm-cap-row.perm-cap-add .perm-cap-edit{background:transparent}
+
+
 /* ===== MCP 映射注入窗口 ===== */.map-split{display:grid;grid-template-columns:1fr 1fr;min-height:220px}
 .map-pane{padding:2px;min-width:0;overflow-y:auto;max-height:46vh;scrollbar-width:none}
 .map-pane::-webkit-scrollbar{display:none}
