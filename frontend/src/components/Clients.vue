@@ -920,13 +920,13 @@ const claudeMcps = computed(() => claudeMcpServerNames())
             <template v-else-if="cfgTarget?.id==='agy'">
               <section class="card cfg-card">
                 <div class="field-row">
-                  <div class="field fw-l"><label>GOOGLE_GEMINI_BASE_URL <span class="tip"><i>?</i><em>{{ t('sync.agy.envBaseTip') }}</em></span></label>
+                  <div class="field fw-l"><label>{{ t('sync.agy.envBaseLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.envBaseTip') }}</em></span></label>
                     <div class="ro-url">
                       <input :value="agyRouterUrl()" readonly />
                       <button type="button" class="btn btn-xs btn-ghost" @click="copyText(agyRouterUrl(), $event.currentTarget)">{{ t('sync.copy') }}</button>
                     </div>
                   </div>
-                  <div class="field fw-l"><label>GEMINI_API_KEY <span class="tip"><i>?</i><em>{{ t('sync.agy.envKeyTip') }}</em></span></label>
+                  <div class="field fw-l"><label>{{ t('sync.agy.envKeyLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.envKeyTip') }}</em></span></label>
                     <input v-model="agyEnvKey" :placeholder="t('sync.routeToken')" />
                   </div>
                 </div>
