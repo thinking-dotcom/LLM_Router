@@ -172,49 +172,6 @@ function agySafeCycle(k) {
   agyForm.value[k] = v === 'true' ? 'false' : v === 'false' ? '' : 'true'
 }
 
-// agy 权限配置：常用规则预设胶囊。agy 官方格式为字符串数组（command(git)/write_file(src/)…），
-// 规则归属由「放进 allow 栏还是 deny 栏」决定（无 ask 档）。胶囊点按循环 未设(灰) → 允许(绿)
-// → 拒绝(红) → 未设，状态从 allowText/denyText 行实时反推，写盘仍走原文本框。
-const AGY_PERM_PRESETS = [
-  'command(git)',
-  'command(npm run build)',
-  'command(npm run lint)',
-  'command(npm test)',
-  'command(pnpm run build)',
-  'command(go test ./...)',
-  'command(python3 *)',
-  'command(ls)',
-  'command(pwd)',
-  'command(rm -rf)',
-  'command(sudo)',
-  'command(curl .*)',
-]
-const agyLinesOf = txt => String(txt ?? '').split(/\r?\n/).map(s => s.trim())
-// 同一规则同时出现在两栏（手写冲突）时按 deny 显示，更安全
-function agyPermState(rule) {
-  const d = agyLinesOf(agyForm.value.denyText)
-  if (d.includes(rule)) return 'deny'
-  return agyLinesOf(agyForm.value.allowText).includes(rule) ? 'allow' : 'def'
-}
-function agyLineStrip(txt, rule) {
-  return String(txt ?? '').split(/\r?\n/).filter(l => l.trim() !== rule).join('\n')
-}
-function agyLineAppend(txt, rule) {
-  const s = String(txt ?? '').trim()
-  return s ? s + '\n' + rule : rule
-}
-function agyPermCycle(rule) {
-  const next = agyPermState(rule) === 'def' ? 'allow' : agyPermState(rule) === 'allow' ? 'deny' : 'def'
-  let a = agyLineStrip(agyForm.value.allowText, rule)
-  let d = agyLineStrip(agyForm.value.denyText, rule)
-  if (next === 'allow') a = agyLineAppend(a, rule)
-  else if (next === 'deny') d = agyLineAppend(d, rule)
-  agyForm.value.allowText = a
-  agyForm.value.denyText = d
-}
-const agyPermCls = m => m === 'allow' ? 'allow' : m === 'deny' ? 'deny' : 'def'
-const agyPermWord = m => m === 'allow' ? t('sync.allow') : m === 'deny' ? t('sync.deny') : t('sync.opt.default')
-
 // ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
 // 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
 // → 询问(琥珀) → 拒绝(红) → 未设。写盘走各客户端既有模型，此处的 class/文案仅展示层。
@@ -1091,25 +1048,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                       <option value="always-proceed">{{ t('sync.opt.alwaysProceed') }}</option>
                       <option value="proceed-in-sandbox">{{ t('sync.opt.proceedInSandbox') }}</option>
                     </select>
-                  </div>
-                </div>
-                <div class="field" style="margin:4px 0"><label>{{ t('sync.agy.permPresetLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.permPresetTip') }}</em></span></label>
-                  <div class="perm-caps" role="group" :aria-label="t('sync.agy.permPresetLabel')">
-                    <button v-for="r in AGY_PERM_PRESETS" :key="r" type="button" class="perm-cap" role="radio"
-                      :class="agyPermCls(agyPermState(r))" :aria-checked="agyPermState(r)!=='def'"
-                      :title="r + ' · ' + t('sync.agy.permPresetClick')" @click="agyPermCycle(r)">
-                      <span class="perm-cap-dot"></span>
-                      <span class="perm-cap-text">{{ r }}</span>
-                      <span class="perm-cap-state">{{ agyPermWord(agyPermState(r)) }}</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="cfg-grid">
-                  <div class="field fw-l"><label>{{ t('sync.allow') }}</label>
-                    <textarea v-model="agyForm.allowText" rows="3" class="perm-ta" placeholder="command(git)&#10;write_file(src/)" @wheel="taWheelStop"></textarea>
-                  </div>
-                  <div class="field fw-l"><label>{{ t('sync.deny') }}</label>
-                    <textarea v-model="agyForm.denyText" rows="3" class="perm-ta" placeholder="command(rm -rf)&#10;command(curl .*)" @wheel="taWheelStop"></textarea>
                   </div>
                 </div>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.agy.permTip') }}</em></div>

@@ -399,7 +399,6 @@ export const agyForm = ref({
   systemInstruction: '',
   temperature: '', maxOutputTokens: '', topP: '', topK: '',
   toolPermission: '',
-  allowText: '', denyText: '',
   enableTerminalSandbox: '', allowNonWorkspaceAccess: '', useG1Credits: '', enableTelemetry: '',
   colorScheme: '', altScreenMode: '', runningLightSpeed: '', verbosity: '', editor: '',
   subagentsEnabled: '', subagentsMaxSteps: '', subagentsAutoExecuteTools: '',
@@ -411,7 +410,6 @@ export function initAgyForm() {
   const params = obj(c.parameters), perms = obj(c.permissions), sub = obj(c.subagents)
   const numOr = v => (v !== null && v !== undefined && v !== '' && isFinite(Number(v))) ? String(v) : ''
   const triOr = v => (v === true || v === false) ? String(v) : ''
-  const linesText = arr => Array.isArray(arr) ? arr.filter(x => String(x).trim()).join('\n') : ''
   agyForm.value = {
     modelProvider: c.modelProvider || '',
     baseUrl: c.baseUrl || '',
@@ -423,8 +421,6 @@ export function initAgyForm() {
     topP: numOr(params.topP),
     topK: numOr(params.topK),
     toolPermission: perms.toolPermission || '',
-    allowText: linesText(perms.allow),
-    denyText: linesText(perms.deny),
     enableTerminalSandbox: triOr(c.enableTerminalSandbox),
     allowNonWorkspaceAccess: triOr(c.allowNonWorkspaceAccess),
     useG1Credits: triOr(c.useG1Credits),
@@ -466,14 +462,12 @@ export function agyApplyToObj() {
   if (pk != null) params.topK = pk; else if ('topK' in params) delete params.topK
   if (Object.keys(params).length) c.parameters = params
   else if ('parameters' in c) delete c.parameters
-  // permissions：toolPermission + allow/deny 文本行
+  // permissions：仅维护 toolPermission；allow/deny 规则不在表单管理，保存即移除（避免残留旧规则）
   const perms = (c.permissions && typeof c.permissions === 'object' && !Array.isArray(c.permissions)) ? c.permissions : {}
   const tp = strTrim(f.toolPermission)
   if (tp) perms.toolPermission = tp; else if ('toolPermission' in perms) delete perms.toolPermission
-  const toList = txt => String(txt ?? '').split(/\r?\n/).map(s => s.trim()).filter(Boolean)
-  const allow = toList(f.allowText), deny = toList(f.denyText)
-  if (allow.length) perms.allow = allow; else if ('allow' in perms) delete perms.allow
-  if (deny.length) perms.deny = deny; else if ('deny' in perms) delete perms.deny
+  delete perms.allow
+  delete perms.deny
   if (Object.keys(perms).length) c.permissions = perms
   else if ('permissions' in c) delete c.permissions
   // 布尔开关三态：true / false 显式写入；'' 不写（移除已有键）
