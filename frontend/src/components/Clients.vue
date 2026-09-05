@@ -192,8 +192,10 @@ const AGY_ALL_CMD_MODES = [
 // codebuddy 默认权限模式（settings.json permissions.defaultMode 写盘枚举值不变）：
 // 沿用全客户端 PERM_OPTIONS 四档卡片同款词条，此处以 agy 式单选胶囊呈现
 const CB_DEFAULT_MODES = PERM_OPTIONS
-const cbModelOpen = ref(false) // 默认模型（settings.json model）下拉（仅 model 配选型下拉，lite/reasoning 走自由输入）
-const cbRowOpen = ref(-1)     // models.json 模型行「标识」下拉：当前打开行的索引（-1=全部收起）
+const cbModelOpen = ref(false)  // 默认模型（settings.json model）下拉
+const cbLiteOpen = ref(false)   // 快速档模型（variantModels.lite）下拉
+const cbReasonOpen = ref(false) // 深度档模型（variantModels.reasoning）下拉
+const cbRowOpen = ref(-1)       // models.json 模型行「标识」下拉：当前打开行的索引（-1=全部收起）
 
 // ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
 // 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
@@ -1291,8 +1293,30 @@ const customGrokRows = computed(() =>
                       </div>
                     </div>
                   </div>
-                  <div class="field fw-m"><label>{{ t('sync.cb.lite') }}</label><input v-model="cbForm.liteModel" :placeholder="t('sync.pickModel')" /></div>
-                  <div class="field fw-m"><label>{{ t('sync.cb.reasoning') }}</label><input v-model="cbForm.reasoningModel" :placeholder="t('sync.pickModel')" /></div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.lite') }}</label>
+                    <div class="pi-sel">
+                      <input v-model="cbForm.liteModel" :placeholder="t('sync.pickModel')" @focus="cbLiteOpen=true" @click.stop="cbLiteOpen=true" @input="cbLiteOpen=true" @blur="setTimeout(()=>{ cbLiteOpen=false },120)" />
+                      <div v-show="cbLiteOpen" class="pi-sel-drop">
+                        <div v-for="g in modelGroupsByLetter(cbForm.liteModel)" :key="g.letter" class="pi-sel-group" :data-letter="g.letter">
+                          <div class="pi-sel-letter">{{ g.letter }}</div>
+                          <button v-for="m in g.items" :key="m" type="button" @mousedown.prevent="cbForm.liteModel=m; cbLiteOpen=false">{{ m }}</button>
+                        </div>
+                        <div v-if="!modelGroupsByLetter(cbForm.liteModel).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.reasoning') }}</label>
+                    <div class="pi-sel">
+                      <input v-model="cbForm.reasoningModel" :placeholder="t('sync.pickModel')" @focus="cbReasonOpen=true" @click.stop="cbReasonOpen=true" @input="cbReasonOpen=true" @blur="setTimeout(()=>{ cbReasonOpen=false },120)" />
+                      <div v-show="cbReasonOpen" class="pi-sel-drop">
+                        <div v-for="g in modelGroupsByLetter(cbForm.reasoningModel)" :key="g.letter" class="pi-sel-group" :data-letter="g.letter">
+                          <div class="pi-sel-letter">{{ g.letter }}</div>
+                          <button v-for="m in g.items" :key="m" type="button" @mousedown.prevent="cbForm.reasoningModel=m; cbReasonOpen=false">{{ m }}</button>
+                        </div>
+                        <div v-if="!modelGroupsByLetter(cbForm.reasoningModel).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div class="field-row">
                   <div class="field fw-s"><label>{{ t('sync.cb.cleanupDays') }}</label><input type="number" min="1" v-model="cbForm.cleanupDays" placeholder="30" /></div>
