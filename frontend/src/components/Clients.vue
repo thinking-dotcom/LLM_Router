@@ -111,9 +111,9 @@ import {
   loadAgyAliasPanel,
 } from './sync/agy'
 import {
-  cbForm, cbPermRows, initCodebuddyForm, initCodebuddy, cbRouterUrl,
+  cbForm, cbPermRows, initCodebuddy, cbConnUrl, cbConnKey, cbFillConn,
   cbModelsObj, cbModelsContent, cbModelsExists, cbModelsFile,
-  cbMcpContent, cbMcpExists, cbMcpFile, cbAddModel, cbDelModel, cbFillRoute,
+  cbMcpContent, cbMcpExists, cbMcpFile, cbAddModel, cbDelModel,
 } from './sync/codebuddy'
 // ---- 中枢动作（页签/构建/保存/打开/通用联动/统一模型下拉） ----
 import {
@@ -193,11 +193,6 @@ const AGY_ALL_CMD_MODES = [
 // 沿用全客户端 PERM_OPTIONS 四档卡片同款词条，此处以 agy 式单选胶囊呈现
 const CB_DEFAULT_MODES = PERM_OPTIONS
 const cbModelOpen = ref(false) // 默认模型（settings.json model）下拉（仅 model 配选型下拉，lite/reasoning 走自由输入）
-// 单行端点一键回填：url → 本路由器接入地址，apiKey → 路由令牌（未设鉴权则留空占位）
-async function cbRouteRow(row) {
-  await cbFillRoute(row, 'url')
-  await cbFillRoute(row, 'key')
-}
 
 // ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
 // 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
@@ -1237,8 +1232,18 @@ const customGrokRows = computed(() =>
 
             <!-- codebuddy (CodeBuddy CLI) -->
             <template v-else-if="cfgTarget?.id==='codebuddy'">
-              <!-- 接入端点（models.json）：端点地址仅存在于各模型行 url（官方行级字段），不再顶部重复展示 -->
+              <!-- ① 连接（models.json 端点 url + apiKey，保存时统一铺写到每个模型行） -->
               <div class="panel-head ph-1">{{ t('sync.cb.endpoints') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.endpointTip') }}</em></span></div>
+              <section class="card cfg-card">
+                <div class="field-row" style="margin-top:2px">
+                  <div class="field fw-l"><label>{{ t('sync.cb.url') }}</label><input v-model="cbConnUrl" placeholder="http://127.0.0.1:3000/router" /></div>
+                  <div class="field fw-l"><label>{{ t('sync.apiKey') }}</label><input v-model="cbConnKey" :placeholder="t('sync.routeToken')" /></div>
+                  <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-end;margin-bottom:4px" @click="cbFillConn()">{{ t('sync.cb.fillRouter') }}</button>
+                </div>
+              </section>
+
+              <!-- ② 模型配置（models.json models[]：id/name/vendor/能力开关；连接由顶部统一） -->
+              <div class="panel-head ph-2">{{ t('sync.cb.modelsTitle') }}</div>
               <section class="card cfg-card">
                 <div v-if="cbModelsObj.models && cbModelsObj.models.length" class="cb-mrows">
                   <div v-for="(row, i) in cbModelsObj.models" :key="i" class="pi-model-block cb-mrow">
@@ -1257,19 +1262,14 @@ const customGrokRows = computed(() =>
                         <select v-model="row.supportsImages"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
                       </div>
                     </div>
-                    <div class="field-row">
-                      <div class="field fw-l"><label>{{ t('sync.cb.url') }}</label><input v-model="row.url" placeholder="http://127.0.0.1:3000/router" /></div>
-                      <div class="field fw-l"><label>{{ t('sync.apiKey') }}</label><input v-model="row.apiKey" :placeholder="t('sync.routeToken')" /></div>
-                      <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-end;margin-bottom:4px" :title="t('sync.cb.fillRouter')" @click="cbRouteRow(row)">{{ t('sync.cb.fillRouter') }}</button>
-                    </div>
                   </div>
                 </div>
                 <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-start" @click="cbAddModel()">{{ t('sync.addModel') }}</button>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.cb.modelsTip') }}</em></div>
               </section>
 
-              <!-- 默认模型与常规（settings.json） -->
-              <div class="panel-head ph-2">{{ t('sync.cb.general') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.generalTip') }}</em></span></div>
+              <!-- ③ 默认模型与常规（settings.json） -->
+              <div class="panel-head ph-3">{{ t('sync.cb.general') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.generalTip') }}</em></span></div>
               <section class="card cfg-card">
                 <div class="field-row" style="margin-top:2px">
                   <div class="field fw-l"><label>{{ t('sync.defaultModel') }} <span class="tip"><i>?</i><em>settings.json model</em></span></label>
@@ -1302,8 +1302,8 @@ const customGrokRows = computed(() =>
                 </div>
               </section>
 
-              <!-- 权限配置：defaultMode 单选胶囊（agy 风格）+ allow/ask/deny 规则行 -->
-              <div class="panel-head ph-3">{{ t('sync.panelPerm') }}</div>
+              <!-- ④ 权限配置：defaultMode 单选胶囊（agy 风格）+ allow/ask/deny 规则行 -->
+              <div class="panel-head ph-4">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
                 <div class="agy-perm-line">
                   <div class="agy-perm-col">
@@ -1322,8 +1322,8 @@ const customGrokRows = computed(() =>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.cb.permTip') }}</em></div>
               </section>
 
-              <!-- 沙箱（settings.json sandbox） -->
-              <div class="panel-head ph-4">{{ t('sync.cb.sandboxPanel') }}</div>
+              <!-- ⑤ 沙箱（settings.json sandbox） -->
+              <div class="panel-head ph-5">{{ t('sync.cb.sandboxPanel') }}</div>
               <section class="card cfg-card">
                 <div class="cfg-grid agy-safe-grid">
                   <div class="field fw-m"><label>{{ t('sync.cb.sandboxEnabled') }}</label>

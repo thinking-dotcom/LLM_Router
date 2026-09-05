@@ -13,6 +13,8 @@
 // 接入本路由器靠 ~/.codebuddy/models.json 的端点模型行（官方机制）：
 //   每行 { id, name, vendor, url, apiKey, supportsToolCall, supportsImages }
 //   把 url 指向本路由器 /router、apiKey 填路由令牌即可让 CLI 请求走路由器。
+// 表单将连接收敛为顶部「端点地址 + 密钥」一组共享值：保存时统一铺写每个模型行的
+// url / apiKey（models.json 行级字段），行内仅保留模型配置；行级差异化走 JSON 源码页签。
 // models.json 顶层其余键（availableModels 等）原样保留。
 //
 // MCP 声明在 ~/.codebuddy/mcp.json（mcpServers 对象），源码页签直编。
@@ -33,6 +35,39 @@ export const cbModelsContent = ref('')
 export const cbModelsExists = ref(false)
 export const cbModelsFile = ref('~/.codebuddy/models.json')
 
+// 共享连接（面板顶部）：端点地址 cbConnUrl + 密钥 cbConnKey。
+// models.json 每行的 url / apiKey 由这两值统一铺写；行内不再各自重复配置。
+export const cbConnUrl = ref('')
+export const cbConnKey = ref('')
+
+const modelsRows = () => {
+  const o = cbModelsObj.value
+  return Array.isArray(o && o.models) ? o.models : []
+}
+// 行 → 顶部：取首个非空 url / apiKey（按加载顺序）；全空则回退本路由器接入地址
+function syncConnFromRows() {
+  let u = '', k = ''
+  for (const r of modelsRows()) {
+    if (!u) u = String((r && r.url) || '').trim()
+    if (!k) k = String((r && r.apiKey) || '').trim()
+    if (u && k) break
+  }
+  cbConnUrl.value = u || cbRouterUrl()
+  cbConnKey.value = k
+}
+// 顶部 → 行：url / apiKey 为受管共享键，非空则铺写每个模型行；
+// 空值不干预（行级既有差异保留，仅在 JSON 源码页签可见/维护）
+function applyConnToRows() {
+  const u = String(cbConnUrl.value || '').trim()
+  const k = String(cbConnKey.value || '').trim()
+  if (!u && !k) return
+  for (const r of modelsRows()) {
+    if (!r || typeof r !== 'object') continue
+    if (u) r.url = u
+    if (k) r.apiKey = k
+  }
+}
+
 // 从源码文本解析进 cbModelsObj（含 models 数组缺省兜底）；非法 JSON 返回 false
 export function cbModelsFromText(content) {
   try {
@@ -40,11 +75,13 @@ export function cbModelsFromText(content) {
     if (!v || typeof v !== 'object' || Array.isArray(v)) return false
     if (!Array.isArray(v.models)) v.models = []
     cbModelsObj.value = v
+    syncConnFromRows()
     return true
   } catch (e) { return false }
 }
-// cbModelsObj → 源码文本（结构序列化，顶层其它键一并保留）
+// cbModelsObj → 源码文本（先把顶部共享连接铺到各模型行，再序列化，顶层其它键一并保留）
 export function cbModelsBuildText() {
+  applyConnToRows()
   const o = cbModelsObj.value || {}
   return JSON.stringify({ models: Array.isArray(o.models) ? o.models : [], ...dropKey(o, 'models') }, null, 2) + '\n'
 }
@@ -53,9 +90,9 @@ function dropKey(o, key) {
   for (const [k, v] of Object.entries(o || {})) if (k !== key) out[k] = v
   return out
 }
-// 新行骨架：url 默认指向本路由器（apiKey 留空占位路由令牌）
+// 新行骨架：仅模型配置；端点 url / apiKey 由顶部共享连接统一铺写
 export function cbNewModelRow() {
-  return { id: '', name: '', vendor: 'OpenAI', url: cbRouterUrl(), apiKey: '', supportsToolCall: true, supportsImages: false }
+  return { id: '', name: '', vendor: 'OpenAI', supportsToolCall: true, supportsImages: false }
 }
 export function cbAddModel() {
   const o = cbModelsObj.value
@@ -66,10 +103,9 @@ export function cbDelModel(i) {
   const o = cbModelsObj.value
   if (Array.isArray(o.models)) o.models.splice(i, 1)
 }
-// 单行快捷回填：'url' 填路由器端点；'key' 填路由令牌（读配置 authToken，未设则置空）
-export async function cbFillRoute(row, mode) {
-  if (!row) return
-  if (mode === 'url') row.url = cbRouterUrl()
+// 顶部共享连接一键回填：'url' 填本路由器端点；'key' 填路由令牌（读配置 authToken，未设则置空）
+export async function cbFillRoute(mode) {
+  if (mode === 'url') cbConnUrl.value = cbRouterUrl()
   if (mode === 'key') {
     let tk = ''
     try {
@@ -77,8 +113,12 @@ export async function cbFillRoute(row, mode) {
       const v = String((c && c.authToken) || '').trim()
       if (v && v !== '****') tk = v
     } catch (e) {}
-    row.apiKey = tk
+    cbConnKey.value = tk
   }
+}
+export function cbFillConn() {
+  cbFillRoute('url')
+  cbFillRoute('key')
 }
 
 // 接入地址：统一 /router（与其它客户端一致）

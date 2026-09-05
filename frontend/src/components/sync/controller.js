@@ -837,8 +837,8 @@ export async function openTargetConfig(tg) {
           if (mr && mr.ok && mr.file) cbModelsFile.value = mr.file
           const raw = hasM ? mr.content : ''
           if (cbModelsFromText(raw)) cbModelsContent.value = raw || cbModelsBuildText()
-          else { cbModelsObj.value = { models: [] }; cbModelsContent.value = cbModelsBuildText() }
-        } catch (e) { cbModelsObj.value = { models: [] }; cbModelsContent.value = cbModelsBuildText() }
+          else { cbModelsFromText('{}'); cbModelsContent.value = cbModelsBuildText() }
+        } catch (e) { cbModelsFromText('{}'); cbModelsContent.value = cbModelsBuildText() }
         // 同时加载 mcp.json（~/.codebuddy/mcp.json）源码页签
         cbMcpContent.value = ''
         cbMcpExists.value = false

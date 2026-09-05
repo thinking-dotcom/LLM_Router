@@ -541,11 +541,12 @@ export const I18N = {
 
     // codebuddy (CodeBuddy CLI)
     'sync.cb.endpoints': '接入端点（models.json）',
-    'sync.cb.endpointTip': 'CodeBuddy 端点模型清单：每行 url / apiKey 决定 CLI 请求去向。url 填本路由器接入地址、apiKey 填路由令牌即可让请求经路由器转发；models.json 顶层其它键（availableModels 等）在 JSON 源码页签维护。',
+    'sync.cb.endpointTip': '顶部端点地址与密钥为统一连接：保存时写入 models.json 的每个模型行（url / apiKey），CLI 全部模型请求都经该端点转发；需要按行差异化端点时请用 models.json 源码页签直接编辑该行。',
     'sync.cb.fillRouter': '接入本路由器',
     'sync.cb.url': '端点地址 (url)',
     'sync.cb.images': '图像支持',
-    'sync.cb.modelsTip': '本面板行编辑仅覆盖 models 数组；models.json 顶层其余键与每行未列字段保存时原样保留。',
+    'sync.cb.modelsTitle': '模型配置（models.json）',
+    'sync.cb.modelsTip': '模型行编辑 id / name / vendor / 能力开关；端点 url / apiKey 统一取顶部连接。行内未列字段与顶层其余键（availableModels 等）保存时原样保留，JSON 源码页签可整文件维护。',
     'sync.cb.general': '默认模型与常规（settings.json）',
     'sync.cb.generalTip': 'model 为默认模型；variantModels 对应快速档/深度档（会话内 /model 可即时切换）。',
     'sync.cb.lite': '快速档模型 (variantModels.lite)',
@@ -1467,11 +1468,12 @@ export const I18N = {
 
     // codebuddy (CodeBuddy CLI)
     'sync.cb.endpoints': 'Endpoints (models.json)',
-    'sync.cb.endpointTip': 'CodeBuddy endpoint model list: the url / apiKey of each row decides where CLI requests go. Point url at the router address and apiKey at the route token to route through this router; other top-level keys (availableModels etc.) live in the JSON source tab.',
+    'sync.cb.endpointTip': 'The endpoint URL and key above are the shared connection: on save they are written into every model row (url / apiKey) of models.json, so all CLI model traffic goes through that endpoint. For per-row endpoint overrides, edit the row directly in the models.json source tab.',
     'sync.cb.fillRouter': 'Route via this router',
     'sync.cb.url': 'Endpoint URL (url)',
     'sync.cb.images': 'Image support',
-    'sync.cb.modelsTip': 'Row edits cover the models array only; other top-level keys and unlisted per-row fields are preserved on save.',
+    'sync.cb.modelsTitle': 'Models (models.json)',
+    'sync.cb.modelsTip': 'Rows edit id / name / vendor / capability flags only; url / apiKey come from the shared connection above. Unlisted per-row fields and other top-level keys (availableModels etc.) are preserved on save; the JSON source tab edits the whole file.',
     'sync.cb.general': 'Default model & general (settings.json)',
     'sync.cb.generalTip': 'model is the default model; variantModels map the lite / reasoning tiers (switchable live with /model in a session).',
     'sync.cb.lite': 'Lite model (variantModels.lite)',
