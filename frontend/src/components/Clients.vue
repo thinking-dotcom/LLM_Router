@@ -1270,6 +1270,9 @@ const customGrokRows = computed(() =>
                       <div class="field fw-s"><label>{{ t('sync.cb.images') }}</label>
                         <select v-model="row.supportsImages"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
                       </div>
+                      <div class="field fw-s"><label>{{ t('sync.cb.supportsReasoning') }}</label>
+                        <select v-model="row.supportsReasoning"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1316,6 +1319,24 @@ const customGrokRows = computed(() =>
                         <div v-if="!modelGroupsByLetter(cbForm.reasoningModel).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
                       </div>
                     </div>
+                  </div>
+                </div>
+                <div class="field-row">
+                  <div class="field fw-m"><label>{{ t('sync.cb.reasoningEffort') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.reasoningEffortTip') }}</em></span></label>
+                    <select v-model="cbForm.reasoningEffort">
+                      <option value="">{{ t('sync.opt.auto') }}</option>
+                      <option value="low">{{ t('sync.opt.low') }}</option>
+                      <option value="medium">{{ t('sync.opt.medium') }}</option>
+                      <option value="high">{{ t('sync.opt.high') }}</option>
+                      <option value="xhigh">{{ t('sync.opt.xhigh') }}</option>
+                    </select>
+                  </div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.alwaysThinking') }}</label>
+                    <select v-model="cbForm.alwaysThinking">
+                      <option value="">{{ t('sync.opt.default') }}</option>
+                      <option value="true">{{ t('sync.opt.yes') }}</option>
+                      <option value="false">{{ t('sync.opt.no') }}</option>
+                    </select>
                   </div>
                 </div>
                 <div class="field-row">

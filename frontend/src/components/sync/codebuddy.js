@@ -1,8 +1,9 @@
 // CodeBuddy CLI（codebuddy，~/.codebuddy/settings.json，/oai 接入）：
 // settings.json 表单 + models.json 端点行 + mcp.json 源码，界面仿 agy。
 //
-// 主配置 settings.json（官方字段，权限/沙箱/模型等）直读直写真实文件：
-//   model / variantModels{ lite, reasoning } / cleanupPeriodDays /
+// 主配置 settings.json（官方字段，权限/沙箱/模型/深度推理等）直读直写真实文件：
+//   model / reasoningEffort / alwaysThinkingEnabled /
+//   variantModels{ lite, reasoning } / cleanupPeriodDays /
 //   includeCoAuthoredBy / trustedDirectories[] /
 //   permissions{ defaultMode, allow[], ask[], deny[] } /
 //   sandbox{ enabled, autoAllowBashIfSandboxed, excludedCommands[],
@@ -11,7 +12,8 @@
 // 由 JSON 源码页签维护，保存原样保留。
 //
 // 接入本路由器靠 ~/.codebuddy/models.json 的端点模型行（官方机制）：
-//   每行 { id, name, vendor, url, apiKey, supportsToolCall, supportsImages }
+//   每行 { id, name, vendor, url, apiKey, supportsToolCall, supportsImages,
+//          supportsReasoning }
 //   把 url 指向本路由器 /router、apiKey 填路由令牌即可让 CLI 请求走路由器。
 // 表单将连接收敛为顶部「端点地址 + 密钥」一组共享值：保存时统一铺写每个模型行的
 // url / apiKey（models.json 行级字段），行内仅保留模型配置；行级差异化走 JSON 源码页签。
@@ -74,6 +76,10 @@ export function cbModelsFromText(content) {
     const v = JSON.parse(String(content || '{}'))
     if (!v || typeof v !== 'object' || Array.isArray(v)) return false
     if (!Array.isArray(v.models)) v.models = []
+    // 归一能力开关：supportsReasoning 缺失的旧行补默认 false，保证行内下拉有选中态
+    for (const r of v.models) {
+      if (r && typeof r === 'object' && typeof r.supportsReasoning !== 'boolean') r.supportsReasoning = false
+    }
     cbModelsObj.value = v
     syncConnFromRows()
     return true
@@ -92,7 +98,7 @@ function dropKey(o, key) {
 }
 // 新行骨架：仅模型配置；端点 url / apiKey 由顶部共享连接统一铺写
 export function cbNewModelRow() {
-  return { id: '', name: '', vendor: 'OpenAI', supportsToolCall: true, supportsImages: false }
+  return { id: '', name: '', vendor: 'OpenAI', supportsToolCall: true, supportsImages: false, supportsReasoning: false }
 }
 export function cbAddModel() {
   const o = cbModelsObj.value
@@ -130,6 +136,8 @@ export function cbRouterUrl() {
 export function codebuddyPreset() {
   return {
     model: '',
+    reasoningEffort: '',
+    alwaysThinkingEnabled: null,
     variantModels: { lite: '', reasoning: '' },
     permissions: { defaultMode: 'default', allow: [], ask: [], deny: [] },
     sandbox: { enabled: null, autoAllowBashIfSandboxed: null, excludedCommands: [], network: { allowLocalBinding: null, allowUnixSockets: [] } },
@@ -140,6 +148,8 @@ export function codebuddyPreset() {
 }
 export const cbForm = ref({
   model: '',
+  reasoningEffort: '',  // ''=auto（跟随产品默认）/ low / medium / high / xhigh
+  alwaysThinking: '',   // '' 默认 / true / false（alwaysThinkingEnabled）
   liteModel: '',
   reasoningModel: '',
   cleanupDays: '',
@@ -169,6 +179,9 @@ export function initCodebuddyForm() {
   const variant = objOr(c.variantModels)
   cbForm.value = {
     model: c.model || '',
+    // 官方语义：auto 等价于清空该项 → 归一为空（下拉空选项即 auto）
+    reasoningEffort: c.reasoningEffort === 'auto' ? '' : (c.reasoningEffort || ''),
+    alwaysThinking: triOr(c.alwaysThinkingEnabled),
     liteModel: variant.lite || '',
     reasoningModel: variant.reasoning || '',
     cleanupDays: numOr(c.cleanupPeriodDays),
@@ -203,6 +216,15 @@ export function codebuddyApplyToObj() {
   if (!c || typeof c !== 'object') return
   const f = cbForm.value
   setStr(c, f, 'model')
+  // reasoningEffort（官方 low/medium/high/xhigh；空=auto/跟随产品默认，删键）
+  const re = strTrim(f.reasoningEffort)
+  if (re) c.reasoningEffort = re
+  else if ('reasoningEffort' in c) delete c.reasoningEffort
+  // alwaysThinkingEnabled：总开思考模式（三态，空=删键跟随默认）
+  const at = f.alwaysThinking
+  if (at === 'true') c.alwaysThinkingEnabled = true
+  else if (at === 'false') c.alwaysThinkingEnabled = false
+  else if ('alwaysThinkingEnabled' in c) delete c.alwaysThinkingEnabled
   // variantModels：仅维护 lite / reasoning，其余键保留
   const variant = objOr(c.variantModels)
   const vl = strTrim(f.liteModel), vr = strTrim(f.reasoningModel)

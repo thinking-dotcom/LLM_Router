@@ -1,5 +1,7 @@
 {
   "model": "",
+  "reasoningEffort": "",
+  "alwaysThinkingEnabled": null,
   "variantModels": {
     "lite": "",
     "reasoning": ""
