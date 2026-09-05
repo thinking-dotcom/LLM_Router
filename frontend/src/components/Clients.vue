@@ -1232,7 +1232,7 @@ const customGrokRows = computed(() =>
 
             <!-- codebuddy (CodeBuddy CLI) -->
             <template v-else-if="cfgTarget?.id==='codebuddy'">
-              <!-- ① 连接（models.json 端点 url + apiKey，保存时统一铺写到每个模型行） -->
+              <!-- ① 接入端点与模型（models.json）：顶部统一端点地址/密钥 + 下方模型配置行（保存时连接铺写到每行 url/apiKey） -->
               <div class="panel-head ph-1">{{ t('sync.cb.endpoints') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.endpointTip') }}</em></span></div>
               <section class="card cfg-card">
                 <div class="field-row" style="margin-top:2px">
@@ -1240,12 +1240,7 @@ const customGrokRows = computed(() =>
                   <div class="field fw-l"><label>{{ t('sync.apiKey') }}</label><input v-model="cbConnKey" :placeholder="t('sync.routeToken')" /></div>
                   <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-end;margin-bottom:4px" @click="cbFillConn()">{{ t('sync.cb.fillRouter') }}</button>
                 </div>
-              </section>
-
-              <!-- ② 模型配置（models.json models[]：id/name/vendor/能力开关；连接由顶部统一） -->
-              <div class="panel-head ph-2">{{ t('sync.cb.modelsTitle') }}</div>
-              <section class="card cfg-card">
-                <div v-if="cbModelsObj.models && cbModelsObj.models.length" class="cb-mrows">
+                <div v-if="cbModelsObj.models && cbModelsObj.models.length" class="cb-mrows" style="margin-top:8px">
                   <div v-for="(row, i) in cbModelsObj.models" :key="i" class="pi-model-block cb-mrow">
                     <div class="pi-model-head">
                       <strong>#{{ i + 1 }}</strong>
@@ -1264,12 +1259,12 @@ const customGrokRows = computed(() =>
                     </div>
                   </div>
                 </div>
-                <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-start" @click="cbAddModel()">{{ t('sync.addModel') }}</button>
+                <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-start;margin-top:4px" @click="cbAddModel()">{{ t('sync.addModel') }}</button>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.cb.modelsTip') }}</em></div>
               </section>
 
-              <!-- ③ 默认模型与常规（settings.json） -->
-              <div class="panel-head ph-3">{{ t('sync.cb.general') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.generalTip') }}</em></span></div>
+              <!-- ② 默认模型与常规（settings.json） -->
+              <div class="panel-head ph-2">{{ t('sync.cb.general') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.generalTip') }}</em></span></div>
               <section class="card cfg-card">
                 <div class="field-row" style="margin-top:2px">
                   <div class="field fw-l"><label>{{ t('sync.defaultModel') }} <span class="tip"><i>?</i><em>settings.json model</em></span></label>
@@ -1302,8 +1297,8 @@ const customGrokRows = computed(() =>
                 </div>
               </section>
 
-              <!-- ④ 权限配置：defaultMode 单选胶囊（agy 风格）+ allow/ask/deny 规则行 -->
-              <div class="panel-head ph-4">{{ t('sync.panelPerm') }}</div>
+              <!-- ③ 权限配置：defaultMode 单选胶囊（agy 风格）+ allow/ask/deny 规则行 -->
+              <div class="panel-head ph-3">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
                 <div class="agy-perm-line">
                   <div class="agy-perm-col">
@@ -1322,8 +1317,8 @@ const customGrokRows = computed(() =>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.cb.permTip') }}</em></div>
               </section>
 
-              <!-- ⑤ 沙箱（settings.json sandbox） -->
-              <div class="panel-head ph-5">{{ t('sync.cb.sandboxPanel') }}</div>
+              <!-- ④ 沙箱（settings.json sandbox） -->
+              <div class="panel-head ph-4">{{ t('sync.cb.sandboxPanel') }}</div>
               <section class="card cfg-card">
                 <div class="cfg-grid agy-safe-grid">
                   <div class="field fw-m"><label>{{ t('sync.cb.sandboxEnabled') }}</label>
