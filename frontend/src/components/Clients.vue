@@ -193,6 +193,7 @@ const AGY_ALL_CMD_MODES = [
 // 沿用全客户端 PERM_OPTIONS 四档卡片同款词条，此处以 agy 式单选胶囊呈现
 const CB_DEFAULT_MODES = PERM_OPTIONS
 const cbModelOpen = ref(false) // 默认模型（settings.json model）下拉（仅 model 配选型下拉，lite/reasoning 走自由输入）
+const cbRowOpen = ref(-1)     // models.json 模型行「标识」下拉：当前打开行的索引（-1=全部收起）
 
 // ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
 // 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
@@ -1247,7 +1248,18 @@ const customGrokRows = computed(() =>
                       <button type="button" class="btn btn-xs btn-ghost row-del" @click="cbDelModel(i)">{{ t('sync.delete') }}</button>
                     </div>
                     <div class="field-row">
-                      <div class="field fw-m"><label>{{ t('sync.id') }}</label><input v-model="row.id" placeholder="model-id" /></div>
+                      <div class="field fw-l"><label>{{ t('sync.id') }}</label>
+                        <div class="pi-sel">
+                          <input v-model="row.id" :placeholder="t('sync.pickModel')" @focus="cbRowOpen=i" @click.stop="cbRowOpen=i" @input="cbRowOpen=i" @blur="setTimeout(()=>{ if(cbRowOpen===i) cbRowOpen=-1 },120)" />
+                          <div v-show="cbRowOpen===i" class="pi-sel-drop">
+                            <div v-for="g in modelGroupsByLetter(row.id)" :key="g.letter" class="pi-sel-group" :data-letter="g.letter">
+                              <div class="pi-sel-letter">{{ g.letter }}</div>
+                              <button v-for="m in g.items" :key="m" type="button" @mousedown.prevent="row.id=m; cbRowOpen=-1">{{ m }}</button>
+                            </div>
+                            <div v-if="!modelGroupsByLetter(row.id).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
+                          </div>
+                        </div>
+                      </div>
                       <div class="field fw-m"><label>{{ t('sync.name') }}</label><input v-model="row.name" :placeholder="t('sync.namePh')" /></div>
                       <div class="field fw-s"><label>{{ t('sync.provider') }}</label><input v-model="row.vendor" placeholder="OpenAI" /></div>
                       <div class="field fw-s"><label>{{ t('sync.supportsTools') }}</label>
