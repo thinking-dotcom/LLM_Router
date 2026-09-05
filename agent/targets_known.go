@@ -359,4 +359,15 @@ func init() {
 		configFile: agySettingsRealFile(),
 		presetFile: agySettingsTemplateFile(),
 	})
+
+	// CodeBuddy CLI：mcp + 编辑配置。主配置直接读写真实 ~/.codebuddy/settings.json
+	//（权限 / 模型 / 沙箱等官方设置，无模板中转），模板仅作首次初始值；
+	// models.json（端点模型清单，url/apiKey 指向本路由器）与 mcp.json 由前端
+	// 经 Get/SaveCodebuddyModels / Get/SaveCodebuddyMcp 并入同一编辑页。
+	RegisterTarget(&fileMcpTarget{
+		id: "codebuddy", name: "CodeBuddy CLI", apiFormat: "/oai",
+		mcpFile:    codebuddyMcpRealFile(),
+		configFile: codebuddySettingsRealFile(),
+		presetFile: codebuddySettingsTemplateFile(),
+	})
 }

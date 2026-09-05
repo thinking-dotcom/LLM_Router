@@ -77,5 +77,10 @@
     "config": "~/.gemini/antigravity-cli/settings.json",
     "mcp": "~/.gemini/config/mcp_config.json",
     "skills": "~/.gemini/config/skills"
+  },
+  "codebuddy": {
+    "config": "~/.codebuddy/settings.json",
+    "models": "~/.codebuddy/models.json",
+    "mcp": "~/.codebuddy/mcp.json"
   }
 }

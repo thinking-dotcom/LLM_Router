@@ -110,6 +110,11 @@ import {
   agyRouterModels, agyToOpenFor, agyToGroups, pickAgyTo, agyToKeyNav,
   loadAgyAliasPanel,
 } from './sync/agy'
+import {
+  cbForm, cbPermRows, initCodebuddyForm, initCodebuddy, cbRouterUrl,
+  cbModelsObj, cbModelsContent, cbModelsExists, cbModelsFile,
+  cbMcpContent, cbMcpExists, cbMcpFile, cbAddModel, cbDelModel, cbFillRoute,
+} from './sync/codebuddy'
 // ---- 中枢动作（页签/构建/保存/打开/通用联动/统一模型下拉） ----
 import {
   currentCfgFile, currentCfgExists, switchMode, tabJsonLabel, claudeModelOpen, ocModelOpen, geminiModelOpen,
@@ -130,6 +135,7 @@ initCommandCode()
 initHermes()
 initKilo()
 initAgy()
+initCodebuddy()
 initSyncController()
 
 // agy 接入环境变量写/清：清除走应用内确认弹窗（替代原生 confirm）
@@ -182,6 +188,16 @@ const AGY_ALL_CMD_MODES = [
   { v: 'allow', label: 'sync.allow', cls: 'allow' },
   { v: 'deny', label: 'sync.deny', cls: 'deny' },
 ]
+
+// codebuddy 默认权限模式（settings.json permissions.defaultMode 写盘枚举值不变）：
+// 沿用全客户端 PERM_OPTIONS 四档卡片同款词条，此处以 agy 式单选胶囊呈现
+const CB_DEFAULT_MODES = PERM_OPTIONS
+const cbModelOpen = ref(false) // 默认模型（settings.json model）下拉（仅 model 配选型下拉，lite/reasoning 走自由输入）
+// 单行端点一键回填：url → 本路由器接入地址，apiKey → 路由令牌（未设鉴权则留空占位）
+async function cbRouteRow(row) {
+  await cbFillRoute(row, 'url')
+  await cbFillRoute(row, 'key')
+}
 
 // ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
 // 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
@@ -486,6 +502,10 @@ const customGrokRows = computed(() =>
             <button v-if="cfgTarget?.id==='copilot'" class="cfg-tab" :class="{on:cfgMode==='copilotenv'}" @click="switchMode('copilotenv')" :title="t('sync.copilot.tabTip')">{{ t('sync.copilot.title') }}</button>
             <button v-if="cfgTarget?.id==='copilot'" class="cfg-tab" :class="{on:cfgMode==='copilotperm'}" @click="switchMode('copilotperm')" :title="t('sync.copilot.permTabTip')">{{ t('sync.copilot.permTab') }}</button>
             <button v-if="cfgTarget?.id==='agy'" class="cfg-tab" :class="{on:cfgMode==='agymcp'}" @click="switchMode('agymcp')" :title="'~/.gemini/config/mcp_config.json ' + t('sync.src')">mcp_config.json</button>
+            <template v-if="cfgTarget?.id==='codebuddy'">
+              <button class="cfg-tab" :class="{on:cfgMode==='cbmodels'}" @click="switchMode('cbmodels')" :title="'~/.codebuddy/models.json ' + t('sync.src')">models.json</button>
+              <button class="cfg-tab" :class="{on:cfgMode==='cbmcp'}" @click="switchMode('cbmcp')" :title="'~/.codebuddy/mcp.json ' + t('sync.src')">mcp.json</button>
+            </template>
           </div>
         </div>
 
@@ -1212,6 +1232,139 @@ const customGrokRows = computed(() =>
                     </select>
                   </div>
                 </div>
+              </section>
+            </template>
+
+            <!-- codebuddy (CodeBuddy CLI) -->
+            <template v-else-if="cfgTarget?.id==='codebuddy'">
+              <!-- 接入端点（models.json）：url/apiKey 指向本路由器，等效 agy 顶部连接信息 -->
+              <div class="panel-head ph-1">{{ t('sync.cb.endpoints') }}</div>
+              <section class="card cfg-card">
+                <div class="field-row" style="margin-top:2px;align-items:flex-end">
+                  <div class="field fw-l"><label>{{ t('sync.routerUrl') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.endpointTip') }}</em></span></label>
+                    <div class="ro-url">
+                      <input :value="derivedBaseUrl()" readonly />
+                      <button type="button" class="btn btn-xs btn-ghost" @click="copyText(derivedBaseUrl(), $event.currentTarget)">{{ t('sync.copy') }}</button>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="cbModelsObj.models && cbModelsObj.models.length" class="cb-mrows">
+                  <div v-for="(row, i) in cbModelsObj.models" :key="i" class="pi-model-block cb-mrow">
+                    <div class="pi-model-head">
+                      <strong>#{{ i + 1 }}</strong>
+                      <button type="button" class="btn btn-xs btn-ghost row-del" @click="cbDelModel(i)">{{ t('sync.delete') }}</button>
+                    </div>
+                    <div class="field-row">
+                      <div class="field fw-m"><label>{{ t('sync.id') }}</label><input v-model="row.id" placeholder="model-id" /></div>
+                      <div class="field fw-m"><label>{{ t('sync.name') }}</label><input v-model="row.name" :placeholder="t('sync.namePh')" /></div>
+                      <div class="field fw-s"><label>{{ t('sync.provider') }}</label><input v-model="row.vendor" placeholder="OpenAI" /></div>
+                      <div class="field fw-s"><label>{{ t('sync.supportsTools') }}</label>
+                        <select v-model="row.supportsToolCall"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
+                      </div>
+                      <div class="field fw-s"><label>{{ t('sync.cb.images') }}</label>
+                        <select v-model="row.supportsImages"><option :value="true">{{ t('sync.opt.true') }}</option><option :value="false">{{ t('sync.opt.false') }}</option></select>
+                      </div>
+                    </div>
+                    <div class="field-row">
+                      <div class="field fw-l"><label>{{ t('sync.cb.url') }}</label><input v-model="row.url" placeholder="http://127.0.0.1:3000/router" /></div>
+                      <div class="field fw-l"><label>{{ t('sync.apiKey') }}</label><input v-model="row.apiKey" :placeholder="t('sync.routeToken')" /></div>
+                      <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-end;margin-bottom:4px" :title="t('sync.cb.fillRouter')" @click="cbRouteRow(row)">{{ t('sync.cb.fillRouter') }}</button>
+                    </div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-start" @click="cbAddModel()">{{ t('sync.addModel') }}</button>
+                <div class="tip blk"><i>?</i><em>{{ t('sync.cb.modelsTip') }}</em></div>
+              </section>
+
+              <!-- 默认模型与常规（settings.json） -->
+              <div class="panel-head ph-2">{{ t('sync.cb.general') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.generalTip') }}</em></span></div>
+              <section class="card cfg-card">
+                <div class="field-row" style="margin-top:2px">
+                  <div class="field fw-l"><label>{{ t('sync.defaultModel') }} <span class="tip"><i>?</i><em>settings.json model</em></span></label>
+                    <div class="pi-sel">
+                      <input v-model="cbForm.model" :placeholder="t('sync.pickModel')" @focus="cbModelOpen=true" @click.stop="cbModelOpen=true" @input="cbModelOpen=true" @blur="setTimeout(()=>{ cbModelOpen=false },120)" />
+                      <div v-show="cbModelOpen" class="pi-sel-drop">
+                        <div v-for="g in modelGroupsByLetter(cbForm.model)" :key="g.letter" class="pi-sel-group" :data-letter="g.letter">
+                          <div class="pi-sel-letter">{{ g.letter }}</div>
+                          <button v-for="m in g.items" :key="m" type="button" @mousedown.prevent="cbForm.model=m; cbModelOpen=false">{{ m }}</button>
+                        </div>
+                        <div v-if="!modelGroupsByLetter(cbForm.model).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.lite') }}</label><input v-model="cbForm.liteModel" :placeholder="t('sync.pickModel')" /></div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.reasoning') }}</label><input v-model="cbForm.reasoningModel" :placeholder="t('sync.pickModel')" /></div>
+                </div>
+                <div class="field-row">
+                  <div class="field fw-s"><label>{{ t('sync.cb.cleanupDays') }}</label><input type="number" min="1" v-model="cbForm.cleanupDays" placeholder="30" /></div>
+                  <div class="field fw-s"><label>{{ t('sync.cb.coauth') }}</label>
+                    <select v-model="cbForm.coauth">
+                      <option value="">{{ t('sync.opt.default') }}</option>
+                      <option value="true">{{ t('sync.opt.yes') }}</option>
+                      <option value="false">{{ t('sync.opt.no') }}</option>
+                    </select>
+                  </div>
+                  <div class="field fw-l"><label>{{ t('sync.cb.trustedDirs') }}</label>
+                    <textarea v-model="cbForm.trustedDirsText" rows="2" class="perm-ta" @wheel="taWheelStop" placeholder="C:/path/proj"></textarea>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 权限配置：defaultMode 单选胶囊（agy 风格）+ allow/ask/deny 规则行 -->
+              <div class="panel-head ph-3">{{ t('sync.panelPerm') }}</div>
+              <section class="card cfg-card">
+                <div class="agy-perm-line">
+                  <div class="agy-perm-col">
+                    <span class="agy-perm-name">{{ t('sync.permMode') }}</span>
+                    <div class="agy-perm-box" role="radiogroup" :aria-label="t('sync.permMode')">
+                      <label v-for="o in CB_DEFAULT_MODES" :key="o.value" class="agy-box-opt" :title="o.desc ? o.desc() : ''">
+                        <input type="radio" name="cbDefMode" :value="o.value" v-model="cbForm.defaultMode" />
+                        <span>{{ o.name() }}</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+                <div class="field" style="margin:6px 0 2px"><label>{{ t('sync.permRules') }}</label>
+                  <PermList v-model="cbPermRows" placeholder="Bash(npm run test)" />
+                </div>
+                <div class="tip blk"><i>?</i><em>{{ t('sync.cb.permTip') }}</em></div>
+              </section>
+
+              <!-- 沙箱（settings.json sandbox） -->
+              <div class="panel-head ph-4">{{ t('sync.cb.sandboxPanel') }}</div>
+              <section class="card cfg-card">
+                <div class="cfg-grid agy-safe-grid">
+                  <div class="field fw-m"><label>{{ t('sync.cb.sandboxEnabled') }}</label>
+                    <select v-model="cbForm.sandboxEnabled">
+                      <option value="">{{ t('sync.opt.default') }}</option>
+                      <option value="true">{{ t('sync.opt.yes') }}</option>
+                      <option value="false">{{ t('sync.opt.no') }}</option>
+                    </select>
+                  </div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.sandboxAuto') }}</label>
+                    <select v-model="cbForm.autoAllowBash">
+                      <option value="">{{ t('sync.opt.default') }}</option>
+                      <option value="true">{{ t('sync.opt.yes') }}</option>
+                      <option value="false">{{ t('sync.opt.no') }}</option>
+                    </select>
+                  </div>
+                  <div class="field fw-m"><label>{{ t('sync.cb.localBinding') }}</label>
+                    <select v-model="cbForm.allowLocalBinding">
+                      <option value="">{{ t('sync.opt.default') }}</option>
+                      <option value="true">{{ t('sync.opt.yes') }}</option>
+                      <option value="false">{{ t('sync.opt.no') }}</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field-row" style="margin-top:6px">
+                  <div class="field fw-l"><label>{{ t('sync.cb.excludedCmds') }}</label>
+                    <textarea v-model="cbForm.excludedCmdsText" rows="2" class="perm-ta" @wheel="taWheelStop" placeholder="docker&#10;git"></textarea>
+                  </div>
+                  <div class="field fw-l"><label>{{ t('sync.cb.unixSockets') }}</label>
+                    <textarea v-model="cbForm.unixSocketsText" rows="2" class="perm-ta" @wheel="taWheelStop" placeholder="/var/run/docker.sock"></textarea>
+                  </div>
+                </div>
+                <div class="tip blk"><i>?</i><em>{{ t('sync.cb.sandboxTip') }}</em></div>
               </section>
             </template>
 
@@ -2252,6 +2405,18 @@ const customGrokRows = computed(() =>
           <div v-else-if="cfgMode==='agymcp'" class="cfg-src">
             <CodeArea v-model="agyMcpContent" />
             <div class="cfg-src-bar"><button type="button" class="cfg-file-btn" :title="t('sync.openFolder') + agyMcpFile" @click="revealFile(agyMcpFile)"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14 3v4h4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>{{ srcBarName(agyMcpFile) }}</button></div>
+          </div>
+
+          <!-- CodeBuddy models.json 源码：~/.codebuddy/models.json -->
+          <div v-else-if="cfgMode==='cbmodels'" class="cfg-src">
+            <CodeArea v-model="cbModelsContent" />
+            <div class="cfg-src-bar"><button type="button" class="cfg-file-btn" :title="t('sync.openFolder') + cbModelsFile" @click="revealFile(cbModelsFile)"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14 3v4h4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>{{ srcBarName(cbModelsFile) }}</button></div>
+          </div>
+
+          <!-- CodeBuddy mcp.json 源码：~/.codebuddy/mcp.json -->
+          <div v-else-if="cfgMode==='cbmcp'" class="cfg-src">
+            <CodeArea v-model="cbMcpContent" />
+            <div class="cfg-src-bar"><button type="button" class="cfg-file-btn" :title="t('sync.openFolder') + cbMcpFile" @click="revealFile(cbMcpFile)"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M14 3v4h4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>{{ srcBarName(cbMcpFile) }}</button></div>
           </div>
         </div>
       </div>

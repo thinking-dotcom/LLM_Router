@@ -32,6 +32,10 @@ import { writeCopilotEnv, saveCopilotPerm, loadCopilotEnv, loadCopilotPerm, copi
 import { hermesInitFrom, hermesWriteYaml, hermesMuted, hermesYamlPreset } from './hermes'
 import { kiloApplyToObj, kiloFromSource, initKiloForm, kiloModels, kiloModel, kiloSmallModel, kiloSubagentModel, kiloApiKey, kiloProviderKey, kiloProviderPrefix, kiloQualifyModel, kiloAgentsContent, kiloAgentsExists, kiloAgentsFile, parseJsonc, setKiloMuted } from './kilo'
 import { agyApplyToObj, initAgyForm, agySettingsPreset, agyMcpContent, agyMcpExists, agyMcpFile, agyForm, writeAgyEnv, loadAgyEnv, loadAgyAliasPanel, applyAgyAliases } from './agy'
+import {
+  codebuddyPreset, initCodebuddyForm, codebuddyApplyToObj, cbModelsObj, cbModelsFromText, cbModelsBuildText,
+  cbModelsContent, cbModelsExists, cbModelsFile, cbMcpContent, cbMcpExists, cbMcpFile,
+} from './codebuddy'
 
 // ============ 当前编辑文件 / 存在态（各客户端专属页签） ============
 export function currentCfgFile() {
@@ -59,6 +63,10 @@ export function currentCfgFile() {
   }
   if (cfgTarget.value?.id === 'copilot' && cfgMode.value === 'copilotperm') return copilotPermFile.value
   if (cfgTarget.value?.id === 'agy' && cfgMode.value === 'agymcp') return agyMcpFile.value
+  if (cfgTarget.value?.id === 'codebuddy') {
+    if (cfgMode.value === 'cbmodels') return cbModelsFile.value
+    if (cfgMode.value === 'cbmcp') return cbMcpFile.value
+  }
   return cfgFile.value
 }
 export function currentCfgExists() {
@@ -86,6 +94,10 @@ export function currentCfgExists() {
   }
   if (cfgTarget.value?.id === 'copilot' && cfgMode.value === 'copilotperm') return copilotPermExists.value
   if (cfgTarget.value?.id === 'agy' && cfgMode.value === 'agymcp') return agyMcpExists.value
+  if (cfgTarget.value?.id === 'codebuddy') {
+    if (cfgMode.value === 'cbmodels') return cbModelsExists.value
+    if (cfgMode.value === 'cbmcp') return cbMcpExists.value
+  }
   return cfgExists.value
 }
 
@@ -116,6 +128,7 @@ export function switchMode(m) {
     else if (cfgTarget.value?.id === 'commandcode') { ccApplyToObj(); syncToJson() }
     else if (cfgTarget.value?.id === 'kilo') { kiloApplyToObj(); syncToJson() }
     else if (cfgTarget.value?.id === 'agy') { agyApplyToObj(); syncToJson() }
+    else if (cfgTarget.value?.id === 'codebuddy') { codebuddyApplyToObj(); syncToJson() }
     else syncToJson()
   }
   if (m === 'form' && cfgMode.value === 'json') {
@@ -138,6 +151,7 @@ export function switchMode(m) {
     if (cfgTarget.value?.id === 'hermes') { setHermesMuted(true); hermesInitFrom(cfgContent.value); nextTick(() => { setHermesMuted(false) }) }
     if (cfgTarget.value?.id === 'kimi') { setKimiMuted(true); kimiReadToml(cfgContent.value); nextTick(() => { setKimiMuted(false) }) }
     if (cfgTarget.value?.id === 'agy') initAgyForm()
+    if (cfgTarget.value?.id === 'codebuddy') initCodebuddyForm()
     nextTick(() => { setGenericMuted(false) })
   }
   // 离开全局设置源码页签时回填表单；进入时序列化源码
@@ -146,6 +160,14 @@ export function switchMode(m) {
   }
   if (m === 'globjson') {
     piSettingsContent.value = piSettingsBuildText()
+  }
+  // codebuddy models.json 源码页签：进入时由端点行重建源码；离开时解析回 cbModelsObj。
+  // 源码非法时阻止离开，避免表单行数据被损坏内容覆盖（保存路径另有 JSON 校验拦截）
+  if (cfgMode.value === 'cbmodels' && m !== 'cbmodels') {
+    if (!cbModelsFromText(cbModelsContent.value)) { toast(t('sync.jsonError')); return }
+  }
+  if (m === 'cbmodels' && cfgMode.value !== 'cbmodels') {
+    cbModelsContent.value = cbModelsBuildText()
   }
   cfgMode.value = m
 }
@@ -178,6 +200,7 @@ export function buildFormText() {
   if (id === 'commandcode') { ccApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'kilo') { kiloApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'agy') { agyApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
+  if (id === 'codebuddy') { codebuddyApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'grok-build') return grokBuildToml()
   if (id === 'codex') return codexWriteToml(cfgContent.value)
   if (id === 'hermes') return hermesWriteYaml(cfgContent.value)
@@ -223,6 +246,28 @@ export async function saveTargetConfig() {
       const am = await api.SaveAgyMcp(agyMcpContent.value)
       if (am && am.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: am?.error || '?' }))
+    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
+    return
+  }
+  // CodeBuddy models.json 源码模式：只保存 ~/.codebuddy/models.json，不动主配置
+  if (cfgTarget.value.id === 'codebuddy' && cfgMode.value === 'cbmodels') {
+    try { if (cbModelsContent.value.trim()) JSON.parse(cbModelsContent.value) } catch (e) { const p = jsonErrorPos(cbModelsContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
+    cfgSaving.value = true
+    try {
+      const bm = await api.SaveCodebuddyModels(cbModelsContent.value)
+      if (bm && bm.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      else toast(t('common.fail', { msg: bm?.error || '?' }))
+    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
+    return
+  }
+  // CodeBuddy mcp.json 源码模式：只保存 ~/.codebuddy/mcp.json，不动主配置
+  if (cfgTarget.value.id === 'codebuddy' && cfgMode.value === 'cbmcp') {
+    try { if (cbMcpContent.value.trim()) JSON.parse(cbMcpContent.value) } catch (e) { const p = jsonErrorPos(cbMcpContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
+    cfgSaving.value = true
+    try {
+      const cm = await api.SaveCodebuddyMcp(cbMcpContent.value)
+      if (cm && cm.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      else toast(t('common.fail', { msg: cm?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
   }
@@ -473,6 +518,26 @@ export async function saveTargetConfig() {
       if (mp === 'gemini') {
         const aew = await writeAgyEnv()
         if (aew && !saveErr) saveErr = aew
+      }
+    }
+    // codebuddy 合并：models.json（端点行，表单内始终重建）与 mcp.json（源码直编）
+    // 随主配置 settings.json 一同保存；mcp 源码非法时拦截（与源码页签保存前校验一致）
+    if (cfgTarget.value.id === 'codebuddy') {
+      const cmt = String(cbMcpContent.value || '').trim()
+      if (cmt) {
+        try { JSON.parse(cmt) } catch (e) {
+          const p = jsonErrorPos(cbMcpContent.value)
+          toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError'))
+          return
+        }
+      }
+      if (!saveErr) {
+        const mr = await api.SaveCodebuddyModels(cbModelsBuildText())
+        if (mr && !mr.ok) saveErr = mr?.error || t('sync.saveFailModels')
+      }
+      if (!saveErr && cmt) {
+        const mc = await api.SaveCodebuddyMcp(cbMcpContent.value)
+        if (mc && !mc.ok) saveErr = mc?.error || t('sync.saveFailMcp')
       }
     }
     if (r && r.ok && !saveErr) { toast(t('sync.configSaved')); cfgEdit.value = false }
@@ -751,6 +816,40 @@ export async function openTargetConfig(tg) {
           if (mr && mr.file) agyMcpFile.value = mr.file
           agyMcpContent.value = hasM ? mr.content : JSON.stringify({ mcpServers: {} }, null, 2)
         } catch (e) { agyMcpExists.value = false; agyMcpContent.value = JSON.stringify({ mcpServers: {} }, null, 2) }
+      } else if (tg.id === 'codebuddy') {
+        // JSON：直接读写真实 settings.json，解析进 cfgObj 供表单与源码页签使用
+        if (hasContent) {
+          try { const v = JSON.parse(r.content); cfgObj.value = v && typeof v === 'object' ? v : {} } catch (e) { cfgObj.value = {} }
+        } else {
+          cfgObj.value = { ...codebuddyPreset() }
+        }
+        initCodebuddyForm()
+        syncToJson()
+        // 同时加载 models.json（~/.codebuddy/models.json）端点行，并入同一编辑页
+        cbModelsObj.value = { models: [] }
+        cbModelsContent.value = ''
+        cbModelsExists.value = false
+        cbModelsFile.value = '~/.codebuddy/models.json'
+        try {
+          const mr = await api.GetCodebuddyModels()
+          const hasM = !!(mr && mr.ok && mr.content)
+          cbModelsExists.value = !!(mr && mr.ok && mr.exists)
+          if (mr && mr.ok && mr.file) cbModelsFile.value = mr.file
+          const raw = hasM ? mr.content : ''
+          if (cbModelsFromText(raw)) cbModelsContent.value = raw || cbModelsBuildText()
+          else { cbModelsObj.value = { models: [] }; cbModelsContent.value = cbModelsBuildText() }
+        } catch (e) { cbModelsObj.value = { models: [] }; cbModelsContent.value = cbModelsBuildText() }
+        // 同时加载 mcp.json（~/.codebuddy/mcp.json）源码页签
+        cbMcpContent.value = ''
+        cbMcpExists.value = false
+        cbMcpFile.value = '~/.codebuddy/mcp.json'
+        try {
+          const mcpR = await api.GetCodebuddyMcp()
+          const hasMcp = !!(mcpR && mcpR.ok && mcpR.content)
+          cbMcpExists.value = !!(mcpR && mcpR.ok && mcpR.exists)
+          if (mcpR && mcpR.ok && mcpR.file) cbMcpFile.value = mcpR.file
+          cbMcpContent.value = hasMcp ? mcpR.content : JSON.stringify({ mcpServers: {} }, null, 2) + '\n'
+        } catch (e) { cbMcpExists.value = false; cbMcpContent.value = JSON.stringify({ mcpServers: {} }, null, 2) + '\n' }
       } else if (tg.id === 'kilo') {
         // JSONC：真实文件缺失时后端返回首次初始值模板内容（同样可编辑部署）。
         // 表单与源码直接读写真实 kilo.jsonc：含注释/尾逗号走 parseJsonc 宽容解析
@@ -847,6 +946,7 @@ export function initSyncController() {
     else if (id === 'opencode') initOcForm()
     else if (id === 'commandcode') initCcForm()
     else if (id === 'agy') initAgyForm()
+    else if (id === 'codebuddy') initCodebuddyForm()
     nextTick(() => { setJsonEcho(false) })
   })
 }

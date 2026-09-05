@@ -59,6 +59,11 @@ func clientPathsDefaults() map[string]map[string]string {
 			"mcp":    "~/.gemini/config/mcp_config.json",
 			"skills": "~/.gemini/config/skills",
 		},
+		"codebuddy": {
+			"config": "~/.codebuddy/settings.json",
+			"models": "~/.codebuddy/models.json",
+			"mcp":    "~/.codebuddy/mcp.json",
+		},
 	}
 }
 

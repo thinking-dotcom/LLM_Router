@@ -124,6 +124,7 @@ export const TARGET_LOGOS = {
   'kimi': '/logos/kimi.svg',
   'kilo': '/logos/kilo.svg',
   'agy': '/logos/agy.svg',
+  'codebuddy': '/logos/codebuddy.svg',
 }
 export function targetLogo(id) { return TARGET_LOGOS[id] || '' }
 

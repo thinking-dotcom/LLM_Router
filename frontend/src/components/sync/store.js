@@ -157,4 +157,4 @@ export let jsonEcho = false
 export function setJsonEcho(v) { jsonEcho = v }
 // 有专属联动的客户端不走通用 watcher（各家已有 deep watcher 或 TOML/YAML 原文流）；
 // copilot 走环境变量面板不发主配置表单，同样排除避免通用表单污染 mcp-config.json
-export const GENERIC_EXCLUDED_IDS = ['pi', 'gemini', 'opencode', 'cline', 'grok-build', 'codex', 'hermes', 'commandcode', 'copilot', 'kimi', 'kilo', 'agy']
+export const GENERIC_EXCLUDED_IDS = ['pi', 'gemini', 'opencode', 'cline', 'grok-build', 'codex', 'hermes', 'commandcode', 'copilot', 'kimi', 'kilo', 'agy', 'codebuddy']

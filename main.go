@@ -463,6 +463,40 @@ func (a *App) SaveAgyMcp(content string) map[string]any {
 	return map[string]any{"ok": true}
 }
 
+// GetCodebuddyModels 读取 codebuddy 的端点模型清单（~/.codebuddy/models.json）。
+func (a *App) GetCodebuddyModels() map[string]any {
+	content, exists, filePath, errMsg := agent.GetCodebuddyModels()
+	if errMsg != "" {
+		return map[string]any{"ok": false, "error": errMsg}
+	}
+	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
+}
+
+// SaveCodebuddyModels 保存 codebuddy 的端点模型清单（~/.codebuddy/models.json）。
+func (a *App) SaveCodebuddyModels(content string) map[string]any {
+	if errMsg := agent.SaveCodebuddyModels(content); errMsg != "" {
+		return map[string]any{"ok": false, "error": errMsg}
+	}
+	return map[string]any{"ok": true}
+}
+
+// GetCodebuddyMcp 读取 codebuddy 的 MCP 服务配置（~/.codebuddy/mcp.json）。
+func (a *App) GetCodebuddyMcp() map[string]any {
+	content, exists, filePath, errMsg := agent.GetCodebuddyMcp()
+	if errMsg != "" {
+		return map[string]any{"ok": false, "error": errMsg}
+	}
+	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
+}
+
+// SaveCodebuddyMcp 保存 codebuddy 的 MCP 服务配置（~/.codebuddy/mcp.json）。
+func (a *App) SaveCodebuddyMcp(content string) map[string]any {
+	if errMsg := agent.SaveCodebuddyMcp(content); errMsg != "" {
+		return map[string]any{"ok": false, "error": errMsg}
+	}
+	return map[string]any{"ok": true}
+}
+
 // GetPiAgents 读取 pi 的 AGENTS.md（~/.pi/agent/AGENTS.md）。
 func (a *App) GetPiAgents() map[string]any {
 	content, exists, filePath, errMsg := agent.GetPiAgents()

@@ -1,0 +1,25 @@
+{
+  "model": "",
+  "variantModels": {
+    "lite": "",
+    "reasoning": ""
+  },
+  "cleanupPeriodDays": null,
+  "includeCoAuthoredBy": null,
+  "trustedDirectories": [],
+  "permissions": {
+    "defaultMode": "default",
+    "allow": [],
+    "ask": [],
+    "deny": []
+  },
+  "sandbox": {
+    "enabled": null,
+    "autoAllowBashIfSandboxed": null,
+    "excludedCommands": [],
+    "network": {
+      "allowLocalBinding": null,
+      "allowUnixSockets": []
+    }
+  }
+}
