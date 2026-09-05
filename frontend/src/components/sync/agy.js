@@ -26,7 +26,7 @@ export const agyMcpFile = ref('~/.gemini/config/mcp_config.json')
 // 不选服务商：aliases 文本每行 客户端名 = 上游名；保存时按「目标模型」自动解析
 // 目标模型所属的已启用服务商（模型名 / 已有别名匹配），无匹配则退回默认服务商。
 export const agyAliasText = ref('')
-export const agyAliasSaving = ref(false)
+export const agyAliasLoaded = ref(false) // 面板已成功从磁盘载入 aliases：false 时「保存」跳过映射回写，防止误清
 export const agyAliasProviderList = ref([]) // [{id,name}]（已启用服务商，载入面板时解析用，不展示）
 export const agyAliasMap = ref({}) // { 内置ID: 路由器模型 }：每个内置 ID 一行映射文本框
 // agyAliasText → 各内置 ID 的映射值（非内置 ID 的历史行忽略；值含 @服务商 后缀时原样回显，保存可无损回写）
@@ -104,16 +104,19 @@ export const agyRouterModels = ref([])   // 路由器接入方式返回的模型
 // agy 内置模型 ID（agy CLI 客户端当前仅提供这四个模型；推理档位在客户端内
 // 另作选择，映射针对实际下发的模型 ID）
 export const AGY_BUILTIN_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.1-pro']
+// 「执行所有命令」胶囊对应的官方通配规则（permissions.allow/deny 数组元素，command(...) 格式）
+export const AGY_ALL_CMD_RULE = 'command(*)'
 export const agyBuiltinModels = ref(AGY_BUILTIN_MODELS.slice())
 export async function loadAgyAliasPanel() {
   agyAliasText.value = ''
+  agyAliasLoaded.value = false
   agyAliasProviderList.value = []
   try {
     const r = await api.GetConfig()
     if (!(r && Array.isArray(r.providers))) return
     const list = r.providers.filter(p => p.enabled !== false)
     agyAliasProviderList.value = list.map(p => ({ id: p.id || '', name: p.name || '' }))
-    await agyFetchAliasesMerged()
+    agyAliasLoaded.value = await agyFetchAliasesMerged()
   } catch (e) {}
   try { await loadAgyModelLists() } catch (e) {}
 }
@@ -241,7 +244,10 @@ export async function loadAgyModelLists() {
   }
   agyRouterModels.value = [...new Set(models)].sort()
 }
-export async function saveAgyAliases() {
+// 模型映射随配置窗口「保存」一并落盘：把面板映射文本回写到路由器服务商 aliases。
+// 返回错误消息（''=成功 / 面板未载入则跳过返回 ''），由调用方统一提示。
+export async function applyAgyAliases() {
+  if (!agyAliasLoaded.value) return '' // 面板未成功载入时不动 aliases，避免载入失败被误判为「清空映射」
   const parsed = [] // {k, v, prov}  prov=目标服务商 key 或 null（由目标模型解析）
   for (const line of String(agyAliasText.value || '').split('\n')) {
     if (!line.trim()) continue
@@ -261,8 +267,6 @@ export async function saveAgyAliases() {
     }
     parsed.push({ k, v, prov: provHint })
   }
-  agyAliasSaving.value = true
-  let r = null
   try {
     const cfg = JSON.parse(JSON.stringify(await api.GetConfig() || {}))
     const providers = cfg.providers || []
@@ -277,8 +281,7 @@ export async function saveAgyAliases() {
     if (!Object.keys(byProvider).length) {
       if (hasText) {
         // 有内容但无法解析到任何服务商（目标模型不在已启用服务商模型/别名中）
-        toast(t('sync.agy.aliasProviderReq'))
-        return
+        return t('sync.agy.aliasProviderReq')
       }
       // 文本为空 = 清空映射：把所有已启用且当前带 aliases 的服务商 aliases 置空
       for (const p of providers) {
@@ -304,16 +307,15 @@ export async function saveAgyAliases() {
         if (covered.has(p.id) || covered.has(p.name)) continue
         if (p.aliases && Object.keys(p.aliases).length) p.aliases = {}
       }
-      if (!touched.length) { toast(t('sync.agy.aliasProviderReq')); return }
+      if (!touched.length) return t('sync.agy.aliasProviderReq')
     }
-    r = await api.SaveConfig(cfg)
+    const r = await api.SaveConfig(cfg)
     if (r && r.ok) {
-      toast(t('sync.configSaved'))
       if (r.restartNeeded) toast(t('set.savedRestart'))
-    } else {
-      toast(t('common.fail', { msg: (r && r.error) || '?' }))
+      return ''
     }
-  } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { agyAliasSaving.value = false }
+    return (r && r.error) || '?'
+  } catch (e) { return e?.message || '?' }
 }
 
 // 接入环境变量（官方 BYOK 契约）：仅 GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY 两个
@@ -399,6 +401,7 @@ export const agyForm = ref({
   systemInstruction: '',
   temperature: '', maxOutputTokens: '', topP: '', topK: '',
   toolPermission: '',
+  allCommands: '', // 「执行所有命令」胶囊：'' 默认不接管 / 'allow' 允许 / 'deny' 拒绝（对应 command(*) 通配规则）
   enableTerminalSandbox: '', allowNonWorkspaceAccess: '', useG1Credits: '', enableTelemetry: '',
   colorScheme: '', altScreenMode: '', runningLightSpeed: '', verbosity: '', editor: '',
   subagentsEnabled: '', subagentsMaxSteps: '', subagentsAutoExecuteTools: '',
@@ -421,6 +424,8 @@ export function initAgyForm() {
     topP: numOr(params.topP),
     topK: numOr(params.topK),
     toolPermission: perms.toolPermission || '',
+    allCommands: (Array.isArray(perms.allow) && perms.allow.includes(AGY_ALL_CMD_RULE)) ? 'allow'
+      : (Array.isArray(perms.deny) && perms.deny.includes(AGY_ALL_CMD_RULE)) ? 'deny' : '',
     enableTerminalSandbox: triOr(c.enableTerminalSandbox),
     allowNonWorkspaceAccess: triOr(c.allowNonWorkspaceAccess),
     useG1Credits: triOr(c.useG1Credits),
@@ -462,12 +467,18 @@ export function agyApplyToObj() {
   if (pk != null) params.topK = pk; else if ('topK' in params) delete params.topK
   if (Object.keys(params).length) c.parameters = params
   else if ('parameters' in c) delete c.parameters
-  // permissions：仅维护 toolPermission；allow/deny 规则不在表单管理，保存即移除（避免残留旧规则）
+  // permissions：toolPermission + 「执行所有命令」胶囊（仅定点维护 command(*) 通配规则，
+  // 允许=入 allow、拒绝=入 deny、默认=移除；其余 allow/deny 规则原样保留，可在 JSON 源码页编辑）
   const perms = (c.permissions && typeof c.permissions === 'object' && !Array.isArray(c.permissions)) ? c.permissions : {}
   const tp = strTrim(f.toolPermission)
   if (tp) perms.toolPermission = tp; else if ('toolPermission' in perms) delete perms.toolPermission
-  delete perms.allow
-  delete perms.deny
+  const arrOr = v => Array.isArray(v) ? v.filter(x => String(x).trim() !== AGY_ALL_CMD_RULE) : []
+  const allow = arrOr(perms.allow), deny = arrOr(perms.deny)
+  const ac = strTrim(f.allCommands)
+  if (ac === 'allow') allow.push(AGY_ALL_CMD_RULE)
+  else if (ac === 'deny') deny.push(AGY_ALL_CMD_RULE)
+  if (allow.length) perms.allow = allow; else if ('allow' in perms) delete perms.allow
+  if (deny.length) perms.deny = deny; else if ('deny' in perms) delete perms.deny
   if (Object.keys(perms).length) c.permissions = perms
   else if ('permissions' in c) delete c.permissions
   // 布尔开关三态：true / false 显式写入；'' 不写（移除已有键）

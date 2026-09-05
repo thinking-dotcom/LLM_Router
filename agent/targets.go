@@ -196,7 +196,7 @@ func injectMcp(mcpFile, routerBase string, servers []MCPServer) error {
 }
 
 // mergeMcpServers 把 servers 写入目标 JSON 文件的 mcpServers 字段。
-// 仅支持对象形态 { mcpServers: { name: {…} } }（Claude Code / Claude Desktop
+// 仅支持对象形态 { mcpServers: { name: {…} } }（Claude Code
 // 常用）；若现有 mcpServers 是数组或其它类型，会被丢弃并重建为空对象再合并。
 //
 // 采用字节级定点替换（upsertJSONObjectKey）：只改动 mcpServers 键的值，

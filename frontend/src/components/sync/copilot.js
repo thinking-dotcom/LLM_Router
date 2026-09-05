@@ -121,12 +121,13 @@ export async function loadCopilotPerm() {
   } catch (e) {}
 }
 export async function saveCopilotPerm() {
-  if (!api.SaveCopilotPermissions) { toast(t('common.fail', { msg: t('sync.copilot.permNoBind') })); return }
+  if (!api.SaveCopilotPermissions) { toast(t('common.fail', { msg: t('sync.copilot.permNoBind') })); return false }
   try {
     const r = await api.SaveCopilotPermissions(copilotPermDoc())
-    if (r && r.ok) { copilotPermExists.value = true; toast(t('sync.configSaved')) }
-    else toast(t('common.fail', { msg: (r && r.error) || '?' }))
+    if (r && r.ok) { copilotPermExists.value = true; toast(t('sync.configSaved')); return true }
+    toast(t('common.fail', { msg: (r && r.error) || '?' }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) }
+  return false
 }
 // 写入：三个端点环境变量 + settings.json 全部面板键（空 = 移除）；任一步失败返回错误信息
 async function copilotWriteVars() {
@@ -172,9 +173,10 @@ export async function writeCopilotEnv() {
   copilotSaving.value = true
   try {
     const err = await copilotWriteVars()
-    if (!err) { toast(t('sync.copilot.written')); return }
+    if (!err) { toast(t('sync.copilot.written')); return true }
     toast(t('common.fail', { msg: err }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { copilotSaving.value = false }
+  return false
 }
 export async function clearCopilotEnv() {
   // 确认交互由调用方的应用内弹窗完成（替代原生 confirm），此处只执行清除

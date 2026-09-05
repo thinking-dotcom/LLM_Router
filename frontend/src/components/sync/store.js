@@ -96,7 +96,7 @@ export async function loadModelOptions() {
 // 路由器按路径识别协议并归一化，再按实际上游格式转换。
 export function currentAccessFmt() {
   const id = cfgTarget.value?.id
-  if (id === 'claude-code' || id === 'claude-desktop') return '/aai'
+  if (id === 'claude-code') return '/aai'
   if (id === 'gemini') return '/gai'
   return '/oai'
 }
@@ -148,7 +148,7 @@ export function syncToObj() {
   } catch (e) { toast(t('sync.jsonError')); return false }
 }
 
-// ============ 双向实时联动（通用 JSON 路径：claude-code / claude-desktop 等） ============
+// ============ 双向实时联动（通用 JSON 路径：claude-code 等） ============
 // genericMuted：模板载入期间静默，避免载入赋值触发联动打乱源码键序
 export let genericMuted = false
 export function setGenericMuted(v) { genericMuted = v }

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// claude-code / claude-desktop 形态：无 configFile（参考模版），编辑源即真实 McpFile。
+// 直编真实文件形态：无 configFile，编辑源即真实 McpFile。
 // GetTargetConfig 应回退读 McpFile；SaveTargetConfig 应备份后写回。
 // 用临时注册的 fileMcpTarget 模拟该形态，不触碰真实 ~/.claude。
 func TestClaudeStyleTargetReadWriteFallback(t *testing.T) {
@@ -17,7 +17,7 @@ func TestClaudeStyleTargetReadWriteFallback(t *testing.T) {
 	if err := os.WriteFile(real, []byte(original), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// 模拟 claude-code：无 configFile，仅 mcpFile
+	// 模拟 fileMcpTarget 直编形态：无 configFile，仅 mcpFile
 	RegisterTarget(&fileMcpTarget{id: "test-claude-style", name: "Claude Style", apiFormat: "/aai", mcpFile: real})
 	defer delete(registry, "test-claude-style")
 

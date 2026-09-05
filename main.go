@@ -282,7 +282,7 @@ func (a *App) OpenFileLocation(path string) map[string]any {
 	return map[string]any{"ok": true}
 }
 
-// GetAgentSkills 返回各 Agent（Claude Code、Claude Desktop、Codex、Gemini、
+// GetAgentSkills 返回各 Agent（Claude Code、Codex、Gemini、
 // Grok Build、OpenCode、Hermes、pi）在系统用户目录技能文件夹里
 // 的技能，按 Agent 分组返回。
 

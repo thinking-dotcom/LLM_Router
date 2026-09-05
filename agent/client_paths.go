@@ -20,13 +20,12 @@ var (
 // clientPathsDefaults 内置默认路径（与 Json_modles/client-paths.json 保持一致）。
 func clientPathsDefaults() map[string]map[string]string {
 	return map[string]map[string]string{
-		"claude-code":    {"config": "~/.claude/settings.json", "mcp": "~/.claude/settings.json", "skills": "~/.claude/skills", "md": "~/.claude/CLAUDE.md"},
-		"claude-desktop": {"config": "~/.claude.json", "mcp": "~/.claude.json", "skills": "~/.claude/skills"},
-		"opencode":       {"config": "~/.config/opencode/opencode.json", "agents": "~/.config/opencode/AGENTS.md", "skills": "~/.config/opencode/skills"},
-		"gemini":         {"config": "~/.gemini/settings.json", "mcp": "~/.gemini/settings.json", "env": "~/.gemini/.env", "agents": "~/.gemini/GEMINI.md", "skills": "~/.gemini/skills"},
-		"pi":             {"config": "~/.pi/agent/models.json", "settings": "~/.pi/agent/settings.json", "mcp": "~/.pi/agent/mcp.json", "agents": "~/.pi/agent/AGENTS.md", "skills": "~/.pi/skills"},
-		"grok-build":     {"config": "~/.grok/config.toml", "mcp": "~/.grok/config.toml", "agents": "~/.grok/AGENTS.md", "skills": "~/.grok/skills"},
-		"codex":          {"config": "~/.codex/config.toml", "mcp": "~/.codex/config.toml", "agents": "~/.codex/AGENTS.md", "skills": "~/.codex/skills"},
+		"claude-code": {"config": "~/.claude/settings.json", "mcp": "~/.claude/settings.json", "skills": "~/.claude/skills", "md": "~/.claude/CLAUDE.md"},
+		"opencode":    {"config": "~/.config/opencode/opencode.json", "agents": "~/.config/opencode/AGENTS.md", "skills": "~/.config/opencode/skills"},
+		"gemini":      {"config": "~/.gemini/settings.json", "mcp": "~/.gemini/settings.json", "env": "~/.gemini/.env", "agents": "~/.gemini/GEMINI.md", "skills": "~/.gemini/skills"},
+		"pi":          {"config": "~/.pi/agent/models.json", "settings": "~/.pi/agent/settings.json", "mcp": "~/.pi/agent/mcp.json", "agents": "~/.pi/agent/AGENTS.md", "skills": "~/.pi/skills"},
+		"grok-build":  {"config": "~/.grok/config.toml", "mcp": "~/.grok/config.toml", "agents": "~/.grok/AGENTS.md", "skills": "~/.grok/skills"},
+		"codex":       {"config": "~/.codex/config.toml", "mcp": "~/.codex/config.toml", "agents": "~/.codex/AGENTS.md", "skills": "~/.codex/skills"},
 		"cline": {
 			"config":      "~/.cline/data/settings/cline_mcp_settings.json",
 			"models":      "~/.cline/data/settings/models.json",

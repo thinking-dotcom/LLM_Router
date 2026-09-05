@@ -226,13 +226,6 @@ func init() {
 		presetFile: claudeCodeTemplateFile(),
 	})
 
-	// Claude Desktop：仅 mcp（~/.claude.json）。该文件是含会话状态的活文件，
-	// 不做模板化部署：不设 configFile，编辑窗口直接读写真实文件本身（读取回退 mcpFile）。
-	RegisterTarget(&fileMcpTarget{
-		id: "claude-desktop", name: "Claude Desktop", apiFormat: "/oai",
-		mcpFile: clientPath("claude-desktop", "config"),
-	})
-
 	// OpenCode：skills + mcp。主配置直接读写真实文件 ~/.config/opencode/opencode.json
 	//（无模板中转），模板仅作首次初始值。
 	RegisterTarget(&skillsMcpTarget{

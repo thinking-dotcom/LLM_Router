@@ -126,15 +126,9 @@ func SaveTargetConfig(targetID, content string) string {
 	if err := os.MkdirAll(filepath.Dir(fp), 0o755); err != nil {
 		return err.Error()
 	}
-	// 保存前备份：首次 .bak 保留最初状态；claude-desktop 的 ~/.claude.json 是
-	// 含会话历史的活文件，额外每次滚动备份，保证误覆盖后总有近期状态可回退。
+	// 保存前备份：首次 .bak 保留最初状态。
 	if _, err := backupIfAbsent(fp); err != nil {
 		return err.Error()
-	}
-	if targetID == "claude-desktop" {
-		if err := backupRolling(fp, 5); err != nil {
-			return err.Error()
-		}
 	}
 	if err := writeFileAtomic(fp, out, 0o600); err != nil {
 		return err.Error()

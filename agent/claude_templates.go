@@ -11,8 +11,6 @@ import (
 //
 // 模版文件是「编辑源」：加载时从它读取，保存时把内容写回它并清空覆写到真实路径。
 // MCP 注入走真实路径，注入/撤销后回写模版保持同步（templateSync）。
-// 注意：Claude Desktop 的 ~/.claude.json 是含会话状态的活文件，不做模板化部署，
-// 编辑窗口直接读写真实文件本身（注册时不设 configFile，读取回退 mcpFile）。
 
 // claudeTemplatesDir 返回 claude 参考模版文件所在目录（agent/Json_modles/claude）。
 func claudeTemplatesDir() string { return jsonModelsDir("claude") }

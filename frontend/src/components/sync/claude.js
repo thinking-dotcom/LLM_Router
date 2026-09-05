@@ -148,12 +148,6 @@ export const CLAUDE_EXTRA_GROUPS = [
 ]
 // 拍平：init / sync 逻辑遍历全部字段，不区分分组
 export const CLAUDE_EXTRA_FIELDS = CLAUDE_EXTRA_GROUPS.flatMap(g => g.fields)
-// mcpServers 只读展示：返回当前已配置的服务器名（mcpServers 由 MCP 页统一管理，表单不直接编辑）
-export function claudeMcpServerNames() {
-  const m = getPath(cfgObj.value, 'mcpServers')
-  if (!m || typeof m !== 'object' || Array.isArray(m)) return []
-  return Object.keys(m).filter(Boolean)
-}
 // ---- Claude Code 全局记忆/指令文件 CLAUDE.md（~/.claude/CLAUDE.md，源码页签直读直写） ----
 export const claudeMdContent = ref('')
 export const claudeMdExists = ref(false)
@@ -227,14 +221,14 @@ export function initClaude() {
   watch(claudeEnvModels, () => {
     if (!cfgEdit.value || genericMuted || jsonEcho) return
     const id = cfgTarget.value?.id
-    if (id !== 'claude-code' && id !== 'claude-desktop') return
+    if (id !== 'claude-code') return
     try { syncClaudeEnvModelsToObj(); syncToJson() } catch (e) {}
   }, { deep: true })
   // 默认模型 / 权限规则 / 模版高级字段 → 实时写回 cfgObj
   watch([claudeDefaultModel, claudePermRules, claudePermRows, claudeExtra], () => {
     if (!cfgEdit.value || genericMuted || jsonEcho) return
     const id = cfgTarget.value?.id
-    if (id !== 'claude-code' && id !== 'claude-desktop') return
+    if (id !== 'claude-code') return
     try { syncClaudeExtraToObj(); syncToJson() } catch (e) {}
   }, { deep: true })
 }

@@ -6,11 +6,6 @@
     "skills": "~/.claude/skills",
     "md": "~/.claude/CLAUDE.md"
   },
-  "claude-desktop": {
-    "config": "~/.claude.json",
-    "mcp": "~/.claude.json",
-    "skills": "~/.claude/skills"
-  },
   "opencode": {
     "config": "~/.config/opencode/opencode.json",
     "agents": "~/.config/opencode/AGENTS.md",

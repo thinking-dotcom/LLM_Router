@@ -474,7 +474,7 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 /* 权限规则点选列表（opencode 固定权限键 与 各客户端自定义规则 共用）
    统一为「卡片形式 + 三态点选」：每条规则一张卡片，allow/ask/deny 三态按钮点选 */
 /* 规则多时限高内部滚动（约 4 行可见），避免撑高整张卡片 */
-.perm-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(286px,1fr));gap:6px 10px;align-items:start;max-height:172px;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
+.perm-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(286px,1fr));gap:6px 10px;align-items:start;max-height:172px;overflow-y:auto;padding:6px 10px;border-radius:14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.20);scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
 .perm-list::-webkit-scrollbar{width:6px}
 .perm-list::-webkit-scrollbar-thumb{background:var(--border-hover);border-radius:3px}
 .perm-row-wrap{
@@ -529,8 +529,10 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .pcl-add .pcl-opts{margin-left:0}
 
 /* ===== 权限规则胶囊（各客户端权限面板统一：单胶囊点按循环 未设→允许→询问→拒绝） ===== */
-/* 常驻固定键/预设规则：一行胶囊 chips */
-.perm-caps{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+/* 常驻固定键/预设规则：一行胶囊 chips；容器统一为 agy 式淡绿分组面板 */
+.perm-caps{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 10px;border-radius:14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.20)}
+/* gemini 规则行 chips：同样置于淡绿分组面板内 */
+.perm-cap-row-wrap{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 10px;border-radius:14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.20)}
 .perm-cap{
   display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;
   padding:3px 7px;border:1px solid var(--border);border-radius:999px;
@@ -555,8 +557,8 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .perm-cap.deny .perm-cap-dot,.perm-cap-row.deny .perm-cap-dot{background:var(--red);box-shadow:0 0 6px rgba(251,113,133,.5)}
 .perm-cap.deny .perm-cap-state,.perm-cap-row.deny .perm-cap-state{background:var(--red-soft);color:var(--red)}
 .perm-cap.def,.perm-cap-row.def{border-style:dashed;background:var(--bg);opacity:.9}
-/* 自由文本规则：每行一条胶囊（点按行循环，输入框/删除除外） */
-.perm-cap-list{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow-y:auto;padding-right:2px;scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
+/* 自由文本规则：每行一条胶囊（点按行循环，输入框/删除除外）；容器为 agy 式淡绿分组面板 */
+.perm-cap-list{display:flex;flex-direction:column;gap:4px;max-height:190px;overflow-y:auto;padding:6px 10px;border-radius:14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.20);scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
 .perm-cap-list::-webkit-scrollbar{width:6px}
 .perm-cap-list::-webkit-scrollbar-thumb{background:var(--border-hover);border-radius:3px}
 .perm-cap-row{

@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, onBeforeUnmount, computed, ref } from 'vue'
 import { t, i18nState } from '../i18n'
 import { copyText, jsonErrorPos, repairJsonText, pruneIllegalTemplateKeys } from '../utils'
 import { toast } from '../toast'
@@ -31,7 +31,7 @@ import {
   claudeAccessMode, claudeEnvModels, normalizeClaudeEnvModels, claudeDefaultModel, claudePermRules,
   claudePermRows,
   initClaudeExtra, initClaude, claudeExtra,
-  CLAUDE_EXTRA_GROUPS, claudeMcpServerNames, newClaudeEnvModelRow, CLAUDE_ENV_KEY_SLOTS,
+  CLAUDE_EXTRA_GROUPS, newClaudeEnvModelRow, CLAUDE_ENV_KEY_SLOTS,
   claudeMdContent, claudeMdExists, claudeMdFile, loadClaudeMarkdown, saveClaudeMarkdown,
 } from './sync/claude'
 import {
@@ -87,7 +87,7 @@ import {
   codexToggleRule, codexRuleOn, CODEX_RESERVED_PROVIDERS, codexModelOpen, codexInitFrom, initCodex,
 } from './sync/codex'
 import {
-  CC_EFFORT_LEVELS, CC_PERM_MODES, CC_DEFAULT_KEY_REF, ccIsApiKeyRef, PERM_COMMON_RULES, ccAddPermRule,
+  CC_EFFORT_LEVELS, CC_PERM_MODES, CC_DEFAULT_KEY_REF, ccIsApiKeyRef, ccAddPermRule,
   ccRuleOn,
   ccQuickOpen, ccQuickQFocus, ccForm, ccSettingsFile, ccSettingsExists, ccSettingsContent, ccProvidersFile,
   ccProvidersExists, ccProvidersContent, ccNoLogin, ccNoLoginMsg, ccToggleNoLogin, ccModelOpen, ccEffortOpen,
@@ -106,9 +106,9 @@ import {
 import {
   agyForm, initAgyForm, initAgy, agyMcpContent, agyMcpExists, agyMcpFile,
   agyEnvKey, agyEnvSaving, agyRouterUrl, writeAgyEnv, clearAgyEnv, agyEnvBase, agyEnvKeyLoaded,
-  agyAliasText, agyAliasSaving, agyBuiltinModels, agyAliasMap, agySetAlias,
+  agyBuiltinModels, agyAliasMap, agySetAlias,
   agyRouterModels, agyToOpenFor, agyToGroups, pickAgyTo, agyToKeyNav,
-  loadAgyAliasPanel, saveAgyAliases,
+  loadAgyAliasPanel,
 } from './sync/agy'
 // ---- 中枢动作（页签/构建/保存/打开/通用联动/统一模型下拉） ----
 import {
@@ -163,14 +163,25 @@ async function copilotClearConfirm() {
 const agyEnvShowClear = computed(() =>
   String(agyEnvBase.value || '').trim() !== '' && String(agyEnvKey.value || '') === String(agyEnvKeyLoaded.value || ''))
 
-// agy 安全区四枚布尔胶囊：默认(''，不接管) → 允许('true') → 拒绝('false') → 默认，点按循环
+// agy 安全区四个布尔开关：每个用下拉框在 默认('') / 是('true') / 否('false') 三态选择
 const AGY_SAFE_KEYS = ['enableTerminalSandbox', 'allowNonWorkspaceAccess', 'useG1Credits', 'enableTelemetry']
-const agySafeCls = k => agyForm.value[k] === 'true' ? 'allow' : agyForm.value[k] === 'false' ? 'deny' : 'def'
-const agySafeState = k => agyForm.value[k] === 'true' ? t('sync.allow') : agyForm.value[k] === 'false' ? t('sync.deny') : t('sync.opt.default')
-function agySafeCycle(k) {
-  const v = agyForm.value[k]
-  agyForm.value[k] = v === 'true' ? 'false' : v === 'false' ? '' : 'true'
-}
+
+// agy 工具权限模式五档单选框：不写 / 严格 / 请求审查 / 始终放行 / 沙箱内放行（写盘枚举值不变）
+const AGY_TOOL_PERM_MODES = [
+  { v: '', label: 'sync.notWrite' },
+  { v: 'strict', label: 'sync.opt.strict' },
+  { v: 'request-review', label: 'sync.opt.requestReview' },
+  { v: 'always-proceed', label: 'sync.opt.alwaysProceed' },
+  { v: 'proceed-in-sandbox', label: 'sync.opt.proceedInSandbox' },
+]
+
+// agy「执行所有命令」三档单选框：默认(不接管) / 允许 / 拒绝（写盘枚举值不变）
+// permissions.allow/deny 的 command(*) 通配规则：允许入 allow、拒绝入 deny、默认不写
+const AGY_ALL_CMD_MODES = [
+  { v: '', label: 'sync.opt.default', cls: 'neutral' },
+  { v: 'allow', label: 'sync.allow', cls: 'allow' },
+  { v: 'deny', label: 'sync.deny', cls: 'deny' },
+]
 
 // ---- 权限规则胶囊（各客户端「权限配置」的规则列表统一交互） ----
 // 每条规则一枚胶囊：状态圆点 + 规则文本 + 状态词；点按循环 未设(灰虚线) → 允许(绿)
@@ -188,16 +199,7 @@ function geminiCapCycle(k) {
   const v = geminiForm.value[k]
   geminiForm.value[k] = v === 'true' ? 'false' : v === 'false' ? '' : 'true'
 }
-// 循环到「未设」等价旧版「再点一次已选项取消」：预设/自定义按各自数据模型清行
-function claudeRuleCycle(rule) {
-  const cur = claudeRuleMode(rule)
-  const next = permModeNext(cur)
-  if (next) claudeRulePick(rule, next)
-  else {
-    const i = claudePermRows.value.findIndex(r => String(r.text || '') === rule)
-    if (i >= 0) claudePermRows.value.splice(i, 1)
-  }
-}
+// 循环到「未设」等价旧版「再点一次已选项取消」：grok 预设/自定义按各自数据模型清行
 function grokRuleCycle(rule) {
   const cur = grokRuleMode(rule)
   const next = permModeNext(cur)
@@ -234,7 +236,98 @@ function kimiCustomCycle(row) {
 // 非 form 模式（json / claudemd / climodels 等源码页签）走源码编辑排版
 const isSrcMode = computed(() => cfgMode.value !== 'form')
 
-onMounted(() => { loadTargets() })
+// ---- 问号说明浮层边界约束（.tip>em） ----
+// 浮层 CSS 默认锚在问号左下（left:0 / top:100%+6px，宽至 320px），当问号贴近字段行右端、
+// 弹窗底边或窗口边缘时，说明文本会越出可视区域（且会被 overflow 滚动容器裁掉）。
+// 事件委托在 hover 时按「视口 ∩ 各级 overflow 裁剪祖先」的实际可用范围摆位：
+// 右侧放不下 → 改为右对齐向左展开；下方放不下 → 翻转到上方；两侧都不足 → 收窄换行兜底。
+let activeTipEl = null
+const TIP_PAD = 4  // 与可视边界的留白
+const TIP_GAP = 6  // 与问号圆圈的间距
+function resetTipStyle(el) {
+  const em = el && el.querySelector(':scope > em')
+  if (!em) return
+  for (const p of ['left', 'right', 'top', 'bottom', 'maxWidth']) em.style[p] = ''
+}
+function fitActiveTip() {
+  const el = activeTipEl
+  if (!el || !document.body.contains(el)) return
+  const em = el.querySelector(':scope > em')
+  if (!em) return
+  if (getComputedStyle(em).display === 'none') return
+  // 1) 可用边界：视口 ∩ 各级 overflow 裁剪祖先（滚动容器内的浮层越界会被裁掉，须一并收进）
+  let L = 0, T = 0, R = document.documentElement.clientWidth, B = document.documentElement.clientHeight
+  for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
+    const o = getComputedStyle(p)
+    if (o.overflowX === 'visible' && o.overflowY === 'visible') continue
+    const r = p.getBoundingClientRect()
+    L = Math.max(L, r.left); T = Math.max(T, r.top)
+    R = Math.min(R, r.right); B = Math.min(B, r.bottom)
+  }
+  const ir = el.getBoundingClientRect()
+  const bl = el.clientLeft, bt = el.clientTop // absolute 子元素定位相对 padding box（减去边框宽）
+  // 2) 水平：优先「左对齐右展」→「右对齐向左展开」→ 贴可用边界收窄
+  const w0 = em.offsetWidth
+  let x = ir.left
+  let maxW = null
+  if (x + w0 > R - TIP_PAD) {
+    const xR = ir.right - w0 // 浮层右缘对齐问号右缘，向左展开
+    if (xR >= L + TIP_PAD) x = xR
+    else if (R - TIP_PAD - ir.left >= 80) { x = ir.left; maxW = R - TIP_PAD - x }
+    else { x = L + TIP_PAD; maxW = R - TIP_PAD - x }
+  }
+  em.style.maxWidth = maxW != null ? maxW + 'px' : ''
+  const h = em.offsetHeight
+  // 3) 垂直：优先下方；放不下翻转到上方；两侧都不足选空间大的一侧
+  const below = ir.bottom + TIP_GAP
+  const above = ir.top - TIP_GAP - h
+  let y
+  if (below + h <= B - TIP_PAD) y = below
+  else if (above >= T + TIP_PAD) y = above
+  else {
+    const roomB = B - TIP_PAD - ir.bottom - TIP_GAP
+    const roomA = ir.top - TIP_GAP - (T + TIP_PAD)
+    y = roomB >= roomA ? below : above
+  }
+  em.style.left = (x - ir.left - bl) + 'px'
+  em.style.top = (y - ir.top - bt) + 'px'
+}
+function scheduleTipFit() {
+  // hover 使 em 由 display:none 变为 block，双 rAF 等首次布局完成后再测量摆位
+  requestAnimationFrame(() => requestAnimationFrame(fitActiveTip))
+}
+function onTipOver(e) {
+  const tip = e.target && e.target.closest ? e.target.closest('.tip') : null
+  if (!tip) {
+    if (activeTipEl && !activeTipEl.contains(e.target)) { resetTipStyle(activeTipEl); activeTipEl = null }
+    return
+  }
+  if (activeTipEl !== tip) { resetTipStyle(activeTipEl); activeTipEl = tip }
+  scheduleTipFit()
+}
+function onTipOut(e) {
+  const tip = activeTipEl
+  if (!tip) return
+  const to = e.relatedTarget
+  if (to && tip.contains(to)) return // 仍在本问号内（移向浮层文本）不关闭
+  resetTipStyle(tip)
+  activeTipEl = null
+}
+onMounted(() => {
+  loadTargets()
+  document.addEventListener('mouseover', onTipOver, true)
+  document.addEventListener('mouseout', onTipOut, true)
+  document.addEventListener('scroll', scheduleTipFit, true)
+  window.addEventListener('resize', scheduleTipFit)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mouseover', onTipOver, true)
+  document.removeEventListener('mouseout', onTipOut, true)
+  document.removeEventListener('scroll', scheduleTipFit, true)
+  window.removeEventListener('resize', scheduleTipFit)
+  resetTipStyle(activeTipEl)
+  activeTipEl = null
+})
 
 // ---- 通用（未特化）客户端权限规则：卡片三态点选列表 ↔ cfgObj.permissions.{allow,ask,deny} ----
 // get 侧把三段数组并成 [{ text, mode }] 行列表；set 侧按三态分组写回（非空才保留对应键）。
@@ -272,24 +365,34 @@ const claudeFieldWidth = f =>
   f.type === 'list' ? 'fw-full'
   : (f.type === 'bool' || f.type === 'select' || f.type === 'number') ? 'fw-s'
   : 'fw-m'
-// Claude 权限规则：预设规则常驻展示为双态（允许/拒绝）点选卡片
-const claudeRuleMode = rule => {
-  const r = claudePermRows.value.find(r => String(r.text || '') === rule)
+// Claude「命令」权限总状态：允许 / 拒绝 / 询问 三态胶囊，只维护权限通配行
+//（裸工具名 Bash = 该工具全部终端命令，与 Claude 官方规则语法一致）：
+// 允许 → permissions.allow 含 Bash；拒绝 → deny 含 Bash；询问 → ask 含 Bash；
+// 再次点击当前档 = 取消该行（回到不接管）。其余工具规则行（Read/Edit/WebFetch/自定义）
+// 仍在 claudePermRows 中保留写回，不在本面板展示编辑。
+const CLAUDE_CMD_RULE = 'Bash'
+const CLAUDE_CMD_MODES = [
+  { v: 'allow', label: 'sync.allow', cls: 'allow' },
+  { v: 'ask', label: 'sync.ask', cls: 'ask' },
+  { v: 'deny', label: 'sync.deny', cls: 'deny' },
+]
+const claudeCmdMode = () => {
+  const r = claudePermRows.value.find(r => String(r.text || '') === CLAUDE_CMD_RULE)
   return r ? r.mode : ''
 }
-function claudeRulePick(rule, mode) {
-  const i = claudePermRows.value.findIndex(r => String(r.text || '') === rule)
+function claudeCmdSet(mode) {
+  const i = claudePermRows.value.findIndex(r => String(r.text || '') === CLAUDE_CMD_RULE)
   if (i >= 0) {
     if (claudePermRows.value[i].mode === mode) claudePermRows.value.splice(i, 1)
     else claudePermRows.value[i].mode = mode
-  } else {
-    claudePermRows.value.push({ text: rule, mode })
+  } else if (mode) {
+    claudePermRows.value.push({ text: CLAUDE_CMD_RULE, mode })
   }
 }
-// 非预设的既有自定义规则：额外展示为卡片（保留不被丢弃），可删除
-const customClaudeRows = computed(() =>
-  claudePermRows.value.filter(r => !PERM_COMMON_RULES.some(p => p.v === String(r.text || '')))
-)
+// Claude 权限模式专属类：default(询问) / acceptEdits(自动接受编辑) /
+// bypassPermissions(不询问) / plan(只读规划)，配色对齐右侧 cmd-* 语义色系
+const CLAUDE_PM_CLASS = { default: 'pm-ask', acceptEdits: 'pm-accept', bypassPermissions: 'pm-bypass', plan: 'pm-plan' }
+const pmModeCls = v => CLAUDE_PM_CLASS[v] || 'pm-plan'
 // Grok 权限规则：预设规则常驻卡片三态点选（allow/ask/deny），自定义规则卡片可追加/删除
 const grokRuleMode = rule => {
   const r = grokPermRows.value.find(r => String(r.text || '') === rule)
@@ -307,8 +410,6 @@ function grokRulePick(rule, mode) {
 const customGrokRows = computed(() =>
   grokPermRows.value.filter(r => !GROK_PERM_RULES.some(p => p.v === String(r.text || '')))
 )
-// MCP 服务器面板：当前已配置的服务器名（对 cfgObj 响应式，随改动自动刷新）
-const claudeMcps = computed(() => claudeMcpServerNames())
 </script>
 
 <template>
@@ -326,13 +427,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
             <div class="sync-title-text">
               <span class="sync-card-name">{{ tg.name }}</span>
               <span v-if="!tg.placeholder" class="sync-card-arrow">›</span>
-            </div>
-          </div>
-          <div class="sync-card-body">
-            <div class="sync-card-tags">
-              <span v-if="tg.skillsSupported" class="sync-tag t-skills">⚡ skills</span>
-              <span v-if="tg.mcpSupported" class="sync-tag t-mcp">🔌 mcp</span>
-              <span v-if="!tg.skillsSupported && !tg.mcpSupported" class="sync-tag">⚙ config</span>
             </div>
           </div>
         </div>
@@ -358,11 +452,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <button class="copy-btn" @click="copyText(routerHintForTarget(), $event.currentTarget)">{{ t('sync.copy') }}</button>
                 </div>
               </div>
-              <button class="btn btn-green btn-sm cfg-save" type="button" :disabled="cfgSaving || cfgLoading" @click="saveTargetConfig">{{ cfgSaving ? '…' : t('common.save') }}</button>
-              <span class="cfg-actions-divider" aria-hidden="true"></span>
-              <button class="cfg-close" type="button" @click="cfgEdit=false" :title="t('sync.close')">
-                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-              </button>
+              <button class="btn btn-green btn-sm cfg-save" type="button" :disabled="cfgSaving || cfgLoading" @click="saveTargetConfig">{{ cfgSaving ? '…' : t('sync.saveClose') }}</button>
             </div>
           </div>
           <div class="cfg-tabs">
@@ -392,7 +482,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
               <button class="cfg-tab" :class="{on:cfgMode==='geminienv'}" @click="switchMode('geminienv')" :title="'~/.gemini/.env ' + t('sync.src')">.env</button>
               <button class="cfg-tab" :class="{on:cfgMode==='geminimd'}" @click="switchMode('geminimd')" :title="'~/.gemini/GEMINI.md ' + t('sync.src')">GEMINI.md</button>
             </template>
-            <button v-if="cfgTarget?.id==='claude-code' || cfgTarget?.id==='claude-desktop'" class="cfg-tab" :class="{on:cfgMode==='claudemd'}" @click="switchMode('claudemd')" :title="'~/.claude/CLAUDE.md ' + t('sync.src')">CLAUDE.md</button>
+            <button v-if="cfgTarget?.id==='claude-code'" class="cfg-tab" :class="{on:cfgMode==='claudemd'}" @click="switchMode('claudemd')" :title="'~/.claude/CLAUDE.md ' + t('sync.src')">CLAUDE.md</button>
             <button v-if="cfgTarget?.id==='copilot'" class="cfg-tab" :class="{on:cfgMode==='copilotenv'}" @click="switchMode('copilotenv')" :title="t('sync.copilot.tabTip')">{{ t('sync.copilot.title') }}</button>
             <button v-if="cfgTarget?.id==='copilot'" class="cfg-tab" :class="{on:cfgMode==='copilotperm'}" @click="switchMode('copilotperm')" :title="t('sync.copilot.permTabTip')">{{ t('sync.copilot.permTab') }}</button>
             <button v-if="cfgTarget?.id==='agy'" class="cfg-tab" :class="{on:cfgMode==='agymcp'}" @click="switchMode('agymcp')" :title="'~/.gemini/config/mcp_config.json ' + t('sync.src')">mcp_config.json</button>
@@ -403,11 +493,11 @@ const claudeMcps = computed(() => claudeMcpServerNames())
           <div v-if="cfgLoading" style="padding:20px;text-align:center;color:var(--t3)">…</div>
           <div v-else-if="cfgMode==='form'" class="cfg-form" style="display:flex;flex-direction:column;gap:6px">
 
-            <!-- Claude Code / Desktop -->
-            <template v-if="cfgTarget?.id==='claude-code' || cfgTarget?.id==='claude-desktop'">
+            <!-- Claude Code -->
+            <template v-if="cfgTarget?.id==='claude-code'">
               <div class="panel-head ph-1">{{ t('sync.panelModel') }}</div>
               <section class="card cfg-card">
-                <div class="field-row" style="margin-top:2px">
+                <div class="field-row" style="margin-top:2px;align-items:flex-end">
                   <div class="field fw-l">
                     <label>{{ t('sync.claude.baseUrlEnv') }} <span class="tip"><i>?</i><em>env</em></span></label>
                     <input :value="routerHintForTarget()" readonly />
@@ -415,6 +505,19 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                   <div class="field fw-m">
                     <label>{{ t('sync.claude.tokenEnv') }} <span class="tip"><i>?</i><em>env</em></span></label>
                     <input :value="getPath(cfgObj,'env.ANTHROPIC_AUTH_TOKEN') || ''" @input="e=> setPath(cfgObj,'env.ANTHROPIC_AUTH_TOKEN', e.target.value)" :placeholder="t('sync.routeToken')" />
+                  </div>
+                  <div class="field fw-m">
+                    <label>{{ t('sync.model') }} <span class="tip"><i>?</i><em>settings.json 顶层，生效于未走环境变量映射的场景</em></span></label>
+                    <div class="pi-sel">
+                      <input v-model="claudeDefaultModel" :placeholder="t('sync.pickModel')" @focus="claudeModelOpen=-2" @click.stop="claudeModelOpen=-2" @input="claudeModelOpen=-2" @blur="setTimeout(()=>{ if(claudeModelOpen===-2) claudeModelOpen=-1 },120)" />
+                      <div v-show="claudeModelOpen===-2" class="pi-sel-drop">
+                        <div v-for="g in modelGroupsByLetter(claudeDefaultModel)" :key="g.letter" class="pi-sel-group" :data-letter="g.letter">
+                          <div class="pi-sel-letter">{{ g.letter }}</div>
+                          <button v-for="m in g.items" :key="m" type="button" @mousedown.prevent="claudeDefaultModel=m; claudeModelOpen=-1">{{ m }}</button>
+                        </div>
+                        <div v-if="!modelGroupsByLetter(claudeDefaultModel).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.claude.endpointTip') }}</em></div>
@@ -441,68 +544,41 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                 <button v-if="claudeEnvModels.length < CLAUDE_ENV_KEY_SLOTS.length" type="button" class="btn btn-xs btn-ghost" style="margin-top:2px" @click="claudeEnvModels.push(newClaudeEnvModelRow())">{{ t('sync.addMapping') }}</button>
               </section>
 
-              <section class="card cfg-card">
-                <div class="field" style="margin-top:2px">
-                  <label>{{ t('sync.model') }} <span class="tip"><i>?</i><em>settings.json 顶层，生效于未走环境变量映射的场景</em></span></label>
-                  <div class="pi-sel">
-                    <input v-model="claudeDefaultModel" :placeholder="t('sync.pickModel')" @focus="claudeModelOpen=-2" @click.stop="claudeModelOpen=-2" @input="claudeModelOpen=-2" @blur="setTimeout(()=>{ if(claudeModelOpen===-2) claudeModelOpen=-1 },120)" />
-                    <div v-show="claudeModelOpen===-2" class="pi-sel-drop">
-                      <div v-for="g in modelGroupsByLetter(claudeDefaultModel)" :key="g.letter" class="pi-sel-group" :data-letter="g.letter">
-                        <div class="pi-sel-letter">{{ g.letter }}</div>
-                        <button v-for="m in g.items" :key="m" type="button" @mousedown.prevent="claudeDefaultModel=m; claudeModelOpen=-1">{{ m }}</button>
-                      </div>
-                      <div v-if="!modelGroupsByLetter(claudeDefaultModel).length" class="pi-sel-empty">{{ t('sync.noMatch') }}</div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
               <div class="panel-head ph-2">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
-                <div class="perm-mode">
-                  <button v-for="o in PERM_OPTIONS" :key="o.value" type="button" class="perm-mode-card"
-                    :class="{ on: (getPath(cfgObj,'permissions.defaultMode')||getPath(cfgObj,'permission')||'default')===o.value }"
-                    @click="setPath(cfgObj,'permissions.defaultMode',o.value)">
-                    <span class="pm-name">{{ o.name() }}</span>
-                    <span v-if="i18nState.lang==='en'" class="pm-desc">{{ o.desc() }}</span>
-                  </button>
-                </div>
-                <div class="field" style="margin:4px 0"><label>{{ t('sync.claude.permRulesLabel') }}</label>
-                  <div class="perm-caps" role="group" :aria-label="t('sync.claude.permRulesLabel')">
-                    <button v-for="r in PERM_COMMON_RULES" :key="r.v" type="button" class="perm-cap" role="radio"
-                      :class="permCapCls(claudeRuleMode(r.v))" :aria-checked="claudeRuleMode(r.v)!==''"
-                      :title="r.tip() + ' · ' + t('sync.permCapClick')" @click="claudeRuleCycle(r.v)">
-                      <span class="perm-cap-dot"></span>
-                      <span class="perm-cap-text">{{ r.v }}</span>
-                      <span class="perm-cap-state">{{ permCapWord(claudeRuleMode(r.v)) }}</span>
-                    </button>
-                    <template v-for="row in customClaudeRows" :key="row">
-                      <button type="button" class="perm-cap" :class="permCapCls(row.mode)"
-                        :title="row.text + ' · ' + t('sync.permCapClick')" @click="claudeRuleCycle(row.text)">
-                        <span class="perm-cap-dot"></span>
-                        <span class="perm-cap-text">{{ row.text }}</span>
-                        <span class="perm-cap-state">{{ permCapWord(row.mode) }}</span>
-                        <span class="perm-cap-x" :title="t('sync.delete')" @click.stop="claudePermRows.splice(claudePermRows.indexOf(row),1)">×</span>
+                <div class="perm-inline">
+                  <div class="agy-perm-col">
+                    <span class="agy-perm-name">{{ t('sync.permMode') }}</span>
+                    <div class="perm-mode">
+                      <button v-for="o in PERM_OPTIONS" :key="o.value" type="button"
+                        :class="['perm-mode-card', pmModeCls(o.value), { on: (getPath(cfgObj,'permissions.defaultMode')||getPath(cfgObj,'permission')||'default')===o.value }]"
+                        @click="setPath(cfgObj,'permissions.defaultMode',o.value)">
+                        <span class="pm-name">{{ o.name() }}</span>
+                        <span v-if="i18nState.lang==='en'" class="pm-desc">{{ o.desc() }}</span>
                       </button>
-                    </template>
+                    </div>
+                  </div>
+                  <div class="agy-perm-line">
+                    <div class="agy-perm-col">
+                      <span class="agy-perm-name">{{ t('sync.claude.permCmdName') }}</span>
+                      <div class="agy-perm-box" role="radiogroup" :aria-label="t('sync.claude.permCmdName')">
+                        <label v-for="m in CLAUDE_CMD_MODES" :key="m.v" class="agy-box-opt" :class="'cmd-' + m.cls"
+                          :title="t('sync.claude.permTip')">
+                          <input type="radio" name="claudeCmdRule" :value="m.v" :checked="claudeCmdMode() === m.v"
+                            @click="claudeCmdSet(m.v)" />
+                          <span>{{ t(m.label) }}</span>
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <div class="tip blk"><i>?</i><em>{{ t('sync.claude.permTip') }}</em></div>
               </section>
 
-              <div class="panel-head ph-3">{{ t('sync.claude.mcpTitle') }}<span v-if="claudeMcps.length" class="cfg-head-count">{{ claudeMcps.length }}</span></div>
-              <section class="card cfg-card">
-                <div v-if="claudeMcps.length" class="cfg-mcp-list">
-                  <span v-for="n in claudeMcps" :key="n" class="cfg-mcp-chip">{{ n }}</span>
-                </div>
-                <div v-else class="cfg-mcp-empty">{{ t('sync.claude.mcpEmpty') }}</div>
-                <div class="tip blk"><i>?</i><em>{{ t('sync.claude.mcpTip') }}</em></div>
-              </section>
-
               <template v-for="(g, gi) in CLAUDE_EXTRA_GROUPS" :key="g.id">
                 <div class="panel-head" :class="gi === 0 ? 'ph-3' : 'ph-4'">{{ t('sync.claude.group.' + g.id) }}</div>
                 <section class="card cfg-card">
-                  <div class="cfg-grid">
+                  <div :class="g.id==='template' ? 'claude-tpl-row' : 'cfg-grid'">
                     <div v-for="f in g.fields" :key="f.key" class="field" :class="claudeFieldWidth(f)">
                       <label>{{ t('sync.claude.x.' + f.key) }} <span class="tip"><i>?</i><em>{{ f.key }}</em></span></label>
                       <select v-if="f.type==='bool'" v-model="claudeExtra[f.key]">
@@ -937,16 +1013,16 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 
               <div class="panel-head ph-2">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
-                <div class="agy-safe-row" role="group" :aria-label="t('sync.panelPerm')">
+                <div class="perm-cap-row-wrap" role="group" :aria-label="t('sync.panelPerm')">
                   <button v-for="s in GEMINI_PERM_SW" :key="s.k" type="button" role="switch"
-                    class="agy-safe-cap" :class="geminiCapCls(s.k)"
+                    class="perm-cap-row" :class="geminiCapCls(s.k)"
                     :aria-checked="geminiForm[s.k]==='true'"
                     :aria-label="t(s.label)"
                     :title="t(s.tip)"
                     @click="geminiCapCycle(s.k)">
-                    <span class="agy-safe-dot"></span>
-                    <span class="agy-safe-name">{{ t(s.label) }}</span>
-                    <span class="agy-safe-state">{{ geminiCapWord(s.k) }}</span>
+                    <span class="perm-cap-dot"></span>
+                    <span class="perm-cap-name">{{ t(s.label) }}</span>
+                    <span class="perm-cap-state">{{ geminiCapWord(s.k) }}</span>
                   </button>
                 </div>
               </section>
@@ -970,35 +1046,28 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 
             <!-- agy (Antigravity CLI) -->
             <template v-else-if="cfgTarget?.id==='agy'">
-              <section class="card cfg-card">
-                <div class="field-row">
-                  <div class="field fw-l"><label>{{ t('sync.agy.envBaseLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.envBaseTip') }}</em></span></label>
-                    <div class="ro-url">
-                      <input :value="agyRouterUrl()" readonly />
-                      <button type="button" class="btn btn-xs btn-ghost" @click="copyText(agyRouterUrl(), $event.currentTarget)">{{ t('sync.copy') }}</button>
-                    </div>
-                  </div>
-                  <div class="field fw-l"><label>{{ t('sync.agy.envKeyLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.envKeyTip') }}</em></span></label>
-                    <input v-model="agyEnvKey" :placeholder="t('sync.routeToken')" />
-                  </div>
-                </div>
-                <div class="field-row" style="margin-top:6px;align-items:center">
-                  <button v-if="agyEnvShowClear" type="button" class="cc-toggle danger" :disabled="agyEnvSaving" @click="agyClearEnv()">{{ t('sync.copilot.clear') }}</button>
-                  <button v-else type="button" class="cc-toggle on" :disabled="agyEnvSaving" @click="agyWriteEnv()">{{ t('sync.agy.envWrite') }}</button>
-                  <span class="tip" style="margin-left:4px"><i>?</i><em>{{ t('sync.agy.envActTip') }}</em></span>
-                </div>
-                <div class="tip blk"><i>?</i><em>{{ t('sync.agy.modelAliasTip') }}</em></div>
-              </section>
-
-              <div class="panel-head ph-8">{{ t('sync.agy.mapPanel') }}</div>
+              <div class="panel-head ph-8">{{ t('sync.agy.mapPanel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.modelAliasTip') }}</em></span></div>
               <section class="card cfg-card">
                 <div class="agy-map-main">
+                  <!-- 连接 env（Gemini API 地址/密钥/写 env）与模型映射整合于同一面板：连接信息在上，映射列表在下 -->
+                  <div class="field-row" style="align-items:flex-end">
+                    <div class="field fw-l"><label>{{ t('sync.agy.envBaseLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.envBaseTip') }}</em></span></label>
+                      <div class="ro-url">
+                        <input :value="agyRouterUrl()" readonly />
+                        <button type="button" class="btn btn-xs btn-ghost" @click="copyText(agyRouterUrl(), $event.currentTarget)">{{ t('sync.copy') }}</button>
+                      </div>
+                    </div>
+                    <div class="field fw-l"><label>{{ t('sync.agy.envKeyLabel') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.envKeyTip') }}</em></span></label>
+                      <input v-model="agyEnvKey" :placeholder="t('sync.routeToken')" />
+                    </div>
+                    <div style="flex:0 0 auto;display:flex;align-items:center;gap:4px;margin-bottom:6px">
+                      <button v-if="agyEnvShowClear" type="button" class="cc-toggle danger" :disabled="agyEnvSaving" @click="agyClearEnv()">{{ t('sync.copilot.clear') }}</button>
+                      <button v-else type="button" class="cc-toggle on" :disabled="agyEnvSaving" @click="agyWriteEnv()">{{ t('sync.agy.envWrite') }}</button>
+                      <span class="tip"><i>?</i><em>{{ t('sync.agy.envActTip') }}</em></span>
+                    </div>
+                  </div>
                   <!-- 内置 ID 全量列出：每行 内置ID = 映射目标文本框，留空 = 不映射 -->
                   <div class="agy-map-list">
-                    <div class="agy-map-head">
-                      <span>aliases</span>
-                      <span class="tip"><i>?</i><em>{{ t('sync.agy.mapTip') }}</em></span>
-                    </div>
                     <div class="agy-map-rows">
                       <div v-for="m in agyBuiltinModels" :key="m" class="agy-map-row">
                         <span class="agy-map-builtin">{{ m }}</span>
@@ -1019,9 +1088,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
                         </div>
                       </div>
                     </div>
-                    <div class="agy-map-foot">
-                      <button type="button" class="btn btn-green btn-sm" :disabled="agyAliasSaving" @click="saveAgyAliases()">{{ agyAliasSaving ? '…' : t('sync.agy.mapSave') }}</button>
-                    </div>
                   </div>
                 </div>
               </section>
@@ -1039,41 +1105,51 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 
               <div class="panel-head ph-4">{{ t('sync.panelPerm') }}</div>
               <section class="card cfg-card">
-                <div class="cfg-grid">
-                  <div class="field fw-m"><label>{{ t('sync.agy.toolPermission') }} <span class="tip"><i>?</i><em>{{ t('sync.agy.toolPermissionTip') }}</em></span></label>
-                    <select v-model="agyForm.toolPermission">
-                      <option value="">{{ t('sync.notWrite') }}</option>
-                      <option value="strict">{{ t('sync.opt.strict') }}</option>
-                      <option value="request-review">{{ t('sync.opt.requestReview') }}</option>
-                      <option value="always-proceed">{{ t('sync.opt.alwaysProceed') }}</option>
-                      <option value="proceed-in-sandbox">{{ t('sync.opt.proceedInSandbox') }}</option>
-                    </select>
+                <!-- 权限配置：两个单选组（工具权限 5 项 / 执行所有命令 3 项）各被一个淡绿胶囊背景容器包裹归类；
+                     组名标注在胶囊背景的左侧；组内为原生 radio + 文字（圆圈可见、11px、互斥）。 -->
+                <div class="agy-perm-line">
+                  <div class="agy-perm-col">
+                    <span class="agy-perm-name">{{ t('sync.agy.toolPermName') }}</span>
+                    <div class="agy-perm-box">
+                      <label v-for="m in AGY_TOOL_PERM_MODES" :key="m.v" class="agy-box-opt" :title="t(m.label)">
+                        <input type="radio" name="agyToolPerm" :value="m.v" v-model="agyForm.toolPermission" />
+                        <span>{{ t(m.label) }}</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="agy-perm-col">
+                    <span class="agy-perm-name">{{ t('sync.agy.allCmdName') }}</span>
+                    <div class="agy-perm-box">
+                      <label v-for="m in AGY_ALL_CMD_MODES" :key="'cmd-'+m.cls" class="agy-box-opt" :class="'cmd-'+m.cls" :title="t(m.label)">
+                        <input type="radio" name="agyAllCmd" :value="m.v" v-model="agyForm.allCommands" />
+                        <span>{{ t(m.label) }}</span>
+                      </label>
+                    </div>
                   </div>
                 </div>
-                <div class="tip blk"><i>?</i><em>{{ t('sync.agy.permTip') }}</em></div>
               </section>
 
               <div class="panel-head ph-5">{{ t('sync.agy.safetyPanel') }}</div>
               <section class="card cfg-card">
-                <div class="agy-safe-row">
-                  <button
-                    v-for="k in AGY_SAFE_KEYS" :key="k" type="button" role="switch"
-                    class="agy-safe-cap" :class="agySafeCls(k)"
-                    :aria-checked="agyForm[k] === 'true'"
-                    :aria-label="t('sync.agy.' + k)"
-                    :title="k === 'enableTerminalSandbox' ? t('sync.agy.sandboxTip') : t('sync.agy.' + k)"
-                    @click="agySafeCycle(k)"
-                  >
-                    <span class="agy-safe-dot"></span>
-                    <span class="agy-safe-name">{{ t('sync.agy.' + k) }}</span>
-                    <span class="agy-safe-state">{{ agySafeState(k) }}</span>
-                  </button>
+                <div class="cfg-grid agy-safe-grid">
+                  <div v-for="k in AGY_SAFE_KEYS" :key="k" class="field fw-m">
+                    <label>
+                      {{ t('sync.agy.' + k) }}
+                      <span v-if="k === 'enableTerminalSandbox'" class="tip"><i>?</i><em>{{ t('sync.agy.sandboxTip') }}</em></span>
+                    </label>
+                    <select v-model="agyForm[k]">
+                      <option value="">{{ t('sync.opt.default') }}</option>
+                      <option value="true">{{ t('sync.opt.yes') }}</option>
+                      <option value="false">{{ t('sync.opt.no') }}</option>
+                    </select>
+                  </div>
                 </div>
               </section>
 
               <div class="panel-head ph-6">{{ t('sync.panelStyle') }}</div>
               <section class="card cfg-card">
-                <div class="cfg-grid">
+                <!-- agy 风格配置：5 个下拉固定 5 列 grid 同一行（见 .agy-style-row 样式注释） -->
+                <div class="agy-style-row">
                   <div class="field fw-m"><label>{{ t('sync.theme') }}</label>
                     <select v-model="agyForm.colorScheme">
                       <option value="">{{ t('sync.notWrite') }}</option>
@@ -2239,7 +2315,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
   background:linear-gradient(135deg,#33363c,#1d2026);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 2px 8px rgba(0,0,0,.25)
 }
-.avatar-claude-code,.avatar-claude-desktop{background:rgba(217,119,87,.14);box-shadow:inset 0 0 0 1px rgba(217,119,87,.22)}
+.avatar-claude-code{background:rgba(217,119,87,.14);box-shadow:inset 0 0 0 1px rgba(217,119,87,.22)}
 .avatar-gemini{background:rgba(91,155,240,.12);box-shadow:inset 0 0 0 1px rgba(212,167,44,.25)}
 .avatar-opencode{background:linear-gradient(135deg,#232a38,#10141d)}
 .avatar-grok-build{background:linear-gradient(135deg,#1b2130,#0b0e15)}
@@ -2256,10 +2332,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
   font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:999px;
   color:#d97706;background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.35)
 }
-.sync-card-tags{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
-.sync-tag{font-size:10px;padding:2px 8px;border-radius:999px;background:var(--s3,var(--bg));color:var(--t2);border:1px solid var(--border)}
-.sync-tag.t-skills{color:var(--amber);background:rgba(251,191,36,.09);border-color:rgba(251,191,36,.28)}
-.sync-tag.t-mcp{color:var(--violet);background:rgba(212,167,44,.1);border-color:rgba(212,167,44,.3)}
 
 /* ===== 弹窗 ===== */
 .dialog-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex !important;align-items:center;justify-content:center}
@@ -2280,7 +2352,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .cfg-info-btn:hover,.cfg-info-btn.on{
   color:var(--accent);border-color:rgba(52,211,153,.5);background:rgba(52,211,153,.08);
 }
-.cfg-actions-divider{width:1px;height:16px;background:var(--border);margin:0 2px;flex:none}
 .cfg-info-mask{position:fixed;inset:0;z-index:5}
 .cfg-info-pop{
   position:absolute;top:30px;right:-4px;z-index:60;
@@ -2301,30 +2372,31 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .cfg-file code,.cfg-ref code{background:var(--bg);padding:2px 6px;border-radius:5px;margin:0 4px}
 .copy-btn{background:transparent;border:1px solid var(--border);border-radius:5px;font-size:10px;padding:1px 6px;cursor:pointer;color:var(--t2)}
 .cfg-notexist{color:#d97706;font-size:10px;margin-left:4px}
-.cfg-close{
-  width:24px;height:24px;padding:0;border-radius:7px;flex:none;
-  display:flex;align-items:center;justify-content:center;
-  background:transparent;border:1px solid transparent;
-  color:var(--t3);cursor:pointer;
-  transition:color 0.15s, border-color 0.15s, background-color 0.15s, transform 0.1s;
-}
-.cfg-close:hover{color:#f87171;border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.12)}
-.cfg-close:active{transform:scale(0.92)}
 
 /* ===== 页签 ===== */
 .cfg-tabs{display:flex;align-items:center;gap:5px;margin-top:4px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-.cfg-tab{border:1px solid var(--border);background:transparent;color:var(--t2);font-size:11px;padding:2px 9px;border-radius:7px;cursor:pointer;font-family:inherit}
-.cfg-tab:hover{border-color:var(--border-hover);color:var(--text)}
-.cfg-tab.on{border-color:transparent;color:#1c1206;background:linear-gradient(135deg,var(--accent),var(--accent-2))}
+/* 页签（所有客户端）：各自独立胶囊（效仿 agy）。浅白底+描边，选中态=绿渐变填充+深字 */
+.cfg-tab{border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:#fff;font-size:11px;padding:2px 13px;border-radius:999px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.cfg-tab:hover{background:rgba(255,255,255,.11);color:#fff;border-color:rgba(255,255,255,.3)}
+.cfg-tab.on{border-color:transparent;color:#1c1206;background:linear-gradient(135deg,var(--accent),var(--accent-2));font-weight:700}
 
 /* ===== 主体 ===== */
 .cfg-body{padding:6px 8px;overflow:auto;flex:1;min-height:0;background:var(--bg);scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
-.cfg-body-src{display:flex;flex-direction:column;padding:6px 8px 0;min-height:0;background:var(--bg)}
+/* 源码页签窗口：隐藏滚动条、保留滚动能力（滚轮/触控板/键盘仍可滚，代码编辑观感更干净） */
+.cfg-body-src{display:flex;flex-direction:column;padding:6px 8px 0;min-height:0;background:var(--bg);scrollbar-width:none;-ms-overflow-style:none}
+/* 双类提升特异性：压过后文 .cfg-body::-webkit-scrollbar{width:8px} 的全局细条定义 */
+.cfg-body.cfg-body-src::-webkit-scrollbar{width:0;height:0;display:none}
 /* 面板卡片：更强的独立边界（较亮描边 + 同色系底色 + 轻阴影），与对话框背景分层 */
 .cfg-card{padding:6px 9px;border:1px solid var(--border-hover);border-radius:calc(var(--radius-sm) + 1px);background:var(--s2,var(--surface));box-shadow:0 1px 3px rgba(0,0,0,.10),0 3px 8px rgba(0,0,0,.12)}
 .card-head{font-weight:800;font-size:11.5px;color:var(--text);margin-bottom:3px}
 /* 面板分组标题：加粗分隔条（渐变绿底 + 左侧强调线），面板之间边界一目了然 */
 .panel-head{font-size:11px;font-weight:800;letter-spacing:.6px;padding:5px 10px;background:linear-gradient(90deg,rgba(34,197,94,.26),rgba(34,197,94,.1));border:1px solid rgba(34,197,94,.55);border-left:3px solid rgba(74,222,128,.9);border-radius:var(--radius-sm);color:#86efac;margin:9px 0 3px}
+/* 面板标题与其后紧邻的卡片连为一体：.cfg-form 容器 flex gap 6px 会让标题与卡片之间
+   始终残留 6px 空隙（仅把 margin-bottom 归零无法消除容器 gap），故连体时用
+   margin-bottom:-6px 抵消 gap；标题再去下边框/下圆角，卡片削平顶边框与上圆角，
+   二者严丝合缝成为一个面板块。 */
+.panel-head:has(+ .cfg-card){margin:9px 0 -6px;border-bottom:none;border-radius:var(--radius-sm) var(--radius-sm) 0 0}
+.panel-head + .cfg-card{border-top:none;border-top-left-radius:0;border-top-right-radius:0}
 /* ph-1 ~ ph-5 仅保留类名兼容模板引用，颜色统一为绿色 */
 .panel-head.ph-1,.panel-head.ph-2,.panel-head.ph-3,.panel-head.ph-4,.panel-head.ph-5{background:linear-gradient(90deg,rgba(34,197,94,.26),rgba(34,197,94,.1));border-color:rgba(34,197,94,.55);border-left-color:rgba(74,222,128,.9);color:#86efac}
 /* MCP 服务器（mcpServers）只读展示：已配置的服务器以胶囊列出，未配置显示占位 */
@@ -2340,22 +2412,78 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .cfg-form .field input,.cfg-form .field select,.cfg-form .field textarea{width:100%;padding:3px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-family:inherit;box-sizing:border-box}
 .field-row{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:0}
 .cfg-form .field-row{margin-bottom:1px}
+/* agy 风格配置：5 个下拉强制同一行。用 grid 而非 flex——
+   flex 的宽度分档(.agy-style-row .fw-m/.fw-l)会被后文特异性相同的
+   .cfg-form .fw-m/.fw-l 覆盖(144px/208px basis，5 项合计≈784px)，
+   超出 720px 对话框可用宽度即触发 field-row 的 flex-wrap 换行。
+   grid 固定 5 列 minmax(0,1fr)，宽度不足时按列收缩、绝不换行。 */
+.agy-style-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;align-items:end;margin-bottom:0}
+.agy-style-row > .field{min-width:0;margin-bottom:0}
+.agy-style-row > .field select{width:100%}
+/* claude「模板顶层字段」：7 个短字段强制同一行。flex(.cfg-grid) 下每个 fw-s
+   flex-basis 96px × 7 ≈ 672px 超出可用宽即换行成 4+3 两行；grid 固定 7 列
+   minmax(0,1fr)，列宽不足时按列收缩、绝不换行（同 .agy-style-row 原理）。 */
+.claude-tpl-row{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;align-items:end;margin-bottom:0}
+.claude-tpl-row > .field{min-width:0;margin-bottom:0}
+.claude-tpl-row > .field select,
+.claude-tpl-row > .field input{width:100%}
 .cfg-grid{display:flex;gap:4px;flex-wrap:wrap}
 /* commandcode 配置行：统一 4 列等宽栅格，各行列边对齐 */
 .cc-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px 10px;align-items:end}
 .cc-grid4 .cc-span2{grid-column:span 2}
-.rf-group{display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--t2)}
-.rf-group label{display:flex;align-items:center;gap:3px;cursor:pointer}
-/* 权限模式点选卡片：单选双态，选中态高亮描边+浅色底 */
-.perm-mode{display:grid;grid-template-columns:repeat(auto-fit,minmax(116px,1fr));gap:5px;margin-bottom:4px}
-.perm-mode-card{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:4px 8px;text-align:left;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-family:inherit;transition:var(--transition)}
-.perm-mode-card:hover{border-color:var(--border-hover)}
-.perm-mode-card:active{transform:scale(0.98)}
-.perm-mode-card .pm-name{font-size:10.5px;font-weight:700;line-height:1.4;color:var(--t2)}
-.perm-mode-card .pm-desc{font-size:9px;line-height:1.4;color:var(--t3)}
-.perm-mode-card.on{background:var(--accent-soft);border-color:var(--accent)}
-.perm-mode-card.on .pm-name{color:var(--accent)}
-.perm-mode-card.on .pm-desc{color:var(--t2)}
+.rf-group{display:flex;gap:12px;flex-wrap:wrap;align-items:center;padding:3px 12px;border-radius:999px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.25);font-size:11px;color:var(--t2)}
+.rf-group label{display:inline-flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;margin:0}
+.rf-group label:has(input:checked){color:var(--text);font-weight:700}
+.rf-group input{accent-color:var(--green);margin:0;cursor:pointer}
+/* 权限模式组容器：整组淡绿胶囊面板；通用兜底模板内保持卡片点选+绿渐变选中，
+   claude 权限行内的选项样式由下方 .perm-inline 段覆盖（纯文字+语义色细描边） */
+.perm-mode{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px;padding:3px 10px;border-radius:999px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.25)}
+/* claude 权限面板：权限模式四卡 + 「执行命令」三态胶囊整合为同一行；
+   外层 flex(wrap 兜底窄窗/英文 desc 过长时自动折行不溢出)。仅本面板使用。 */
+.perm-inline{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.perm-inline .perm-mode{margin-bottom:0}
+.perm-inline>.agy-perm-line{margin-top:0;flex:1;min-width:0}
+.perm-mode-card{display:inline-flex;align-items:center;gap:6px;padding:3px 13px;text-align:center;background:transparent;border:1px solid transparent;border-radius:999px;cursor:pointer;font-family:inherit;transition:var(--transition)}
+.perm-mode-card:hover{border-color:rgba(255,255,255,.22);background:rgba(255,255,255,.05)}
+.perm-mode-card:active{transform:scale(0.97)}
+.perm-mode-card .pm-name{font-size:11px;font-weight:700;line-height:1.5;color:var(--text)}
+.perm-mode-card .pm-desc{font-size:9px;line-height:1.3;color:var(--t3)}
+.perm-mode-card.on{background:linear-gradient(135deg,var(--accent),var(--accent-2));border-color:transparent}
+.perm-mode-card.on .pm-name{color:#141b12}
+.perm-mode-card.on .pm-desc{color:rgba(20,27,18,.72)}
+/* claude 权限模式每项专属语义类（对齐右侧 cmd-* 色系：询问=琥珀 / 自动接受编辑=绿 /
+   不询问=红高权限警示 / 只读规划=中性灰）。hover 时按语义强调，选中态仍统一绿渐变 */
+.perm-mode-card.pm-ask{--pmc:var(--amber)}
+.perm-mode-card.pm-accept{--pmc:var(--green)}
+.perm-mode-card.pm-bypass{--pmc:var(--red)}
+.perm-mode-card.pm-plan{--pmc:var(--t2)}
+/* 专属语义类只定义选中描边色 --pmc（询问=琥珀 / 自动接受编辑=绿 / 不询问=红 / 只读规划=灰） */
+.perm-mode-card.pm-ask{--pmc:var(--amber)}
+.perm-mode-card.pm-accept{--pmc:var(--green)}
+.perm-mode-card.pm-bypass{--pmc:var(--red)}
+.perm-mode-card.pm-plan{--pmc:var(--t2)}
+/* claude 权限行：去掉项级嵌套胶囊、圆点与一切描边（radio 圆点隐藏、前置语义点移除），
+   组容器淡绿胶囊保留，组内为纯文字选项；选中态=仅文本变绿，无背景、无边框 */
+.perm-inline .perm-mode-card{padding:3px 12px;line-height:1.45;gap:5px;background:transparent;border-color:transparent}
+.perm-inline .perm-mode-card:hover{background:transparent;border-color:transparent}
+.perm-inline .perm-mode-card .pm-name{line-height:1.45}
+.perm-inline .perm-mode-card.on{background:transparent;border-color:transparent}
+.perm-inline .perm-mode-card.on .pm-name{color:var(--green)}
+.perm-inline .perm-mode-card.on .pm-desc{color:var(--green)}
+.perm-inline .perm-mode-card::before{content:none}
+.perm-inline .agy-perm-name{font-size:11px}
+.perm-inline .agy-perm-box{gap:11px}
+.perm-inline .agy-box-opt{line-height:1.45;padding:0;border:1px solid transparent;border-radius:999px;background:transparent}
+.perm-inline .agy-box-opt:hover{border-color:transparent}
+.perm-inline .agy-box-opt input{display:none}
+.perm-inline .agy-box-opt input:checked + span{color:var(--green);font-weight:700}
+.perm-inline .agy-box-opt:has(input:checked){background:transparent;border-color:transparent}
+.perm-inline .agy-box-opt.cmd-allow:has(input:checked){background:transparent;border-color:transparent}
+.perm-inline .agy-box-opt.cmd-ask:has(input:checked){background:transparent;border-color:transparent}
+.perm-inline .agy-box-opt.cmd-deny:has(input:checked){background:transparent;border-color:transparent}
+.perm-inline .agy-box-opt.cmd-allow input:checked + span{color:var(--green)}
+.perm-inline .agy-box-opt.cmd-ask input:checked + span{color:var(--green)}
+.perm-inline .agy-box-opt.cmd-deny input:checked + span{color:var(--green)}
 .model-row{display:flex;gap:5px;align-items:flex-end;flex-wrap:wrap;margin-bottom:3px}
 .row-del{color:var(--t3)}
 /* Kilo 模型集合：每个模型一张独立卡片分割展示 */
@@ -2371,7 +2499,7 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .tip:hover{border-color:var(--accent);background:var(--accent-soft)}
 .tip>i{font-style:normal;font-size:8.5px;font-weight:800;line-height:1;color:var(--t3)}
 .tip:hover>i{color:var(--accent)}
-.tip>em{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:300;font-style:normal;font-weight:400;letter-spacing:normal;text-transform:none;white-space:normal;text-align:left;width:max-content;max-width:min(320px,70vw);padding:6px 9px;font-size:9.5px;line-height:1.55;color:var(--text);background:var(--s3);border:1px solid var(--border-hover);border-radius:8px;box-shadow:var(--shadow)}
+.tip>em{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:300;font-style:normal;font-weight:400;letter-spacing:normal;text-transform:none;white-space:normal;text-align:left;width:max-content;max-width:min(320px,70vw);padding:6px 9px;font-size:9.5px;line-height:1.55;color:var(--text);background:var(--s3);border:1px solid var(--border-hover);border-radius:8px;box-shadow:var(--shadow);pointer-events:none}
 .tip:hover>em{display:block}
 .tip.blk{margin:2px 0 0}
 .tip>em code{font-family:var(--mono);font-size:9px;background:rgba(128,128,128,.15);padding:0 3px;border-radius:3px}
@@ -2392,28 +2520,34 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .cfg-form .env-ro{background:var(--s3,var(--bg));color:var(--t3);cursor:not-allowed}
 
 /* ===== 权限规则编辑 ===== */
-.perm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:5px}
+/* 能力/动作审批卡分组：淡绿分组面板（效仿 agy 权限配置容器） */
+.perm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:5px;padding:6px 10px;border-radius:14px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.20)}
 /* grok 权限：permission_mode 独占一行，allow/ask/deny 三列同一行等宽 */
 .perm-grid.perm-3{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
 /* 权限规则点选列表样式见 public/style.css（全局，供 opencode 与各客户端共用） */
 .perm-ta{font-family:var(--mono);resize:none;min-height:34px;max-height:110px;line-height:1.35}
-/* agy 安全区：一行四枚布尔开关胶囊。点按循环 默认(灰) → 允许(绿/true) → 拒绝(红/false) */
-.agy-safe-row{display:flex;gap:5px;flex-wrap:wrap;align-items:stretch}
-.agy-safe-cap{flex:1 1 0;min-width:96px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:6px 4px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--t2);cursor:pointer;transition:var(--transition);font-family:inherit}
-.agy-safe-cap:hover{border-color:var(--border-hover);transform:translateY(-1px)}
-.agy-safe-cap .agy-safe-dot{width:8px;height:8px;border-radius:50%;background:var(--t3);flex:none}
-.agy-safe-cap .agy-safe-name{font-size:10px;font-weight:700;color:var(--text);text-align:center;line-height:1.3}
-.agy-safe-cap .agy-safe-state{font-size:9px;color:var(--t3)}
-.agy-safe-cap.allow{border-color:var(--green);background:var(--green-soft)}
-.agy-safe-cap.allow .agy-safe-dot{background:var(--green);box-shadow:0 0 6px rgba(52,211,153,.5)}
-.agy-safe-cap.allow .agy-safe-name{color:var(--green)}
-.agy-safe-cap.allow .agy-safe-state{color:var(--green)}
-.agy-safe-cap.deny{border-color:var(--red);background:var(--red-soft)}
-.agy-safe-cap.deny .agy-safe-dot{background:var(--red);box-shadow:0 0 6px rgba(251,113,133,.5)}
-.agy-safe-cap.deny .agy-safe-name{color:var(--red)}
-.agy-safe-cap.deny .agy-safe-state{color:var(--red)}
-/* 默认态：灰（不写入、走 CLI 默认） */
-.agy-safe-cap.def{border-style:dashed;opacity:.88}
+/* agy 安全区：四列下拉列表，自动 wrap 适配窄窗口 */
+.agy-safe-grid{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+/* agy 权限配置：工具权限 5 项 / 命令 3 项，两个单选组各被一个「淡绿胶囊背景」容器包裹归类。
+   组内为原生 radio + 文字（圆圈可见、11px、互斥；不带 .field 包装，不受
+   .cfg-form .field label{9px} 覆盖）；命令组 默认=中性灰 / 允许=绿 / 拒绝=红 的圆圈与选中文字配色。 */
+.agy-perm-line{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:6px}
+/* 每组 = 「类名称」+ 淡绿胶囊背景容器；名称竖排于胶囊左侧，与容器中线对齐 */
+.agy-perm-col{display:flex;align-items:center;gap:7px}
+.agy-perm-name{font-size:10px;font-weight:800;letter-spacing:.3px;color:var(--t2);white-space:nowrap}
+.agy-perm-box{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:3px 14px;border-radius:999px;background:rgba(34,197,94,.10);border:1px solid rgba(34,197,94,.25)}
+.agy-box-opt{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--t2);cursor:pointer;user-select:none;white-space:nowrap}
+.agy-box-opt:hover{color:var(--text)}
+.agy-box-opt input{accent-color:var(--green);margin:0;cursor:pointer;flex:none}
+.agy-box-opt input:checked + span{color:var(--text);font-weight:700}
+.agy-box-opt.cmd-neutral input{accent-color:var(--t3)}
+.agy-box-opt.cmd-allow input{accent-color:var(--green)}
+.agy-box-opt.cmd-ask input{accent-color:var(--amber)}
+.agy-box-opt.cmd-deny input{accent-color:var(--red)}
+.agy-box-opt.cmd-allow input:checked + span{color:var(--green)}
+.agy-box-opt.cmd-ask input:checked + span{color:var(--amber)}
+.agy-box-opt.cmd-deny input:checked + span{color:var(--red)}
+/* agy 权限配置淡绿胶囊分组结束 */
 /* Claude 权限规则独立卡片：规则文本 + 允许/拒绝双态点选（预设常驻，自定义可删除） */
 .perm-rule-card{display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);transition:var(--transition)}
 .perm-rule-card:hover{border-color:var(--border-hover)}
@@ -2455,7 +2589,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 /* ---- agy 模型映射面板：配对行 + aliases 行编辑器 ---- */
 .agy-map-main{display:flex;flex-direction:column;gap:8px}
 .agy-map-main .agy-map-list{border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden}
-.agy-map-main .agy-map-head{display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--s2);font-size:10px;font-weight:700;color:var(--t2);border-bottom:1px solid var(--border)}
 .agy-map-main .agy-map-rows{padding:4px 6px}
 .agy-map-main .agy-map-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
 .agy-map-main .agy-map-row:last-child{margin-bottom:0}
@@ -2464,8 +2597,6 @@ const claudeMcps = computed(() => claudeMcpServerNames())
 .agy-map-main .agy-map-val{flex:1;min-width:0;padding:2px 5px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:10px;font-family:var(--mono)}
 .agy-map-main .agy-map-val:focus{outline:none;border-color:var(--accent-ring)}
 .agy-map-main .agy-map-eq{color:var(--t3);font-size:10px;font-family:var(--mono)}
-.agy-map-main .agy-map-foot{display:flex;align-items:center;gap:6px;padding:4px 8px;background:var(--s2);border-top:1px solid var(--border)}
-.agy-map-main .agy-map-foot .btn-green{margin-left:auto}
 
 /* ===== pi/grok 模型下拉 ===== */
 .pi-sel{position:relative}

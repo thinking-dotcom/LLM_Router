@@ -2,7 +2,7 @@
 //
 // 它负责管理可执行文件同目录 data/ 下的 skills 与 mcp 全局配置，并把它们
 // 手动注入（或撤销）到各 Agent CLI 客户端的本地配置目录（Claude Code、
-// Claude Desktop、OpenCode、Gemini CLI、pi、Grok Build、Codex、Cline、
+// OpenCode、Gemini CLI、pi、Grok Build、Codex、Cline、
 // Hermes、Command Code、Kimi Code、Copilot CLI、Kilo），使这些客户端能直接使用本路由器。
 //
 // 本包完全独立于 config/format/router/core：不修改任何既有配置结构与转发

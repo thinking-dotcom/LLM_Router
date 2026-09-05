@@ -60,7 +60,6 @@ async function save() {
 // 客户端 logo（与 Clients.vue 同源：frontend/public/logos/）
 const TARGET_LOGOS = {
   'claude-code': '/logos/claude.svg',
-  'claude-desktop': '/logos/claude.svg',
   'gemini': '/logos/gemini.svg',
   'opencode': '/logos/opencode.svg',
   'grok-build': '/logos/grok.svg',

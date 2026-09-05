@@ -112,7 +112,6 @@ export function permModeNext(mode) {
 // ============ 客户端 logo（frontend/public/logos/）============
 export const TARGET_LOGOS = {
   'claude-code': '/logos/claude.svg',
-  'claude-desktop': '/logos/claude.svg',
   'gemini': '/logos/gemini.svg',
   'opencode': '/logos/opencode.svg',
   'grok-build': '/logos/grok.svg',

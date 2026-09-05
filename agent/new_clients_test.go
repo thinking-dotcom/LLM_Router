@@ -31,7 +31,7 @@ func TestGetRealTextPresetFallback(t *testing.T) {
 }
 
 // 新接入客户端注册形态校验：非占位、ConfigFile 指向真实文件并带 PresetFile、
-// 格式标记正确；claude-desktop 保持直编真实文件（ConfigFile 回退 McpFile）。
+// 格式标记正确。
 func TestNewClientTargetsRegistered(t *testing.T) {
 	cases := []struct {
 		id     string
@@ -74,10 +74,6 @@ func TestNewClientTargetsRegistered(t *testing.T) {
 	}
 	if count < 11 {
 		t.Errorf("registry count = %d, want >= 11", count)
-	}
-	di := registry["claude-desktop"].Info()
-	if di.ConfigFile != di.McpFile {
-		t.Errorf("claude-desktop ConfigFile should fall back to McpFile (got %q)", di.ConfigFile)
 	}
 }
 

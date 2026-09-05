@@ -48,7 +48,9 @@ function format() {
 <style scoped>
 .code-area{height:min(472px,68vh);flex:none;display:flex;min-height:0;border:1px solid var(--bd,#333);border-radius:8px;background:var(--bg2,#141414);overflow:hidden;position:relative}
 .ca-ln{width:40px;flex-shrink:0;text-align:right;padding:8px 8px 8px 0;font-family:Consolas,monospace;font-size:12px;line-height:1.5;color:var(--t3,#888);background:rgba(128,128,128,.08);overflow:hidden;user-select:none;white-space:pre}
-.ca-ta{flex:1;resize:none;font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:8px;border:none;outline:none;background:transparent;color:inherit;white-space:pre;overflow:auto}
+.ca-ta{flex:1;resize:none;font-family:Consolas,monospace;font-size:12px;line-height:1.5;padding:8px;border:none;outline:none;background:transparent;color:inherit;white-space:pre;overflow:auto;scrollbar-width:none;-ms-overflow-style:none}
+/* 文本区隐藏滚动条但保留滚动（长行横向滚动/纵向滚动均可用滚轮、触控板与键盘） */
+.ca-ta::-webkit-scrollbar{width:0;height:0;display:none}
 .ca-format{position:absolute;top:6px;right:10px;z-index:2;padding:1px 10px;font-size:9.5px;line-height:1.6;font-family:inherit;border:1px solid var(--border,#444);border-radius:999px;background:var(--surface,#1d1d1d);color:var(--t2,#aaa);cursor:pointer;opacity:.75;transition:var(--transition,.15s)}
 .ca-format:hover{opacity:1;border-color:var(--accent,#34d399);color:var(--accent,#34d399)}
 </style>

@@ -31,7 +31,7 @@ import { ccApplyToObj, initCcForm, ccSeedModelsFromList, ccLoadNoLogin, ccSettin
 import { writeCopilotEnv, saveCopilotPerm, loadCopilotEnv, loadCopilotPerm, copilotPermFile, copilotPermExists } from './copilot'
 import { hermesInitFrom, hermesWriteYaml, hermesMuted, hermesYamlPreset } from './hermes'
 import { kiloApplyToObj, kiloFromSource, initKiloForm, kiloModels, kiloModel, kiloSmallModel, kiloSubagentModel, kiloApiKey, kiloProviderKey, kiloProviderPrefix, kiloQualifyModel, kiloAgentsContent, kiloAgentsExists, kiloAgentsFile, parseJsonc, setKiloMuted } from './kilo'
-import { agyApplyToObj, initAgyForm, agySettingsPreset, agyMcpContent, agyMcpExists, agyMcpFile, agyForm, writeAgyEnv, loadAgyEnv, loadAgyAliasPanel } from './agy'
+import { agyApplyToObj, initAgyForm, agySettingsPreset, agyMcpContent, agyMcpExists, agyMcpFile, agyForm, writeAgyEnv, loadAgyEnv, loadAgyAliasPanel, applyAgyAliases } from './agy'
 
 // ============ 当前编辑文件 / 存在态（各客户端专属页签） ============
 export function currentCfgFile() {
@@ -169,7 +169,7 @@ export function pickGeminiModel(m) { geminiForm.value.modelName = m; geminiModel
 // ============ 构建 / 保存 / 打开 ============
 export function buildFormText() {
   const id = cfgTarget.value.id
-  if (id === 'claude-code' || id === 'claude-desktop') {
+  if (id === 'claude-code') {
     return claudeBuildFormText()
   }
   if (id === 'pi') return piBuildModelsText()
@@ -197,20 +197,22 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const g = await api.SaveGeminiDotEnv(geminiEnvContent.value)
-      if (g && g.ok) toast(t('sync.configSaved'))
+      if (g && g.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: g?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
   }
   // Copilot CLI 环境变量 BYOK 模式：不落盘配置文件，直接写入用户环境变量
   if (cfgTarget.value.id === 'copilot' && cfgMode.value === 'copilotenv') {
-    await writeCopilotEnv()
+    if (await writeCopilotEnv()) cfgEdit.value = false
     return
   }
   // Copilot CLI 工具审批权限：保存 ~/.copilot/permissions-config.json（源码直编）
   if (cfgTarget.value.id === 'copilot' && cfgMode.value === 'copilotperm') {
     cfgSaving.value = true
-    try { await saveCopilotPerm() } finally { cfgSaving.value = false }
+    let ok = false
+    try { ok = await saveCopilotPerm() } finally { cfgSaving.value = false }
+    if (ok) cfgEdit.value = false
     return
   }
   // Antigravity CLI mcp_config.json 源码模式：只保存 ~/.gemini/config/mcp_config.json，不动主配置
@@ -219,7 +221,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const am = await api.SaveAgyMcp(agyMcpContent.value)
-      if (am && am.ok) toast(t('sync.configSaved'))
+      if (am && am.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: am?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -229,7 +231,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const ga = await api.SaveGeminiAgents(geminiAgentsContent.value)
-      if (ga && ga.ok) toast(t('sync.configSaved'))
+      if (ga && ga.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: ga?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -239,7 +241,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const oa = await api.SaveOpencodeAgents(ocAgentsContent.value)
-      if (oa && oa.ok) toast(t('sync.configSaved'))
+      if (oa && oa.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: oa?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -249,7 +251,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const ka = await api.SaveKiloAgents(kiloAgentsContent.value)
-      if (ka && ka.ok) toast(t('sync.configSaved'))
+      if (ka && ka.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: ka?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -259,7 +261,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveCodexAgents(codexAgentsContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -270,7 +272,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveClineModels(clineModelsContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -281,7 +283,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveClineProviders(clineProvidersContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -291,7 +293,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveClineAgents(clineAgentsContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -308,7 +310,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveClineGlobalState(clineGlobalStateContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -319,7 +321,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveCommandcodeSettings(ccSettingsContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -330,18 +332,18 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveCommandcodeProviders(ccProvidersContent.value)
-      if (r && r.ok) toast(t('sync.configSaved'))
+      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
   }
   // Claude Code CLAUDE.md 源码模式：只保存 ~/.claude/CLAUDE.md，不动主配置
-  if ((cfgTarget.value.id === 'claude-code' || cfgTarget.value.id === 'claude-desktop') && cfgMode.value === 'claudemd') {
+  if (cfgTarget.value.id === 'claude-code' && cfgMode.value === 'claudemd') {
     cfgSaving.value = true
     try {
       const cmErr = await saveClaudeMarkdown()
       if (cmErr) toast(t('common.fail', { msg: cmErr }))
-      else toast(t('sync.configSaved'))
+      else toast(t('sync.configSaved')); cfgEdit.value = false
     } finally { cfgSaving.value = false }
     return
   }
@@ -360,6 +362,14 @@ export async function saveTargetConfig() {
   // pi 全局设置源码模式：校验 + 自动格式化后再保存
   if (cfgTarget.value.id === 'pi' && cfgMode.value === 'globjson') {
     if (piSettingsContent.value.trim() && !autoFormatJson(piSettingsContent)) { const p = jsonErrorPos(piSettingsContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
+  }
+  // agy 合并：模型映射随「保存」一并落盘——先解析映射文本并回写路由器服务商 aliases，
+  // 失败（目标模型解析不到已启用服务商等）即中止整次保存，避免无效映射仍写入 settings.json
+  if (cfgTarget.value.id === 'agy') {
+    cfgSaving.value = true
+    const ae = await applyAgyAliases()
+    cfgSaving.value = false
+    if (ae) { toast(t('common.fail', { msg: ae })); return }
   }
   cfgSaving.value = true
   try {
@@ -465,7 +475,7 @@ export async function saveTargetConfig() {
         if (aew && !saveErr) saveErr = aew
       }
     }
-    if (r && r.ok && !saveErr) toast(t('sync.configSaved'))
+    if (r && r.ok && !saveErr) { toast(t('sync.configSaved')); cfgEdit.value = false }
     else toast(t('common.fail', { msg: (r && !r.ok ? r.error : saveErr) || '?' }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
 }
@@ -771,10 +781,9 @@ export async function openTargetConfig(tg) {
           try { const v = JSON.parse(r.content); cfgObj.value = v && typeof v === 'object' ? v : {} } catch (e) { cfgObj.value = {} }
         } else {
           if (tg.id === 'claude-code') cfgObj.value = { model: '', permissions: { defaultMode: 'default' }, env: {} }
-          else if (tg.id === 'claude-desktop') cfgObj.value = { model: '', env: {} }
           else cfgObj.value = { model: '', accessMode: tg.apiFormat || '/oai', permissions: { defaultMode: 'default' } }
         }
-        if (tg.id === 'claude-code' || tg.id === 'claude-desktop') {
+        if (tg.id === 'claude-code') {
           // 重置环境变量模型行再重建，避免上次打开的其它目标的旧行残留并被保存
           claudeEnvModels.value = []
           normalizeClaudeEnvModels()
@@ -832,7 +841,7 @@ export function initSyncController() {
     setJsonEcho(true)
     cfgObj.value = v
     const id = cfgTarget.value?.id
-    if (id === 'claude-code' || id === 'claude-desktop') { claudeEnvModels.value = []; normalizeClaudeEnvModels(); initClaudeExtra() }
+    if (id === 'claude-code') { claudeEnvModels.value = []; normalizeClaudeEnvModels(); initClaudeExtra() }
     else if (id === 'pi') initPiForm()
     else if (id === 'gemini') initGeminiForm()
     else if (id === 'opencode') initOcForm()

@@ -145,7 +145,6 @@ type AgentSkills struct {
 func ListAgentSkills() []AgentSkills {
 	agents := []struct{ name, id string }{
 		{"Claude Code", "claude-code"},
-		{"Claude Desktop", "claude-desktop"},
 		{"Codex", "codex"},
 		{"Gemini", "gemini"},
 		{"Antigravity CLI", "agy"},
