@@ -8,7 +8,8 @@ import (
 // CodeBuddy CLI 参考模版文件（agent/Json_modles/codebuddy）：
 //   - settings.json -> 主配置（真实部署到 ~/.codebuddy/settings.json）
 //   - models.json   -> 端点模型清单（真实部署到 ~/.codebuddy/models.json）
-//   - mcp.json      -> MCP 声明（真实部署到 ~/.codebuddy/mcp.json）
+//   - mcp.json      -> MCP 声明参考示例（不自动部署：真实文件缺失时 mcp.json
+//                      以空 mcpServers 起始，前端源码页签直编）
 //
 // 主配置直接读写真实文件（无模板中转），模板仅作首次初始值；models.json /
 // mcp.json 由前端并入同一编辑页，经下方 Get/Save 直读直写真实路径。
