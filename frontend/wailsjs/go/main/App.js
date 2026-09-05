@@ -50,14 +50,6 @@ export function GetClientRealPaths() {
   return window['go']['main']['App']['GetClientRealPaths']();
 }
 
-export function GetCodebuddyMcp() {
-  return window['go']['main']['App']['GetCodebuddyMcp']();
-}
-
-export function GetCodebuddyModels() {
-  return window['go']['main']['App']['GetCodebuddyModels']();
-}
-
 export function GetClineAgents() {
   return window['go']['main']['App']['GetClineAgents']();
 }
@@ -72,6 +64,14 @@ export function GetClineModels() {
 
 export function GetClineProviders() {
   return window['go']['main']['App']['GetClineProviders']();
+}
+
+export function GetCodebuddyMcp() {
+  return window['go']['main']['App']['GetCodebuddyMcp']();
+}
+
+export function GetCodebuddyModels() {
+  return window['go']['main']['App']['GetCodebuddyModels']();
 }
 
 export function GetCodexAgents() {

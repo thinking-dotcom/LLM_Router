@@ -27,10 +27,6 @@ export function GetClaudeMarkdown():Promise<Record<string, any>>;
 
 export function GetClientRealPaths():Promise<Record<string, any>>;
 
-export function GetCodebuddyMcp():Promise<Record<string, any>>;
-
-export function GetCodebuddyModels():Promise<Record<string, any>>;
-
 export function GetClineAgents():Promise<Record<string, any>>;
 
 export function GetClineGlobalState():Promise<Record<string, any>>;
@@ -38,6 +34,10 @@ export function GetClineGlobalState():Promise<Record<string, any>>;
 export function GetClineModels():Promise<Record<string, any>>;
 
 export function GetClineProviders():Promise<Record<string, any>>;
+
+export function GetCodebuddyMcp():Promise<Record<string, any>>;
+
+export function GetCodebuddyModels():Promise<Record<string, any>>;
 
 export function GetCodexAgents():Promise<Record<string, any>>;
 

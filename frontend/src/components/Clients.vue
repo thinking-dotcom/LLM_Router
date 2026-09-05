@@ -1237,17 +1237,9 @@ const customGrokRows = computed(() =>
 
             <!-- codebuddy (CodeBuddy CLI) -->
             <template v-else-if="cfgTarget?.id==='codebuddy'">
-              <!-- 接入端点（models.json）：url/apiKey 指向本路由器，等效 agy 顶部连接信息 -->
-              <div class="panel-head ph-1">{{ t('sync.cb.endpoints') }}</div>
+              <!-- 接入端点（models.json）：端点地址仅存在于各模型行 url（官方行级字段），不再顶部重复展示 -->
+              <div class="panel-head ph-1">{{ t('sync.cb.endpoints') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.endpointTip') }}</em></span></div>
               <section class="card cfg-card">
-                <div class="field-row" style="margin-top:2px;align-items:flex-end">
-                  <div class="field fw-l"><label>{{ t('sync.routerUrl') }} <span class="tip"><i>?</i><em>{{ t('sync.cb.endpointTip') }}</em></span></label>
-                    <div class="ro-url">
-                      <input :value="derivedBaseUrl()" readonly />
-                      <button type="button" class="btn btn-xs btn-ghost" @click="copyText(derivedBaseUrl(), $event.currentTarget)">{{ t('sync.copy') }}</button>
-                    </div>
-                  </div>
-                </div>
                 <div v-if="cbModelsObj.models && cbModelsObj.models.length" class="cb-mrows">
                   <div v-for="(row, i) in cbModelsObj.models" :key="i" class="pi-model-block cb-mrow">
                     <div class="pi-model-head">
