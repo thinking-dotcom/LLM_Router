@@ -87,6 +87,7 @@ var sessionStores = map[string]SessionStore{
 type SessionItem struct {
 	Path  string `json:"path"`  // 绝对路径
 	Name  string `json:"name"`  // 条目名（文件/目录名）
+	ID    string `json:"id"`    // 会话 ID（按各客户端注册的恢复 ID 口径提取，无 ID 语义时兜底去扩展名的条目名）
 	Group string `json:"group"` // 相对 Root 的父目录（项目/分组名，用于展示）
 	IsDir bool   `json:"isDir"`
 	Size  int64  `json:"size"`  // 字节数（目录为递归合计）
@@ -276,6 +277,34 @@ func ListSessionClients() []SessionClient {
 	return append(managed, unmanaged...)
 }
 
+// sessionDisplayID 提取展示用会话 ID：口径与终端恢复所用的 ID 一致
+// （stem/name/trimSession/jsonlSessionId）。客户端未登记 ID 提取规则
+// （恢复按会话文件载入，如 gemini/commandcode；或未登记恢复，如 pi/copilot）
+// 或提取失败时兜底：文件去扩展名、目录用条目名——展示场景永不报错。
+func sessionDisplayID(st SessionStore, it SessionItem) string {
+	id := ""
+	switch st.Resume.IDFrom {
+	case "stem":
+		id = strings.TrimSuffix(it.Name, filepath.Ext(it.Name))
+	case "name":
+		id = it.Name
+	case "trimSession":
+		id = strings.TrimPrefix(it.Name, "session_")
+	case "jsonlSessionId":
+		if v, ok := readSessionJSONField(it.Path, "session_id"); ok && v != "" {
+			id = v
+		}
+	}
+	if id == "" {
+		if it.IsDir {
+			id = it.Name
+		} else {
+			id = strings.TrimSuffix(it.Name, filepath.Ext(it.Name))
+		}
+	}
+	return id
+}
+
 // ListSessionItems 返回指定客户端的会话条目（修改时间新→旧）。
 func ListSessionItems(clientID string) ([]SessionItem, error) {
 	st, rootAbs, ok := sessionStoreOf(clientID)
@@ -288,6 +317,9 @@ func ListSessionItems(clientID string) ([]SessionItem, error) {
 	items, _, err := walkSessionItems(st, rootAbs)
 	if err != nil {
 		return nil, err
+	}
+	for i := range items {
+		items[i].ID = sessionDisplayID(st, items[i])
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Mtime > items[j].Mtime })
 	return items, nil

@@ -193,7 +193,7 @@ defineExpose({ loadClients, refresh, askDelete, state })
                   @click="showResumePop(it)" @keydown.enter.prevent="showResumePop(it)"
                 />
               </td>
-              <td class="sr-name" :title="it.path">{{ it.name }}</td>
+              <td class="sr-name" :title="it.path">{{ it.id || it.name }}</td>
               <td class="sr-time">{{ it.mtime }}</td>
               <td>
                 <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>

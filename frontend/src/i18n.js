@@ -33,7 +33,7 @@ export const I18N = {
     'sessions.confirmDelete': '确定删除选中的 {n} 个会话？删除后不可恢复。',
     'sessions.deleted': '已删除 {n} 个会话',
     'sessions.total': '共 {n} 个会话 · {size}',
-    'sessions.colName': '会话',
+    'sessions.colName': '会话 ID',
     'sessions.colTime': '修改时间',
 
     // 概览
@@ -993,7 +993,7 @@ export const I18N = {
     'sessions.confirmDelete': 'Delete {n} selected session(s)? This cannot be undone.',
     'sessions.deleted': 'Deleted {n} session(s)',
     'sessions.total': '{n} session(s) · {size}',
-    'sessions.colName': 'Session',
+    'sessions.colName': 'Session ID',
     'sessions.colTime': 'Modified',
 
     'server.status': 'Server Status',

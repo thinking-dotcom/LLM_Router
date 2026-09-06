@@ -286,3 +286,39 @@ func TestSessionResumeRejects(t *testing.T) {
 		t.Fatal("unknown client should be rejected")
 	}
 }
+
+// 展示用会话 ID：口径与恢复一致（stem/name/trimSession/jsonlSessionId），
+// 未登记 ID 提取规则（按文件恢复或不可恢复）时兜底去扩展名/目录名。
+func TestSessionDisplayID(t *testing.T) {
+	st := func(idFrom string) SessionStore {
+		return SessionStore{Kind: "file", Resume: ResumeSpec{IDFrom: idFrom}}
+	}
+	cases := []struct {
+		name string
+		st   SessionStore
+		it   SessionItem
+		want string
+	}{
+		{"stem 去扩展名", st("stem"), SessionItem{Name: "01a07242-f649-7162-8523-28f7093ebab4.jsonl"}, "01a07242-f649-7162-8523-28f7093ebab4"},
+		{"name 即 ID（目录型）", st("name"), SessionItem{Name: "01a06862-6071-7681-8704-edae8cdfe4b2", IsDir: true}, "01a06862-6071-7681-8704-edae8cdfe4b2"},
+		{"trimSession 去前缀", st("trimSession"), SessionItem{Name: "session_143c66bf-ca43-46f3-bbe0-a8e4edc56602", IsDir: true}, "143c66bf-ca43-46f3-bbe0-a8e4edc56602"},
+		{"jsonlSessionId 读文件内字段", st("jsonlSessionId"), SessionItem{Name: "rollout-x.jsonl"}, "uuid-from-json"},
+		{"未登记规则兜底去扩展名", st(""), SessionItem{Name: "2026-08-21T10-59-13-506Z_01a023f9.jsonl"}, "2026-08-21T10-59-13-506Z_01a023f9"},
+		{"未登记规则兜底目录名", st(""), SessionItem{Name: "6cf6381a-9b00-443a-8a00-a6b360c957b3", IsDir: true}, "6cf6381a-9b00-443a-8a00-a6b360c957b3"},
+	}
+	// 预建临时 jsonl 文件供 jsonlSessionId 用例读取
+	dir := t.TempDir()
+	mb, _ := json.Marshal(map[string]string{"session_id": "uuid-from-json"})
+	jf := filepath.Join(dir, "rollout-x.jsonl")
+	if err := os.WriteFile(jf, mb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range cases {
+		it := c.it
+		it.Path = jf // 覆盖 JSON 读取路径（其余分支不读文件，无害）
+		got := sessionDisplayID(c.st, it)
+		if got != c.want {
+			t.Fatalf("%s: id = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
