@@ -70,8 +70,13 @@ async function openLocation(p) {
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
 }
 
-// 在系统终端中打开会话（目录型进入会话目录，文件型进入其所在目录）
+// 在终端中以该客户端的恢复命令拉起会话（claude --resume <id> 等）。
+// 客户端不支持按会话恢复（Copilot/pi）时置灰并 toast 说明原因。
 async function openTerminal(p) {
+  if (!activeClient.value?.resumeSupported) {
+    toast(activeClient.value?.resumeNote || t('sessions.noResume'))
+    return
+  }
   try {
     const r = await api.OpenSessionTerminal(activeId.value, p)
     if (r && r.ok === false) toast(t('common.fail', { msg: r.error || '' }))
@@ -153,7 +158,11 @@ defineExpose({ loadClients })
               <td class="sr-time">{{ it.mtime }}</td>
               <td>
                 <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>
-                <button class="btn btn-xs btn-ghost btn-ico sess-term" :title="t('sessions.openTerminal')" @click="openTerminal(it.path)">❯_</button>
+                <button
+                  class="btn btn-xs btn-ghost btn-ico sess-term" :class="{ 'no-resume': !activeClient?.resumeSupported }"
+                  :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
+                  @click="openTerminal(it.path)"
+                >❯_</button>
               </td>
             </tr>
           </tbody>

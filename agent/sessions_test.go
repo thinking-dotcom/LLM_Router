@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -162,44 +165,124 @@ func TestSessionDeleteOutsideRoot(t *testing.T) {
 	}
 }
 
-// 终端目录解析：文件型会话 → 其所在目录；目录型会话 → 会话目录本身
-func TestSessionOpenDir(t *testing.T) {
-	// 文件型（Claude 布局）：Root/<分组>/<会话>.jsonl → 返回 <分组> 目录
+// 终端恢复命令组装：文件型按 stem 取 ID、cwd 从会话文件还原；目录型按名取 ID
+func TestSessionResumePlan(t *testing.T) {
+	// 文件型（Claude 风格）：Root/<分组>/<会话id>.jsonl，id=stem，目录还原自文件内 cwd
 	rootFile := t.TempDir()
+	cwdDir := filepath.Join(t.TempDir(), "orig-proj")
+	if err := os.MkdirAll(cwdDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mb, _ := json.Marshal(map[string]string{"sessionId": "ignored", "cwd": cwdDir}) // 反斜杠由 json.Marshal 转义
 	writeFile(t, filepath.Join(rootFile, "proj1", "a.jsonl"), 10)
-	withTestStore(t, "test-of", SessionStore{Root: rootFile, Kind: "file", Pattern: "*.jsonl", Depth: 2})
-	got, err := SessionOpenDir("test-of", filepath.Join(rootFile, "proj1", "a.jsonl"))
+	if err := os.WriteFile(filepath.Join(rootFile, "proj1", "a.jsonl"), mb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withTestStore(t, "test-resume", SessionStore{Root: rootFile, Kind: "file", Pattern: "*.jsonl", Depth: 2,
+		Resume: ResumeSpec{Bin: "claude", Args: []string{"claude", "--resume", "{id}"}, IDFrom: "stem", CwdFrom: "jsonlCwd"}})
+	plan, err := BuildSessionResume("test-resume", filepath.Join(rootFile, "proj1", "a.jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(rootFile, "proj1"); got != want {
-		t.Fatalf("open dir = %q, want %q", got, want)
+	if len(plan.Tokens) != 3 || plan.Tokens[0] != "claude" || plan.Tokens[1] != "--resume" || plan.Tokens[2] != "a" {
+		t.Fatalf("tokens = %v", plan.Tokens)
 	}
-	// 分组层（非会话条目）→ 拒绝
-	if _, err := SessionOpenDir("test-of", filepath.Join(rootFile, "proj1")); err == nil {
-		t.Fatal("group layer should be rejected")
+	if plan.Dir != cwdDir {
+		t.Fatalf("dir = %q, want %q (从会话文件 cwd 还原)", plan.Dir, cwdDir)
 	}
 
-	// 目录型（Cline 布局）：Root/<会话目录>/ → 返回会话目录本身
+	// 目录型（grok 风格）：分组目录是 URL 编码的真实项目路径，解码后作为启动目录
 	rootDir := t.TempDir()
-	writeFile(t, filepath.Join(rootDir, "sess1", "x.jsonl"), 5)
-	withTestStore(t, "test-od", SessionStore{Root: rootDir, Kind: "dir", Depth: 1})
-	got, err = SessionOpenDir("test-od", filepath.Join(rootDir, "sess1"))
+	realGrokProj := filepath.Join(t.TempDir(), "real", "grok-proj")
+	if err := os.MkdirAll(realGrokProj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	enc := url.QueryEscape(realGrokProj)
+	writeFile(t, filepath.Join(rootDir, enc, "01a00000-0000-0000-0000-000000000001", "x.jsonl"), 5)
+	withTestStore(t, "test-grok", SessionStore{Root: rootDir, Kind: "dir", Depth: 2,
+		Resume: ResumeSpec{Bin: "grok", Args: []string{"grok", "--resume", "{id}"}, IDFrom: "name", CwdFrom: "urlGroup"}})
+	plan, err = BuildSessionResume("test-grok", filepath.Join(rootDir, enc, "01a00000-0000-0000-0000-000000000001"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := filepath.Join(rootDir, "sess1"); got != want {
-		t.Fatalf("open dir = %q, want %q", got, want)
+	if len(plan.Tokens) != 3 || plan.Tokens[2] != "01a00000-0000-0000-0000-000000000001" {
+		t.Fatalf("tokens = %v", plan.Tokens)
+	}
+	if plan.Dir != realGrokProj {
+		t.Fatalf("dir = %q, want %q (URL 解码分组目录)", plan.Dir, realGrokProj)
 	}
 
-	// 越界 / 不存在 / 未登记客户端 → 拒绝
-	if _, err := SessionOpenDir("test-od", filepath.Join(t.TempDir(), "evil")); err == nil {
+	// 按文件恢复（commandcode / gemini 风格）：{file} 占位替换为条目绝对路径
+	withTestStore(t, "test-file2", SessionStore{Root: rootFile, Kind: "file", Pattern: "*.jsonl", Depth: 2,
+		Resume: ResumeSpec{Bin: "commandcode", Args: []string{"commandcode", "--session", "{file}"}}})
+	itemFile := filepath.Join(rootFile, "proj1", "a.jsonl")
+	plan, err = BuildSessionResume("test-file2", itemFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.Tokens) != 3 || plan.Tokens[2] != itemFile {
+		t.Fatalf("tokens = %v, want file placeholder replaced", plan.Tokens)
+	}
+}
+
+// 不支持按会话恢复的客户端（Copilot）→ 报出原因
+func TestSessionResumeUnsupported(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "chat-uuid-1", "x.json"), 1)
+	withTestStore(t, "test-copilot", SessionStore{Root: root, Kind: "dir", Depth: 1,
+		Resume: ResumeSpec{Unsupported: "Copilot CLI 仅支持 --continue"}})
+	_, err := BuildSessionResume("test-copilot", filepath.Join(root, "chat-uuid-1"))
+	if err == nil || !strings.Contains(err.Error(), "--continue") {
+		t.Fatalf("want unsupported error, got %v", err)
+	}
+	// 概览同样携带不支持标记
+	clients := ListSessionClients()
+	for _, c := range clients {
+		if c.ID == "test-copilot" && (c.ResumeSupported || c.ResumeNote == "") {
+			t.Fatal("copilot-style client should be marked unsupported with note")
+		}
+	}
+}
+
+// codex 风格：读 rollout 内 session_id（缺省回退文件名 stem）
+func TestSessionResumeIDFromJSON(t *testing.T) {
+	root := t.TempDir()
+	f := filepath.Join(root, "2026", "09", "07", "rollout-20260907-120000-x.jsonl")
+	mb, _ := json.Marshal(map[string]string{"session_id": "uuid-abc-123", "cwd": filepath.Join(t.TempDir(), "not-exist-dir")}) // cwd 不存在 → 回退主目录
+	if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f, mb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	withTestStore(t, "test-codex", SessionStore{Root: root, Kind: "file", Pattern: "*.jsonl", Depth: 4,
+		Resume: ResumeSpec{Bin: "codex", Args: []string{"codex", "resume", "{id}"}, IDFrom: "jsonlSessionId", CwdFrom: "jsonlCwd"}})
+	plan, err := BuildSessionResume("test-codex", f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Tokens[2] != "uuid-abc-123" {
+		t.Fatalf("id = %q, want uuid-abc-123 (来自文件内 session_id)", plan.Tokens[2])
+	}
+	home, _ := os.UserHomeDir()
+	if plan.Dir != home {
+		t.Fatalf("dir = %q, want home fallback %q", plan.Dir, home)
+	}
+}
+
+// 越界 / 分组层 / 未登记客户端 → 拒绝
+func TestSessionResumeRejects(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "proj1", "a.jsonl"), 10)
+	withTestStore(t, "test-rej", SessionStore{Root: root, Kind: "file", Pattern: "*.jsonl", Depth: 2,
+		Resume: ResumeSpec{Bin: "claude", Args: []string{"claude", "--resume", "{id}"}, IDFrom: "stem"}})
+	if _, err := BuildSessionResume("test-rej", filepath.Join(t.TempDir(), "evil.jsonl")); err == nil {
 		t.Fatal("outside path should be rejected")
 	}
-	if _, err := SessionOpenDir("test-of", filepath.Join(rootFile, "proj1", "ghost.jsonl")); err == nil {
-		t.Fatal("missing session file should be rejected")
+	if _, err := BuildSessionResume("test-rej", filepath.Join(root, "proj1")); err == nil {
+		t.Fatal("group layer should be rejected")
 	}
-	if _, err := SessionOpenDir("no-such-client", filepath.Join(rootFile, "proj1", "a.jsonl")); err == nil {
+	if _, err := BuildSessionResume("no-such-client", filepath.Join(root, "proj1", "a.jsonl")); err == nil {
 		t.Fatal("unknown client should be rejected")
 	}
 }

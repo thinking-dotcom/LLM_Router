@@ -336,58 +336,113 @@ func (a *App) DeleteSessionItems(clientID string, paths []string) map[string]any
 	return map[string]any{"ok": true}
 }
 
-// OpenSessionTerminal 在系统终端中打开某条会话所在的目录：
-// 目录型会话进入会话目录本身，文件型会话进入其所在目录（项目/分组层）。
+// OpenSessionTerminal 在系统终端中「按该客户端的恢复命令拉起会话」：
+// 例如 Claude Code 会话 → claude --resume <session-id>（在尽量还原的原始项目目录启动）。
+// 该客户端不支持按会话恢复（如 Copilot 仅支持 --continue）时返回原因。
 func (a *App) OpenSessionTerminal(clientID, path string) map[string]any {
-	dir, err := agent.SessionOpenDir(clientID, path)
+	plan, err := agent.BuildSessionResume(clientID, path)
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
-	if err := openTerminalAt(dir); err != nil {
+	if err := openTerminalCommand(plan.Dir, plan.Tokens); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
 }
 
-// openTerminalAt 在系统终端中打开指定目录（新开一个终端窗口并定位到该目录）。
-func openTerminalAt(dir string) error {
-	var cmd *exec.Cmd
+// openTerminalCommand 新开一个终端窗口执行 tokens 命令（目录定位到 dir）。
+func openTerminalCommand(dir string, tokens []string) error {
+	if len(tokens) == 0 {
+		return errors.New("恢复命令为空")
+	}
+	if _, err := exec.LookPath(tokens[0]); err != nil {
+		return errors.New("未找到可执行命令: " + tokens[0] + "，请确认已安装该 CLI")
+	}
+	if dir == "" {
+		dir, _ = os.UserHomeDir()
+	}
 	switch runtime.GOOS {
 	case "windows":
-		// 优先 Windows Terminal（wt 自带新窗口）；失败（未安装）回退经典控制台。
-		// cmd 以 dir 为工作目录启动即默认落位到该目录，无需拼接 cd 命令。
-		if wt := exec.Command("wt.exe", "-d", dir); wt.Start() == nil {
-			go func() { _ = wt.Wait() }()
-			return nil
+		// 各 AI CLI 多为 node .cmd shim，命令统一经 cmd /K 执行（出错留窗可看）。
+		inner := winCmdline(tokens)
+		// 优先 Windows Terminal：wt -d <dir> cmd /K <inner>
+		if _, err := exec.LookPath("wt.exe"); err == nil {
+			wt := exec.Command("wt.exe", "-d", dir, "cmd.exe", "/K", inner)
+			if err := wt.Start(); err == nil {
+				go func() { _ = wt.Wait() }()
+				return nil
+			}
 		}
-		cmd = exec.Command("cmd.exe")
+		// 回退经典控制台：cmd 以 dir 为工作目录启动，强制新控制台窗口避免复用父进程
+		cmd := exec.Command("cmd.exe", "/K", inner)
 		cmd.Dir = dir
-		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE：强制新窗口，避免复用父进程控制台
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		go func() { _ = cmd.Wait() }()
+		return nil
 	case "darwin":
-		quoted := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(dir)
-		cmd = exec.Command("osascript", "-e", `tell application "Terminal" to do script ("cd " & quoted form of "`+quoted+`")`)
+		cmdStr := posixCmdline(dir, tokens)
+		esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(cmdStr)
+		cmd := exec.Command("osascript", "-e", `tell application "Terminal" to do script "`+esc+`"`)
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		go func() { _ = cmd.Wait() }()
+		return nil
 	default:
+		cmdStr := posixCmdline(dir, tokens)
 		for _, cand := range [][]string{
-			{"gnome-terminal", "--working-directory=" + dir},
-			{"konsole", "--workdir", dir},
-			{"xfce4-terminal", "--working-directory=" + dir},
+			{"gnome-terminal", "--working-directory=" + dir, "--", "bash", "-lc", cmdStr},
+			{"konsole", "--workdir", dir, "-e", "bash", "-lc", cmdStr},
+			{"xfce4-terminal", "--working-directory=" + dir, "-x", "bash", "-lc", cmdStr},
 		} {
-			p, err := exec.LookPath(cand[0])
-			if err != nil {
+			p, lerr := exec.LookPath(cand[0])
+			if lerr != nil {
 				continue
 			}
-			cmd = exec.Command(p, cand[1:]...)
-			break
+			cmd := exec.Command(p, cand[1:]...)
+			if err := cmd.Start(); err == nil {
+				go func() { _ = cmd.Wait() }()
+				return nil
+			}
 		}
-		if cmd == nil {
-			return errors.New("未找到可用的终端程序")
+		return errors.New("未找到可用的终端程序")
+	}
+}
+
+// winCmdline 把 argv 拼成 cmd.exe 可执行的命令行（含空格的参数加引号，引号翻倍转义）。
+func winCmdline(tokens []string) string {
+	parts := make([]string, 0, len(tokens))
+	for _, tok := range tokens {
+		if tok == "" {
+			parts = append(parts, `""`)
+			continue
+		}
+		if strings.ContainsAny(tok, " \t\"&|<>^%") {
+			parts = append(parts, `"`+strings.ReplaceAll(tok, `"`, `""`)+`"`)
+		} else {
+			parts = append(parts, tok)
 		}
 	}
-	if err := cmd.Start(); err != nil {
-		return err
+	return strings.Join(parts, " ")
+}
+
+// posixCmdline 生成 `cd <dir> && exec <argv...>` 的 POSIX shell 命令行（单引号安全引用）。
+func posixCmdline(dir string, tokens []string) string {
+	parts := make([]string, 0, len(tokens)+1)
+	parts = append(parts, "cd "+shQuote(dir))
+	parts = append(parts, "exec")
+	for _, tok := range tokens {
+		parts = append(parts, shQuote(tok))
 	}
-	go func() { _ = cmd.Wait() }() // 终端常驻前台，仅后台回收避免僵尸进程
-	return nil
+	return strings.Join(parts, " ")
+}
+
+// shQuote 用单引号包住字符串并转义内部单引号（POSIX shell 安全）。
+func shQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // GetMcps 返回 MCP 配置（路由器地址 + 服务项列表）。

@@ -144,7 +144,7 @@ Wails 绑定（`frontend/wailsjs/go/main/App.d.ts` 自动生成，勿手改）�
 - 状态 / 配置 / 服务：`GetStatus`/`GetAppInfo`/`GetConfig`/`SaveConfig`/`StartServer`/`StopServer`/`RestartServer`
 - 模型：`FetchModels`/`FetchModelsList`/`GetProviderModels`/`GetModelsByFormat`
 - 日志 / 统计：`GetLogs`/`ClearLogs`（清空并立即落盘）/`GetStats`/`GetActiveModels`
-- 会话管理：`GetSessionClients`（各客户端会话概览）/`GetSessionItems`（会话条目列表）/`DeleteSessionItems`（批量删除，逐路径校验位于会话根目录内且层级相符）/`OpenSessionTerminal`（在系统终端中打开会话所在目录：目录型进会话目录、文件型进所在目录，Windows 优先 Windows Terminal、回退经典控制台）
+- 会话管理：`GetSessionClients`（各客户端会话概览，含是否支持按会话恢复）/`GetSessionItems`（会话条目列表）/`DeleteSessionItems`（批量删除，逐路径校验位于会话根目录内且层级相符）/`OpenSessionTerminal`（在终端中以该客户端的恢复命令拉起会话——如 Claude Code/CodeBuddy `claude --resume <session-id>`、Grok `grok --resume <uuid>`、Command Code `commandcode --session <文件>`、Gemini `gemini --session-file <文件>`、Codex `codex resume <id>`、Kimi `kimi -S <id>`、OpenCode `opencode --session <id>`、Cline `cline --id <id>`；ID 规则逐客户端登记，启动目录尽量还原会话原始项目目录；Copilot 仅支持 `--continue` 无法按会话恢复故置灰）
 - 桌面偏好：`GetAutoStartEnabled`/`SetAutoStartEnabled`/`GetTrayEnabled`/`SetTrayEnabled`/`OpenURL`（仅 `http(s)` 且拒绝 shell 元字符）
 - Skills / MCP / 同步：`GetSkillsList`/`GetSkillsDir`/`OpenSkillsDir`/`GetAgentSkills`/`GetSkillContent`/`SaveSkill`/`DeleteSkill`/`GetMcps`/`SaveMcps`/`SaveMcpFile`（单文件编辑）/`ListTargets`/`SyncTargets`/`SyncMcpMapping`（按「客户端 ↔ MCP 服务」映射批量注入）/`GetRouterBase`
 - 真实配置定位：`GetClientRealPaths`（各客户端真实配置路径清单，来源 `client-paths.json`）/`OpenFileLocation`（在文件管理器中打开所在目录并选中）
@@ -200,7 +200,7 @@ llm-router-go/
 │   ├── kilo.go                # Kilo（kilo.jsonc JSONC 容忍读写 + 顶层 mcp 键 MCP 注入 + Provider/默认模型/权限受管表单 + AGENTS.md 直编）
 │   ├── env_windows.go / env_other.go # 用户级环境变量读写（GetUserEnv/DelUserEnv/SetUserEnv，HKCU\Environment + WM_SETTINGCHANGE）
 │   ├── client_paths.go        # 客户端真实路径集中加载（client-paths.json 键级合并，~ 自动展开）
-│   ├── sessions.go            # 会话管理（各客户端历史会话目录的声明式注册表 + 枚举/概览/校验删除）
+│   ├── sessions.go            # 会话管理（各客户端历史会话目录的声明式注册表 + 枚举/概览/校验删除 + 终端恢复命令组装）
 │   ├── agy_templates.go       # Antigravity CLI（settings.json / mcp_config.json / skills 路径）
 │   ├── agy_mcp.go             # Antigravity CLI MCP 合并（~/.gemini/config/mcp_config.json 顶层 mcpServers 键）
 │   ├── codebuddy_files.go     # CodeBuddy CLI（~/.codebuddy/settings.json 主配置真实读写 + models.json / mcp.json 直读直写，参考模板仅作首次初始值）
@@ -273,7 +273,7 @@ llm-router-go/
             ├── Clients.vue    # 客户端（同步/配置注入编辑）
             ├── sync/          # 各客户端可视化编辑控制器（controller.js 统一调度 + 每客户端一个 js：agy/claude/cline/codebuddy/codex/copilot/gemini/grok/hermes/kimi/kilo/opencode/pi/cc + shared.js/store.js/model-select.js/optmap.js（下拉枚举值→i18n 显示文本映射表，写盘枚举不变）+ PermList.vue 权限规则胶囊组件（单胶囊点按循环 未设→允许→询问→拒绝，× 删除））
             ├── TokenChart.vue # Token 图表
-            ├── Sessions.vue   # 会话管理（客户端历史会话浏览/批量删除）
+            ├── Sessions.vue   # 会话管理（客户端历史会话浏览/批量删除/终端恢复拉起）
             ├── CodeArea.vue   # 带行号栏的源码编辑框（可复用）
             ├── ProviderDialog.vue
             ├── DeleteDialog.vue

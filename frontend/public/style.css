@@ -945,6 +945,8 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
 .sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}
 .sess-table td .sess-term{font-family:var(--mono);font-weight:700;color:var(--t2)}
+.sess-table td .sess-term.no-resume{opacity:.38;cursor:not-allowed}
+.sess-table td .sess-term.no-resume:hover{background:transparent;color:var(--t2);border-color:transparent}
 
 /* ===== 深色主题精修：玻璃语言贯穿导航 / 弹层 / 文本选中 ===== */
 :root[data-theme="dark"] .right-nav{
