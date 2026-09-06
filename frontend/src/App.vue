@@ -184,6 +184,10 @@ onUnmounted(() => {
         <!-- 会话管理 -->
         <div v-show="activeRight === 'sessions'" class="right-content p-sessions">
           <div class="page-head">
+            <span v-if="sessionsRef?.state?.active" class="sess-now" :title="sessionsRef.state.active.name">
+              <img v-if="sessionsRef.state.active.logo" class="sess-now-logo" :src="sessionsRef.state.active.logo" alt="" draggable="false" />
+              <span class="sess-now-name">{{ sessionsRef.state.active.name }}</span>
+            </span>
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
               <button class="btn btn-xs btn-ghost" :title="t('sessions.refresh')" @click="sessionsRef?.refresh()">↻ {{ t('sessions.refresh') }}</button>
               <button class="btn btn-xs btn-danger" :class="{ disabled: !sessionsRef?.state?.sel }" @click="sessionsRef?.askDelete()">

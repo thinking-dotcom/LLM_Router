@@ -909,9 +909,8 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .p-logs .logs-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none}
 .p-logs .logs-scroll::-webkit-scrollbar{display:none}
 
-/* ===== 会话管理：客户端选择条 + 会话条目表 ===== */
-.sessions-wrap{display:flex;flex-direction:column;gap:7px;height:100%;min-height:0}
-.sess-clients{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0;align-items:center}
+/* ===== 会话管理：右下角浮动客户端导航 + 会话条目表 ===== */
+.sessions-wrap{display:flex;flex-direction:column;gap:7px;height:100%;min-height:0;position:relative}
 .sess-chip{
   display:flex;align-items:center;justify-content:center;width:32px;height:30px;padding:0;cursor:pointer;
   background:var(--s2);border:1px solid var(--border);border-radius:8px;transition:var(--transition);
@@ -937,6 +936,34 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-table td .sess-term{font-family:var(--mono);font-weight:700;color:var(--t2)}
 .sess-table td .sess-term.no-resume{opacity:.38;cursor:not-allowed}
 .sess-table td .sess-term.no-resume:hover{background:transparent;color:var(--t2);border-color:transparent}
+
+/* 右下角浮动：chatbot 触发按钮 + 从右往左展开的竖向客户端图标栏 */
+.sess-float{position:absolute;right:12px;bottom:14px;z-index:60;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+.sess-fab{
+  width:46px;height:46px;border-radius:50%;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  background:var(--surface);border:1px solid var(--accent);
+  box-shadow:0 4px 14px var(--accent-ring);transition:var(--transition);
+}
+.sess-fab:hover{transform:translateY(-1px);box-shadow:0 6px 18px var(--accent-ring)}
+.sess-fab.on{background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent),0 4px 14px var(--accent-ring)}
+.sess-fab img{width:24px;height:24px;object-fit:contain;display:block;pointer-events:none}
+.sess-nav{
+  display:flex;flex-direction:column;gap:5px;padding:6px;align-items:center;
+  max-height:min(56vh,420px);overflow-y:auto;scrollbar-width:none;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  box-shadow:var(--shadow);
+}
+.sess-nav::-webkit-scrollbar{display:none}
+.sess-nav .sess-chip{width:36px;height:34px;flex-shrink:0}
+.sess-nav .sess-chip .sess-chip-logo{width:19px;height:19px}
+.sess-nav-enter-active{transition:opacity .18s var(--ease), transform .22s var(--ease)}
+.sess-nav-leave-active{transition:opacity .12s var(--ease), transform .14s var(--ease)}
+.sess-nav-enter-from,.sess-nav-leave-to{opacity:0;transform:translateX(28px)}
+/* 顶部工具条「当前客户端」标识（替代原顶部图标条） */
+.sess-now{display:inline-flex;align-items:center;gap:5px;min-width:0;margin-right:auto;overflow:hidden}
+.sess-now-logo{width:15px;height:15px;object-fit:contain;display:block;flex-shrink:0}
+.sess-now-name{font-size:10.5px;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ===== 深色主题精修：玻璃语言贯穿导航 / 弹层 / 文本选中 ===== */
 :root[data-theme="dark"] .right-nav{

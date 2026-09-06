@@ -6,8 +6,9 @@ import api from '../api'
 import { targetLogo } from './sync/shared'
 
 // 会话管理：浏览 / 删除各 AI CLI 客户端落在本机磁盘上的历史会话记录。
-// 左上为客户端选择条（含会话数与体积），主体为该客户端的会话条目表，
-// 支持多选批量删除与在系统文件管理器中打开所在位置。
+// 主体为当前客户端的会话条目表；客户端切换收进右下角浮动按钮
+// （chatbot 图标 → 从右往左展开竖向客户端图标栏），选中后收起并在
+// 顶部工具条左侧显示当前客户端标识。支持多选批量删除与终端恢复。
 
 const clients = ref([])      // 客户端概览（后端注册表驱动）
 const activeId = ref('')     // 当前选中的客户端
@@ -15,6 +16,7 @@ const items = ref([])        // 当前客户端的会话条目
 const loading = ref(false)
 const selected = ref(new Set()) // 选中的会话路径
 const confirming = ref(false)   // 删除确认对话框
+const navOpen = ref(false)      // 右下角浮动图标栏是否展开
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
@@ -22,9 +24,12 @@ const allSelected = computed(() => items.value.length > 0 && selected.value.size
 // 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
 const state = reactive({
   sel: 0,             // 已选会话数（删除按钮计数/禁用）
+  active: null,       // 当前客户端标识 {id,name,logo}（顶部工具条左侧展示）
 })
 function syncUi() {
   state.sel = selected.value.size
+  const ac = activeClient.value
+  state.active = ac ? { id: ac.id, name: ac.name, logo: targetLogo(ac.id) || '' } : null
 }
 watch([activeClient, items, selected], syncUi, { immediate: true })
 
@@ -73,12 +78,14 @@ function toggle(path) {
   selected.value = next
 }
 
-// 客户端胶囊点击：已接入（managed）才进入会话条目；未接入置灰，点击提示原因。
+// 客户端图标点击：已接入（managed）才进入会话条目；未接入置灰，点击提示原因。
+// 选中后收起浮动图标栏。
 function pickClient(c) {
   if (!c.managed) {
     toast(c.note || t('sessions.unmanaged'))
     return
   }
+  navOpen.value = false
   selectClient(c.id)
 }
 
@@ -140,22 +147,7 @@ defineExpose({ loadClients, refresh, askDelete, state })
 
 <template>
   <div class="sessions-wrap">
-    <!-- 客户端选择条：纯图标，悬停显示会话统计；未接入会话管理的客户端置灰 -->
-    <div class="sess-clients">
-      <button
-        v-for="c in clients" :key="c.id"
-        class="sess-chip" :class="{ on: c.id === activeId, empty: c.managed && !c.rootExists, unmanaged: !c.managed }"
-        :title="chipTip(c)"
-        @click="pickClient(c)"
-      >
-        <img v-if="targetLogo(c.id)" class="sess-chip-logo" :src="targetLogo(c.id)" alt="" draggable="false" />
-      </button>
-      <div v-if="!clients.length" class="empty-tip">{{ t('sessions.noClients') }}</div>
-    </div>
-
-    <!-- 工具条已上移至 App.vue 页面顶部 .page-head（本组件只保留图标条与会话表格） -->
-
-    <!-- 会话条目表 -->
+    <!-- 会话条目表（客户端切换在右下角浮动图标栏） -->
     <div class="recent-card sess-card">
       <div class="logs-scroll">
         <table v-if="items.length" class="logs-table sess-table">
@@ -190,6 +182,30 @@ defineExpose({ loadClients, refresh, askDelete, state })
           <template v-else-if="activeClient">{{ t('sessions.empty') }}</template>
         </div>
       </div>
+    </div>
+
+    <!-- 右下角浮动：chatbot 图标 → 展开/收起客户端图标导航栏 -->
+    <div class="sess-float">
+      <transition name="sess-nav">
+        <div v-if="navOpen" class="sess-nav">
+          <div v-if="!clients.length" class="empty-tip" style="padding:6px 4px">{{ t('sessions.noClients') }}</div>
+          <button
+            v-for="c in clients" :key="c.id"
+            class="sess-chip" :class="{ on: c.id === activeId, empty: c.managed && !c.rootExists, unmanaged: !c.managed }"
+            :title="chipTip(c)"
+            @click="pickClient(c)"
+          >
+            <img v-if="targetLogo(c.id)" class="sess-chip-logo" :src="targetLogo(c.id)" alt="" draggable="false" />
+          </button>
+        </div>
+      </transition>
+      <button
+        class="sess-fab" :class="{ on: navOpen }"
+        :title="t('sessions.chooseClient')"
+        @click="navOpen = !navOpen"
+      >
+        <img src="/logos/chatbot.svg" alt="clients" draggable="false" />
+      </button>
     </div>
 
     <!-- 删除确认（应用内对话框，删除不可恢复） -->
