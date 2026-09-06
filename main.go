@@ -384,15 +384,10 @@ func openTerminalCommand(dir string, tokens []string, shell string) error {
 				return nil
 			}
 		}
-		// 回退经典控制台：cmd 以 dir 为工作目录启动，强制新控制台窗口避免复用父进程
-		cmd := exec.Command("cmd.exe", "/K", inner)
-		cmd.Dir = dir
-		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		go func() { _ = cmd.Wait() }()
-		return nil
+		// 回退经典控制台：cmd.exe /K <inner> 强制新控制台窗口（出错留窗可看）。
+		// 不经 exec.Command——其 nil 标准句柄会被接到 NUL，新窗口只剩光标闪烁；
+		// 由 spawnInNewConsole 直启，系统把标准 I/O 绑定到新建控制台。
+		return spawnInNewConsole([]string{"cmd.exe", "/K", inner}, dir)
 	case "darwin":
 		cmdStr := posixCmdline(dir, tokens)
 		esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(cmdStr)
@@ -448,15 +443,10 @@ func openPSCommand(dir string, exe string, args []string) error {
 			return nil
 		}
 	}
-	// 回退经典控制台：powershell 以 dir 为工作目录启动，强制新控制台窗口避免复用父进程
-	cmd := exec.Command(ps, "-NoExit", "-EncodedCommand", enc)
-	cmd.Dir = dir
-	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	go func() { _ = cmd.Wait() }()
-	return nil
+	// 回退经典控制台：powershell -NoExit -EncodedCommand 强制新控制台窗口。
+	// 不经 exec.Command——其 nil 标准句柄会被接到 NUL，新窗口只剩光标闪烁；
+	// 由 spawnInNewConsole 直启，系统把标准 I/O 绑定到新建控制台。
+	return spawnInNewConsole([]string{ps, "-NoExit", "-EncodedCommand", enc}, dir)
 }
 
 // psQuote 用单引号包裹字符串，内部单引号翻倍转义（PowerShell 字符串字面量规则）。
