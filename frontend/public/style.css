@@ -926,14 +926,18 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-card .logs-scroll::-webkit-scrollbar{display:none}
 .sess-table col.c-logo{width:30px}
 .sess-table col.c-ck{width:26px}
-.sess-table col.c-time{width:118px}
+.sess-table col.c-time{width:150px}
 .sess-table col.c-act{width:52px}
 .sess-table input[type=checkbox]{accent-color:var(--accent);cursor:pointer;margin:0}
 .sess-table tbody tr.sel{background:var(--accent-soft)}
 .sess-table td.sr-logo{padding:0;text-align:center}
+/* 行首 terminal-cmd 图标：点击弹 cmd/PowerShell 双宿主恢复浮层 */
 .sr-logo-img{width:15px;height:15px;object-fit:contain;display:block;margin:0 auto;cursor:pointer;border-radius:4px;transition:var(--transition)}
 .sr-logo-img:hover{transform:scale(1.15)}
 .sr-logo-img:focus-visible{outline:1.5px solid var(--accent);outline-offset:1px}
+/* terminal-cmd 原为纯黑填充，深色主题反白保证可见 */
+:root[data-theme="dark"] .sess-table td.sr-logo .term-cmd{filter:invert(1) brightness(1.4)}
+/* 时间列：所属客户端 logo（纯标识）+ 修改时间 紧贴 */
 /* 「会话 ID」列整列左对齐：表头文字与数据（复制按钮+ID）左侧取齐 */
 .sess-table th.th-sess{text-align:left}
 .sess-table td.sr-name{text-align:left}
@@ -949,7 +953,10 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-name .sr-copy.off:hover{color:var(--t3);background:transparent}
 .sr-name .sr-copy.ok{color:var(--green);background:var(--green-soft)}
 .sr-id{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700}
-.sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
+.sr-time{text-align:center}
+.sr-time .st-cell{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:0;vertical-align:middle}
+.sr-time .st-logo{width:14px;height:14px;object-fit:contain;display:block;flex-shrink:0;pointer-events:none;border-radius:3px}
+.sr-time .st-mtime{font-family:var(--mono);font-size:9.5px;color:var(--t3);white-space:nowrap}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
 .sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}
 /* 会话 ID 悬停：光标处浮现恢复该会话的命令行 */

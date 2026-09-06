@@ -277,8 +277,9 @@ defineExpose({ loadClients, refresh, askDelete, state })
               <td><input type="checkbox" :checked="selected.has(it.path)" @change="toggle(it.path)"></td>
               <td class="sr-logo">
                 <img
-                  v-if="rowLogo" class="sr-logo-img"
-                  :src="rowLogo" :alt="activeClient?.name"
+                  class="sr-logo-img term-cmd"
+                  src="/logos/terminal-cmd-svgrepo-com.svg"
+                  alt=""
                   :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
                   draggable="false" role="button" tabindex="0"
                   @click="showResumePop(it)" @keydown.enter.prevent="showResumePop(it)"
@@ -301,7 +302,16 @@ defineExpose({ loadClients, refresh, askDelete, state })
                   <span class="sr-id">{{ it.id || it.name }}</span>
                 </span>
               </td>
-              <td class="sr-time">{{ it.mtime }}</td>
+              <td class="sr-time">
+                <span class="st-cell">
+                  <img
+                    v-if="rowLogo" class="st-logo"
+                    :src="rowLogo" :alt="activeClient?.name" :title="activeClient?.name"
+                    draggable="false"
+                  />
+                  <span class="st-mtime">{{ it.mtime }}</span>
+                </span>
+              </td>
               <td>
                 <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>
               </td>
