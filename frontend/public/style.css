@@ -935,8 +935,6 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-logo-img{width:15px;height:15px;object-fit:contain;display:block;margin:0 auto;cursor:pointer;border-radius:4px;transition:var(--transition)}
 .sr-logo-img:hover{transform:scale(1.15)}
 .sr-logo-img:focus-visible{outline:1.5px solid var(--accent);outline-offset:1px}
-/* terminal-cmd 原为纯黑填充，深色主题反白保证可见 */
-:root[data-theme="dark"] .sess-table td.sr-logo .term-cmd{filter:invert(1) brightness(1.4)}
 /* 时间列：所属客户端 logo（纯标识）+ 修改时间 紧贴 */
 /* 「会话 ID」列整列左对齐：表头文字与数据（复制按钮+ID）左侧取齐 */
 .sess-table th.th-sess{text-align:left}

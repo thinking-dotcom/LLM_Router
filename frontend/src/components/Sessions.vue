@@ -277,8 +277,8 @@ defineExpose({ loadClients, refresh, askDelete, state })
               <td><input type="checkbox" :checked="selected.has(it.path)" @change="toggle(it.path)"></td>
               <td class="sr-logo">
                 <img
-                  class="sr-logo-img term-cmd"
-                  src="/logos/terminal-cmd-svgrepo-com.svg"
+                  class="sr-logo-img"
+                  src="/logos/phone-call-call-svgrepo-com.svg"
                   alt=""
                   :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
                   draggable="false" role="button" tabindex="0"
