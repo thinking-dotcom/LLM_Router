@@ -391,13 +391,17 @@ defineExpose({ loadClients, refresh, askDelete, state })
       </button>
     </div>
 
-    <!-- 会话 ID 悬停：命令速查浮层跟随光标、位于其正下方（恢复该会话 + 常用管理命令） -->
-    <div v-if="tip" ref="tipEl" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
-      <div v-for="(n, i) in tip.entries" :key="i" class="ct-line">
-        <code class="ct-cmd">{{ n.cmd }}</code>
-        <span class="ct-note">{{ t(n.k) }}</span>
+    <!-- 会话 ID 悬停：命令速查浮层跟随光标、位于其正下方（恢复该会话 + 常用管理命令）
+         Teleport 到 body：脱离 .panel(深色主题含 backdrop-filter)的包含块约束，
+         保证 position:fixed 相对视口、与 clientX/Y 坐标一致 -->
+    <Teleport to="body">
+      <div v-if="tip" ref="tipEl" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
+        <div v-for="(n, i) in tip.entries" :key="i" class="ct-line">
+          <code class="ct-cmd">{{ n.cmd }}</code>
+          <span class="ct-note">{{ t(n.k) }}</span>
+        </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 终端恢复浮层（点击行首客户端 logo 弹出，页面中心纯图标小气泡：cmd / PowerShell） -->
     <div class="dialog-overlay resume-mask" :class="{ open: resumePop }" @click.self="resumePop=null">
