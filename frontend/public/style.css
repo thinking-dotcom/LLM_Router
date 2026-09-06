@@ -934,7 +934,18 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-logo-img{width:15px;height:15px;object-fit:contain;display:block;margin:0 auto;cursor:pointer;border-radius:4px;transition:var(--transition)}
 .sr-logo-img:hover{transform:scale(1.15)}
 .sr-logo-img:focus-visible{outline:1.5px solid var(--accent);outline-offset:1px}
-.sr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700;text-align:left}
+.sr-name{min-width:0;overflow:hidden;text-align:left}
+.sr-name .sr-inner{display:flex;align-items:center;gap:6px;min-width:0}
+.sr-name .sr-copy{
+  flex-shrink:0;width:17px;height:17px;padding:0;display:grid;place-items:center;
+  border:none;background:transparent;border-radius:5px;color:var(--t3);cursor:pointer;
+  transition:var(--transition);
+}
+.sr-name .sr-copy:hover{color:var(--accent);background:var(--s2)}
+.sr-name .sr-copy.off{opacity:.32;cursor:not-allowed}
+.sr-name .sr-copy.off:hover{color:var(--t3);background:transparent}
+.sr-name .sr-copy.ok{color:var(--green);background:var(--green-soft)}
+.sr-id{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700}
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
 .sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}

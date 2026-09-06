@@ -4,6 +4,7 @@ import { t } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
 import { targetLogo } from './sync/shared'
+import { copyText } from '../utils'
 
 // 会话管理：浏览 / 删除各 AI CLI 客户端落在本机磁盘上的历史会话记录。
 // 主体为当前客户端的会话条目表，每条会话最左侧以该客户端 logo 标识归属；
@@ -163,6 +164,15 @@ function moveCmdTip(e) {
 }
 function hideCmdTip() { tip.value = null }
 
+// 点击会话 ID 左侧复制按钮：复制该会话的恢复命令行（不支持恢复时提示原因）。
+function copyCmd(it, e) {
+  if (!it.cmd) {
+    toast(activeClient.value?.resumeNote || t('sessions.noResume'))
+    return
+  }
+  copyText(it.cmd, e.currentTarget)
+}
+
 function askDelete() { if (selected.value.size) confirming.value = true }
 async function doDelete() {
   const ids = [...selected.value]
@@ -217,7 +227,19 @@ defineExpose({ loadClients, refresh, askDelete, state })
                 class="sr-name"
                 :title="it.cmd ? undefined : it.path"
                 @mouseenter="showCmdTip(it, $event)" @mousemove="moveCmdTip" @mouseleave="hideCmdTip"
-              >{{ it.id || it.name }}</td>
+              >
+                <span class="sr-inner">
+                  <button
+                    class="sr-copy" :class="{ off: !it.cmd }"
+                    :title="it.cmd ? undefined : (activeClient?.resumeNote || t('sessions.noResume'))"
+                    :aria-label="it.cmd ? t('sessions.copyCmd') : (activeClient?.resumeNote || t('sessions.noResume'))"
+                    @click.stop="copyCmd(it, $event)"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  </button>
+                  <span class="sr-id">{{ it.id || it.name }}</span>
+                </span>
+              </td>
               <td class="sr-time">{{ it.mtime }}</td>
               <td>
                 <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>
