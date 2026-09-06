@@ -205,24 +205,23 @@ function tipEntries(it) {
   return lines.length ? lines : null
 }
 
-// ---- 会话 ID 悬停：光标处浮现「恢复命令 + 常用管理命令」速查浮层 ----
+// ---- 会话 ID 悬停：锚定在光标下方浮现「恢复命令 + 常用管理命令」速查浮层 ----
+// 位置固定于进入时的光标下方偏移处，不随鼠标移动；仅在靠近视口右/下边缘时
+// 向内收敛防止溢出，不做上下/左右翻转。
 function placeCmdTip(e, entries) {
   const pad = 12
   const widest = Math.max(...entries.map(n => n.cmd.length), 20)
   const estW = Math.min(560, 220 + widest * 7.3)
   const estH = 10 + entries.length * 30
-  let x = e.clientX + 12
-  let y = e.clientY + 14
-  if (x + estW > innerWidth - pad) x = e.clientX - estW - 12
-  if (y + estH > innerHeight - pad) y = e.clientY - estH - 14
-  tip.value = { entries, x: Math.max(pad, x), y: Math.max(pad, y) }
+  let x = e.clientX + 14
+  let y = e.clientY + 16
+  if (x + estW > innerWidth - pad) x = Math.max(pad, innerWidth - estW - pad)
+  if (y + estH > innerHeight - pad) y = Math.max(pad, innerHeight - estH - pad)
+  tip.value = { entries, x, y }
 }
 function showCmdTip(it, e) {
   const es = tipEntries(it)
   if (es) placeCmdTip(e, es)
-}
-function moveCmdTip(e) {
-  if (tip.value) placeCmdTip(e, tip.value.entries)
 }
 function hideCmdTip() { tip.value = null }
 
@@ -288,7 +287,7 @@ defineExpose({ loadClients, refresh, askDelete, state })
               <td
                 class="sr-name"
                 :title="tipEntries(it) ? undefined : it.path"
-                @mouseenter="showCmdTip(it, $event)" @mousemove="moveCmdTip" @mouseleave="hideCmdTip"
+                @mouseenter="showCmdTip(it, $event)" @mouseleave="hideCmdTip"
               >
                 <span class="sr-inner">
                   <button
