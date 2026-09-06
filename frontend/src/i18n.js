@@ -36,6 +36,18 @@ export const I18N = {
     'sessions.total': '共 {n} 个会话 · {size}',
     'sessions.colName': '会话 ID',
     'sessions.colTime': '修改时间',
+    // 悬停会话 ID 的「常用管理命令」解释文案（命令原型见 Sessions.vue CMD_HELP）
+    'sessions.hlp.cont': '继续最近一次会话',
+    'sessions.hlp.pick': '不带参数时列出历史会话供选择',
+    'sessions.hlp.sess': '进入会话管理子命令（查看 / 切换）',
+    'sessions.hlp.export': '导出该会话数据为 JSON',
+    'sessions.hlp.list': '列出当前项目的可恢复会话（带序号）',
+    'sessions.hlp.delIdx': '按序号删除会话（--list-sessions 可查序号）',
+    'sessions.hlp.omit': '省略 ID / 标题时恢复最近一次会话',
+    'sessions.hlp.arch': '归档该会话（不删除记录，可稍后恢复）',
+    'sessions.hlp.del': '永久删除该会话（不可恢复）',
+    'sessions.hlp.hist': '列出并管理本机保存的会话历史',
+    'sessions.hlp.exportZip': '将该会话导出为 ZIP 归档',
 
     // 概览
     'server.status': '服务器状态',
@@ -997,6 +1009,18 @@ export const I18N = {
     'sessions.total': '{n} session(s) · {size}',
     'sessions.colName': 'Session ID',
     'sessions.colTime': 'Modified',
+    // Tooltip explanations for common session-management commands shown on session-ID hover
+    'sessions.hlp.cont': 'Continue the most recent session',
+    'sessions.hlp.pick': 'Without arguments, list past sessions to pick from',
+    'sessions.hlp.sess': 'Enter the session management subcommand (view / switch)',
+    'sessions.hlp.export': 'Export this session data as JSON',
+    'sessions.hlp.list': 'List resumable sessions for the current project (numbered)',
+    'sessions.hlp.delIdx': 'Delete a session by index (see --list-sessions for numbers)',
+    'sessions.hlp.omit': 'Omit the ID / title to resume the most recent session',
+    'sessions.hlp.arch': 'Archive this session (record kept, restorable later)',
+    'sessions.hlp.del': 'Permanently delete this session (irreversible)',
+    'sessions.hlp.hist': 'List and manage locally saved sessions',
+    'sessions.hlp.exportZip': 'Export this session as a ZIP archive',
 
     'server.status': 'Server Status',
     'server.running': 'Running',

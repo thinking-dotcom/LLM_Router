@@ -11,6 +11,7 @@ import { copyText } from '../utils'
 // 客户端切换收进右下角浮动按钮（chatbot 图标 → 从右往左展开竖向客户端
 // 图标栏），选中后收起。支持多选批量删除与终端恢复（终端图标收纳在
 // 客户端 logo 上：点击 logo 在页面中心弹出 cmd / PowerShell 双宿主浮层）。
+// 悬停会话 ID 在光标处浮现命令速查：该会话恢复命令 + 常用管理命令及解释。
 
 const clients = ref([])      // 客户端概览（后端注册表驱动）
 const activeId = ref('')     // 当前选中的客户端
@@ -20,7 +21,7 @@ const selected = ref(new Set()) // 选中的会话路径
 const confirming = ref(false)   // 删除确认对话框
 const navOpen = ref(false)      // 右下角浮动图标栏是否展开
 const resumePop = ref(null)     // 终端恢复浮层：当前会话条目对象（null=收起）
-const tip = ref(null)           // 会话 ID 悬停命令浮层：{text,x,y}（null=收起）
+const tip = ref(null)           // 会话 ID 悬停命令速查浮层：{entries,x,y}（null=收起）
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
@@ -145,22 +146,83 @@ async function doResumePop(shell) {
   if (ok) resumePop.value = null
 }
 
-// ---- 会话 ID 悬停：光标处浮现该会话的恢复命令行（条目命令为空时不弹）----
-function placeCmdTip(e, text) {
+// 各客户端「会话管理常用命令」速查（悬停会话 ID 时展示）。cmd 为可读命令原型，
+// {id} 在悬停某条会话时替换为该会话 ID；命令与解释均经本机 CLI --help 校准。
+// 「恢复该会话」命令始终由后端 item.cmd 首条提供（真实可执行），此处只列补充命令。
+const CMD_HELP = {
+  'claude-code': [
+    { cmd: 'claude --continue', k: 'sessions.hlp.cont' },
+    { cmd: 'claude --resume', k: 'sessions.hlp.pick' },
+  ],
+  codebuddy: [
+    { cmd: 'codebuddy --continue', k: 'sessions.hlp.cont' },
+    { cmd: 'codebuddy --resume', k: 'sessions.hlp.pick' },
+  ],
+  opencode: [
+    { cmd: 'opencode --continue', k: 'sessions.hlp.cont' },
+    { cmd: 'opencode session', k: 'sessions.hlp.sess' },
+    { cmd: 'opencode export {id}', k: 'sessions.hlp.export' },
+  ],
+  gemini: [
+    { cmd: 'gemini --list-sessions', k: 'sessions.hlp.list' },
+    { cmd: 'gemini --delete-session <n>', k: 'sessions.hlp.delIdx' },
+  ],
+  'grok-build': [
+    { cmd: 'grok --continue', k: 'sessions.hlp.cont' },
+    { cmd: 'grok --resume', k: 'sessions.hlp.omit' },
+  ],
+  codex: [
+    { cmd: 'codex resume', k: 'sessions.hlp.pick' },
+    { cmd: 'codex archive {id}', k: 'sessions.hlp.arch' },
+    { cmd: 'codex delete {id}', k: 'sessions.hlp.del' },
+  ],
+  cline: [
+    { cmd: 'cline history', k: 'sessions.hlp.hist' },
+  ],
+  copilot: [
+    { cmd: 'github-copilot --continue', k: 'sessions.hlp.cont' },
+  ],
+  commandcode: [
+    { cmd: 'commandcode --continue', k: 'sessions.hlp.cont' },
+    { cmd: 'commandcode --resume', k: 'sessions.hlp.pick' },
+  ],
+  kimi: [
+    { cmd: 'kimi --continue', k: 'sessions.hlp.cont' },
+    { cmd: 'kimi export {id}', k: 'sessions.hlp.exportZip' },
+  ],
+  // pi：未安装且未登记会话管理命令 → 悬停不弹速查（原生路径提示兜底）
+}
+
+// 悬停条目列表：首条 = 该会话真实恢复命令（后端 cmd 字段，与行内复制一致），
+// 其后为该客户端的常用管理命令（{id} 占位替换为该会话 ID）。无内容返回 null。
+function tipEntries(it) {
+  const lines = []
+  if (it.cmd) lines.push({ cmd: it.cmd, k: 'sessions.openTerminal' })
+  const id = it.id || it.name || ''
+  for (const x of CMD_HELP[activeId.value] || []) {
+    lines.push({ cmd: x.cmd.split('{id}').join(id), k: x.k })
+  }
+  return lines.length ? lines : null
+}
+
+// ---- 会话 ID 悬停：光标处浮现「恢复命令 + 常用管理命令」速查浮层 ----
+function placeCmdTip(e, entries) {
   const pad = 12
-  const estW = Math.min(560, 200 + (text?.length || 0) * 7.4)
-  const estH = 30
+  const widest = Math.max(...entries.map(n => n.cmd.length), 20)
+  const estW = Math.min(560, 220 + widest * 7.3)
+  const estH = 10 + entries.length * 30
   let x = e.clientX + 12
   let y = e.clientY + 14
   if (x + estW > innerWidth - pad) x = e.clientX - estW - 12
   if (y + estH > innerHeight - pad) y = e.clientY - estH - 14
-  tip.value = { text, x: Math.max(pad, x), y: Math.max(pad, y) }
+  tip.value = { entries, x: Math.max(pad, x), y: Math.max(pad, y) }
 }
 function showCmdTip(it, e) {
-  if (it.cmd) placeCmdTip(e, it.cmd)
+  const es = tipEntries(it)
+  if (es) placeCmdTip(e, es)
 }
 function moveCmdTip(e) {
-  if (tip.value) placeCmdTip(e, tip.value.text)
+  if (tip.value) placeCmdTip(e, tip.value.entries)
 }
 function hideCmdTip() { tip.value = null }
 
@@ -225,7 +287,7 @@ defineExpose({ loadClients, refresh, askDelete, state })
               </td>
               <td
                 class="sr-name"
-                :title="it.cmd ? undefined : it.path"
+                :title="tipEntries(it) ? undefined : it.path"
                 @mouseenter="showCmdTip(it, $event)" @mousemove="moveCmdTip" @mouseleave="hideCmdTip"
               >
                 <span class="sr-inner">
@@ -279,8 +341,13 @@ defineExpose({ loadClients, refresh, askDelete, state })
       </button>
     </div>
 
-    <!-- 会话 ID 悬停：光标处浮现恢复该会话的命令行 -->
-    <div v-if="tip" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
+    <!-- 会话 ID 悬停：光标处浮现「恢复该会话 + 常用管理命令」速查 -->
+    <div v-if="tip" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
+      <div v-for="(n, i) in tip.entries" :key="i" class="ct-line">
+        <code class="ct-cmd">{{ n.cmd }}</code>
+        <span class="ct-note">{{ t(n.k) }}</span>
+      </div>
+    </div>
 
     <!-- 终端恢复浮层（点击行首客户端 logo 弹出，页面中心纯图标小气泡：cmd / PowerShell） -->
     <div class="dialog-overlay resume-mask" :class="{ open: resumePop }" @click.self="resumePop=null">

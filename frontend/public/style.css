@@ -955,11 +955,14 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 /* 会话 ID 悬停：光标处浮现恢复该会话的命令行 */
 .cmd-tip{
   position:fixed;z-index:500;pointer-events:none;max-width:min(560px,70vw);
-  padding:6px 10px;border-radius:8px;
+  padding:8px 10px;border-radius:10px;
   background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);
-  font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--text);
-  word-break:break-all;white-space:pre-wrap;
+  display:flex;flex-direction:column;gap:6px;
 }
+.cmd-tip .ct-line{display:flex;flex-direction:column;gap:1px;min-width:0}
+.cmd-tip .ct-line + .ct-line{border-top:1px dashed var(--border);padding-top:6px}
+.ct-cmd{font-family:var(--mono);font-size:10.5px;line-height:1.4;color:var(--accent);white-space:pre-wrap;word-break:break-all}
+.ct-note{font-size:9.5px;line-height:1.35;color:var(--t3)}
 /* 终端恢复浮层：点击行首客户端 logo 于页面中心弹出，cmd / PowerShell 纯图标小气泡 */
 .resume-pop{
   display:flex;padding:9px;border-radius:16px;background:var(--surface);
