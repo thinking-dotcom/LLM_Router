@@ -12,6 +12,8 @@ import { copyText } from '../utils'
 // 图标栏），选中后收起。支持多选批量删除与终端恢复（终端图标收纳在
 // 客户端 logo 上：点击 logo 在页面中心弹出 cmd / PowerShell 双宿主浮层）。
 // 悬停会话 ID 在光标处浮现命令速查：该会话恢复命令 + 常用管理命令及解释。
+// 客户端图标导航栏按最近点击（选中）时间自新到旧排列，点击即置顶并持久化
+// （localStorage）；进入页面默认显示列表最上方客户端的会话记录。
 
 const clients = ref([])      // 客户端概览（后端注册表驱动）
 const activeId = ref('')     // 当前选中的客户端
@@ -24,10 +26,41 @@ const resumePop = ref(null)     // 终端恢复浮层：当前会话条目对象
 const tip = ref(null)           // 会话 ID 悬停命令速查浮层：{entries,x,y}（null=收起）
 const tipEl = ref(null)         // 命令速查浮层根节点（视口收敛用实测宽高）
 
+// 客户端图标导航栏排序依据：各客户端最近一次被点击（选中）的时间戳（MRU），
+// 持久化到 localStorage 跨启动保持；从未点过的不记录，保留后端顺序垫底。
+const RECENT_KEY = 'llmrouter.sessions.recent'
+const recent = reactive(loadRecent())
+function loadRecent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '{}') || {} } catch (e) { return {} }
+}
+function saveRecent() {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)) } catch (e) {}
+}
+// 清理已不存在客户端的过期记录（配置下线后不残留占位）
+function pruneRecent() {
+  const alive = new Set(clients.value.map(c => c.id))
+  let dirty = false
+  for (const k of Object.keys(recent)) {
+    if (!alive.has(k)) { delete recent[k]; dirty = true }
+  }
+  if (dirty) saveRecent()
+}
+function markRecent(id) {
+  recent[id] = Date.now()
+  saveRecent()
+}
+
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
 // 行首客户端图标：单客户端视图下所有条目均属当前客户端
 const rowLogo = computed(() => (activeClient.value && targetLogo(activeClient.value.id)) || '')
+// 图标栏顺序：最近点击过的按时间新→旧排最前，其余保持后端顺序垫底
+const navClients = computed(() => {
+  const used = clients.value.filter(c => recent[c.id])
+  const rest = clients.value.filter(c => !recent[c.id])
+  used.sort((a, b) => (recent[b.id] || 0) - (recent[a.id] || 0))
+  return used.concat(rest)
+})
 
 // 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
 const state = reactive({
@@ -49,13 +82,13 @@ function fmtBytes(n) {
 async function loadClients(pick) {
   try { clients.value = (await api.GetSessionClients()) || [] } catch (e) { clients.value = [] }
   if (!clients.value.length) { activeId.value = ''; items.value = []; return }
+  pruneRecent()
   const ids = clients.value.map(c => c.id)
   let id = pick && ids.includes(pick) ? pick : ''
   if (!id) {
-    // 默认选中第一个有会话的已接入客户端；都没有则选第一个已接入客户端
-    const withCount = clients.value.find(c => c.managed && c.count > 0)
-    const anyManaged = clients.value.find(c => c.managed)
-    id = withCount ? withCount.id : (anyManaged ? anyManaged.id : ids[0])
+    // 默认显示导航栏最上方客户端：MRU 命中时=最近点击；首次无记录=后端顺序第一
+    const top = navClients.value.find(c => c.managed)
+    id = top ? top.id : ids[0]
   }
   await selectClient(id)
 }
@@ -84,12 +117,13 @@ function toggle(path) {
 }
 
 // 客户端图标点击：已接入（managed）才进入会话条目；未接入置灰，点击提示原因。
-// 选中后收起浮动图标栏。
+// 成功选中即刷新 MRU（该客户端置顶），随后收起浮动图标栏。
 function pickClient(c) {
   if (!c.managed) {
     toast(c.note || t('sessions.unmanaged'))
     return
   }
+  markRecent(c.id)
   navOpen.value = false
   selectClient(c.id)
 }
@@ -337,8 +371,9 @@ defineExpose({ loadClients, refresh, askDelete, state })
       <transition name="sess-nav">
         <div v-if="navOpen" class="sess-nav">
           <div v-if="!clients.length" class="empty-tip" style="padding:6px 4px">{{ t('sessions.noClients') }}</div>
+          <!-- 图标自上而下：最近点击(选中)的在前，未点过的按后端顺序垫底 -->
           <button
-            v-for="c in clients" :key="c.id"
+            v-for="c in navClients" :key="c.id"
             class="sess-chip" :class="{ on: c.id === activeId, empty: c.managed && !c.rootExists, unmanaged: !c.managed }"
             :title="chipTip(c)"
             @click="pickClient(c)"
