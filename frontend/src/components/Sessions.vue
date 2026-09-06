@@ -6,9 +6,9 @@ import api from '../api'
 import { targetLogo } from './sync/shared'
 
 // 会话管理：浏览 / 删除各 AI CLI 客户端落在本机磁盘上的历史会话记录。
-// 主体为当前客户端的会话条目表；客户端切换收进右下角浮动按钮
-// （chatbot 图标 → 从右往左展开竖向客户端图标栏），选中后收起并在
-// 顶部工具条左侧显示当前客户端标识。支持多选批量删除与终端恢复。
+// 主体为当前客户端的会话条目表，每条会话最左侧以该客户端 logo 标识归属；
+// 客户端切换收进右下角浮动按钮（chatbot 图标 → 从右往左展开竖向客户端
+// 图标栏），选中后收起。支持多选批量删除与终端恢复。
 
 const clients = ref([])      // 客户端概览（后端注册表驱动）
 const activeId = ref('')     // 当前选中的客户端
@@ -20,16 +20,15 @@ const navOpen = ref(false)      // 右下角浮动图标栏是否展开
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
+// 行首客户端图标：单客户端视图下所有条目均属当前客户端
+const rowLogo = computed(() => (activeClient.value && targetLogo(activeClient.value.id)) || '')
 
 // 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
 const state = reactive({
   sel: 0,             // 已选会话数（删除按钮计数/禁用）
-  active: null,       // 当前客户端标识 {id,name,logo}（顶部工具条左侧展示）
 })
 function syncUi() {
   state.sel = selected.value.size
-  const ac = activeClient.value
-  state.active = ac ? { id: ac.id, name: ac.name, logo: targetLogo(ac.id) || '' } : null
 }
 watch([activeClient, items, selected], syncUi, { immediate: true })
 
@@ -152,16 +151,20 @@ defineExpose({ loadClients, refresh, askDelete, state })
       <div class="logs-scroll">
         <table v-if="items.length" class="logs-table sess-table">
           <colgroup>
-            <col class="c-ck"><col class="c-name"><col class="c-time"><col class="c-act">
+            <col class="c-logo"><col class="c-ck"><col class="c-name"><col class="c-time"><col class="c-act">
           </colgroup>
           <thead>
             <tr>
+              <th></th>
               <th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
               <th>{{ t('sessions.colName') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="it in items" :key="it.path" :class="{ sel: selected.has(it.path) }">
+              <td class="sr-logo" :title="activeClient?.name">
+                <img v-if="rowLogo" class="sr-logo-img" :src="rowLogo" alt="" draggable="false" />
+              </td>
               <td><input type="checkbox" :checked="selected.has(it.path)" @change="toggle(it.path)"></td>
               <td class="sr-name" :title="it.path">{{ it.name }}</td>
               <td class="sr-time">{{ it.mtime }}</td>

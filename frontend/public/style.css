@@ -924,11 +924,14 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-card{flex:1;min-height:0;display:flex;flex-direction:column;padding:0;border:0;border-radius:0;overflow:hidden}
 .sess-card .logs-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none}
 .sess-card .logs-scroll::-webkit-scrollbar{display:none}
+.sess-table col.c-logo{width:30px}
 .sess-table col.c-ck{width:26px}
 .sess-table col.c-time{width:118px}
 .sess-table col.c-act{width:66px}
 .sess-table input[type=checkbox]{accent-color:var(--accent);cursor:pointer;margin:0}
 .sess-table tbody tr.sel{background:var(--accent-soft)}
+.sess-table td.sr-logo{padding:0;text-align:center}
+.sr-logo-img{width:15px;height:15px;object-fit:contain;display:block;margin:0 auto;pointer-events:none}
 .sr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700;text-align:left}
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
@@ -960,10 +963,6 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-nav-enter-active{transition:opacity .18s var(--ease), transform .22s var(--ease)}
 .sess-nav-leave-active{transition:opacity .12s var(--ease), transform .14s var(--ease)}
 .sess-nav-enter-from,.sess-nav-leave-to{opacity:0;transform:translateX(28px)}
-/* 顶部工具条「当前客户端」标识（替代原顶部图标条） */
-.sess-now{display:inline-flex;align-items:center;gap:5px;min-width:0;margin-right:auto;overflow:hidden}
-.sess-now-logo{width:15px;height:15px;object-fit:contain;display:block;flex-shrink:0}
-.sess-now-name{font-size:10.5px;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ===== 深色主题精修：玻璃语言贯穿导航 / 弹层 / 文本选中 ===== */
 :root[data-theme="dark"] .right-nav{
