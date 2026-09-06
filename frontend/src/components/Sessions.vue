@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { t } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
+import { targetLogo } from './sync/shared'
 
 // 会话管理：浏览 / 删除各 AI CLI 客户端落在本机磁盘上的历史会话记录。
 // 左上为客户端选择条（含会话数与体积），主体为该客户端的会话条目表，
@@ -62,6 +63,18 @@ function toggle(path) {
   selected.value = next
 }
 
+// 客户端胶囊悬停提示：名称 + 会话统计（总大小）或缺失根目录说明。
+function chipTip(c) {
+  const lines = [c.name]
+  if (c.rootExists) {
+    lines.push(t('sessions.total', { n: c.count || 0, size: fmtBytes(c.totalSize) }))
+  } else {
+    lines.push(t('sessions.noRoot'))
+    if (c.root) lines.push(c.root)
+  }
+  return lines.join('\n')
+}
+
 // 在系统文件管理器中打开（目录型会话选中目录本身）
 async function openLocation(p) {
   try {
@@ -103,16 +116,15 @@ defineExpose({ loadClients })
 
 <template>
   <div class="sessions-wrap">
-    <!-- 客户端选择条 -->
+    <!-- 客户端选择条：纯图标，悬停显示会话统计 -->
     <div class="sess-clients">
       <button
         v-for="c in clients" :key="c.id"
         class="sess-chip" :class="{ on: c.id === activeId, empty: !c.rootExists }"
-        :title="c.rootExists ? c.root : t('sessions.noRoot')"
+        :title="chipTip(c)"
         @click="selectClient(c.id)"
       >
-        <span class="sc-name">{{ c.name }}</span>
-        <span class="sc-meta">{{ c.rootExists ? (c.count || '0') : '—' }}<template v-if="c.totalSize"> · {{ fmtBytes(c.totalSize) }}</template></span>
+        <img v-if="targetLogo(c.id)" class="sess-chip-logo" :src="targetLogo(c.id)" alt="" draggable="false" />
       </button>
       <div v-if="!clients.length" class="empty-tip">{{ t('sessions.noClients') }}</div>
     </div>
