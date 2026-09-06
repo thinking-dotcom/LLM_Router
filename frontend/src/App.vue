@@ -184,7 +184,6 @@ onUnmounted(() => {
         <!-- 会话管理 -->
         <div v-show="activeRight === 'sessions'" class="right-content p-sessions">
           <div class="page-head">
-            <span class="sess-total" :title="sessionsRef?.state?.root || ''">{{ sessionsRef?.state?.summary || '' }}</span>
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
               <button class="btn btn-xs btn-ghost" :title="t('sessions.refresh')" @click="sessionsRef?.refresh()">↻ {{ t('sessions.refresh') }}</button>
               <button

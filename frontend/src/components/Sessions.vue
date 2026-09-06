@@ -21,14 +21,12 @@ const allSelected = computed(() => items.value.length > 0 && selected.value.size
 
 // 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
 const state = reactive({
-  summary: '',        // 「共 N 个会话 · 大小」
   sel: 0,             // 已选会话数（删除按钮计数/禁用）
   canOpenRoot: false, // 当前客户端根目录存在（打开目录按钮可用）
   root: '',           // 当前客户端会话根目录（按钮 title 提示）
 })
 function syncUi() {
   const ac = activeClient.value
-  state.summary = ac ? t('sessions.total', { n: items.value.length, size: fmtBytes(ac.totalSize) }) : ''
   state.sel = selected.value.size
   state.canOpenRoot = !!(ac && ac.managed && ac.rootExists)
   state.root = ac?.root || ''
