@@ -179,7 +179,12 @@ defineExpose({ loadClients, refresh, askDelete, state })
                   class="btn btn-xs btn-ghost btn-ico sess-term" :class="{ 'no-resume': !activeClient?.resumeSupported }"
                   :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
                   @click="openTerminal(it.path)"
-                >❯_</button>
+                ><img class="sess-term-ico" src="/logos/shell-svgrepo-com.svg" alt="" draggable="false" /></button>
+                <button
+                  class="btn btn-xs btn-ghost btn-ico sess-term" :class="{ 'no-resume': !activeClient?.resumeSupported }"
+                  :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
+                  @click="openTerminal(it.path)"
+                ><img class="sess-term-ico term-cmd" src="/logos/terminal-cmd-svgrepo-com.svg" alt="" draggable="false" /></button>
               </td>
             </tr>
           </tbody>
