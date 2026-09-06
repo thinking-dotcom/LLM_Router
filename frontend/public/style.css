@@ -939,7 +939,9 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 /* 「会话 ID」列：表头与数据（复制按钮+ID）整列居中 */
 .sess-table td.sr-name{text-align:center}
 .sr-name{min-width:0;overflow:hidden;text-align:center}
-.sr-name .sr-inner{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0}
+/* 复制钮 + 会话 ID 作为同一行内组合：共用行盒中线水平对齐（inline-flex + vertical-align），
+   组合超宽时受列宽约束、ID 仍可省略号截断（max-width:100%） */
+.sr-name .sr-inner{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:0;max-width:100%;vertical-align:middle;line-height:1}
 .sr-name .sr-copy{
   flex-shrink:0;width:17px;height:17px;padding:0;display:grid;place-items:center;
   border:none;background:transparent;border-radius:5px;color:var(--t3);cursor:pointer;
