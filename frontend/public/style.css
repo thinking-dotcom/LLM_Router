@@ -931,7 +931,9 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-table input[type=checkbox]{accent-color:var(--accent);cursor:pointer;margin:0}
 .sess-table tbody tr.sel{background:var(--accent-soft)}
 .sess-table td.sr-logo{padding:0;text-align:center}
-.sr-logo-img{width:15px;height:15px;object-fit:contain;display:block;margin:0 auto;pointer-events:none}
+.sr-logo-img{width:15px;height:15px;object-fit:contain;display:block;margin:0 auto;cursor:pointer;border-radius:4px;transition:var(--transition)}
+.sr-logo-img:hover{transform:scale(1.15)}
+.sr-logo-img:focus-visible{outline:1.5px solid var(--accent);outline-offset:1px}
 .sr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700;text-align:left}
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}

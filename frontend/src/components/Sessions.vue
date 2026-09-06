@@ -151,21 +151,26 @@ defineExpose({ loadClients, refresh, askDelete, state })
       <div class="logs-scroll">
         <table v-if="items.length" class="logs-table sess-table">
           <colgroup>
-            <col class="c-logo"><col class="c-ck"><col class="c-name"><col class="c-time"><col class="c-act">
+            <col class="c-ck"><col class="c-logo"><col class="c-name"><col class="c-time"><col class="c-act">
           </colgroup>
           <thead>
             <tr>
-              <th></th>
               <th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
+              <th></th>
               <th>{{ t('sessions.colName') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="it in items" :key="it.path" :class="{ sel: selected.has(it.path) }">
-              <td class="sr-logo" :title="activeClient?.name">
-                <img v-if="rowLogo" class="sr-logo-img" :src="rowLogo" alt="" draggable="false" />
-              </td>
               <td><input type="checkbox" :checked="selected.has(it.path)" @change="toggle(it.path)"></td>
+              <td class="sr-logo">
+                <img
+                  v-if="rowLogo" class="sr-logo-img"
+                  :src="rowLogo" :alt="activeClient?.name" :title="activeClient?.name"
+                  draggable="false" role="button" tabindex="0"
+                  @click="toggle(it.path)" @keydown.enter.prevent="toggle(it.path)"
+                />
+              </td>
               <td class="sr-name" :title="it.path">{{ it.name }}</td>
               <td class="sr-time">{{ it.mtime }}</td>
               <td>
