@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, reactive, onMounted } from 'vue'
+import { ref, computed, watch, reactive, onMounted, nextTick } from 'vue'
 import { t } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
@@ -22,6 +22,7 @@ const confirming = ref(false)   // 删除确认对话框
 const navOpen = ref(false)      // 右下角浮动图标栏是否展开
 const resumePop = ref(null)     // 终端恢复浮层：当前会话条目对象（null=收起）
 const tip = ref(null)           // 会话 ID 悬停命令速查浮层：{entries,x,y}（null=收起）
+const tipEl = ref(null)         // 命令速查浮层根节点（视口收敛用实测宽高）
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
@@ -205,24 +206,29 @@ function tipEntries(it) {
   return lines.length ? lines : null
 }
 
-// ---- 会话 ID 悬停：锚定在光标下方浮现「恢复命令 + 常用管理命令」速查浮层 ----
-// 位置固定于进入时的光标下方偏移处，不随鼠标移动；仅在靠近视口右/下边缘时
-// 向内收敛防止溢出，不做上下/左右翻转。
-function placeCmdTip(e, entries) {
+// ---- 会话 ID 悬停：命令速查浮层跟随光标，始终位于光标正下方 ----
+// 划入会话 ID 列时先按光标原位显示，随后随鼠标在列内移动持续平移；
+// x 对齐光标横坐标、y 在光标下方错开 16px。收敛仅按视口右/下边缘向内
+// 钳制（用实测宽高），不做上下/左右翻转，避免贴边时来回跳变。
+function placeCmdTip(e) {
+  const t = tip.value
+  if (!t) return
   const pad = 12
-  const widest = Math.max(...entries.map(n => n.cmd.length), 20)
-  const estW = Math.min(560, 220 + widest * 7.3)
-  const estH = 10 + entries.length * 30
-  let x = e.clientX + 14
-  let y = e.clientY + 16
-  if (x + estW > innerWidth - pad) x = Math.max(pad, innerWidth - estW - pad)
-  if (y + estH > innerHeight - pad) y = Math.max(pad, innerHeight - estH - pad)
-  tip.value = { entries, x, y }
+  const el = tipEl.value
+  const w = el ? el.offsetWidth : 0
+  const h = el ? el.offsetHeight : 0
+  t.x = Math.min(Math.max(e.clientX, pad), Math.max(pad, innerWidth - w - pad))
+  t.y = Math.min(Math.max(e.clientY + 16, pad), Math.max(pad, innerHeight - h - pad))
 }
-function showCmdTip(it, e) {
-  const es = tipEntries(it)
-  if (es) placeCmdTip(e, es)
+async function showCmdTip(it, e) {
+  const entries = tipEntries(it)
+  tip.value = entries ? { entries, x: e.clientX, y: e.clientY + 16 } : null
+  if (entries) {
+    await nextTick() // 等浮层挂载，随后用实测宽高把溢出部分收敛回视口内
+    placeCmdTip(e)
+  }
 }
+function moveCmdTip(e) { placeCmdTip(e) }
 function hideCmdTip() { tip.value = null }
 
 // 点击会话 ID 左侧复制按钮：复制该会话的恢复命令行（不支持恢复时提示原因）。
@@ -288,7 +294,7 @@ defineExpose({ loadClients, refresh, askDelete, state })
               <td
                 class="sr-name"
                 :title="tipEntries(it) ? undefined : it.path"
-                @mouseenter="showCmdTip(it, $event)" @mouseleave="hideCmdTip"
+                @mouseenter="showCmdTip(it, $event)" @mousemove="moveCmdTip" @mouseleave="hideCmdTip"
               >
                 <span class="sr-inner">
                   <button
@@ -350,8 +356,8 @@ defineExpose({ loadClients, refresh, askDelete, state })
       </button>
     </div>
 
-    <!-- 会话 ID 悬停：光标处浮现「恢复该会话 + 常用管理命令」速查 -->
-    <div v-if="tip" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
+    <!-- 会话 ID 悬停：命令速查浮层跟随光标、位于其正下方（恢复该会话 + 常用管理命令） -->
+    <div v-if="tip" ref="tipEl" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">
       <div v-for="(n, i) in tip.entries" :key="i" class="ct-line">
         <code class="ct-cmd">{{ n.cmd }}</code>
         <span class="ct-note">{{ t(n.k) }}</span>
