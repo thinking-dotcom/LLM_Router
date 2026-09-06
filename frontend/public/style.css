@@ -938,21 +938,24 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
 .sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}
-/* 终端恢复浮层：点击行首客户端 logo 于页面中心弹出，两个终端图标按钮供选择 */
-.resume-pop{width:min(340px, calc(100% - 24px));text-align:center}
-.resume-pop h3{justify-content:center}
-.resume-sess{font-family:var(--mono);font-size:10px;color:var(--t3);margin:0 0 12px;word-break:break-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.resume-actions{display:flex;justify-content:center;align-items:center;gap:14px}
+/* 终端恢复浮层：点击行首客户端 logo 于页面中心弹出，cmd / PowerShell 纯图标小气泡 */
+.resume-pop{
+  display:flex;padding:9px;border-radius:16px;background:var(--surface);
+  border:1px solid var(--border);box-shadow:var(--shadow);
+}
+.resume-actions{display:flex;align-items:center;gap:9px}
 .resume-act{
-  width:78px;height:70px;border-radius:14px;cursor:pointer;padding:8px 4px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  width:52px;height:52px;border-radius:13px;cursor:pointer;padding:0;
+  display:flex;align-items:center;justify-content:center;
   background:var(--s2);border:1px solid var(--border);transition:var(--transition);
 }
 .resume-act:hover{background:var(--s3);border-color:var(--accent);box-shadow:0 4px 14px var(--accent-ring);transform:translateY(-1px)}
 .resume-act .resume-ico{width:26px;height:26px;object-fit:contain;display:block;pointer-events:none}
-.resume-act .resume-lab{font-size:9.5px;font-weight:800;color:var(--text);line-height:1;pointer-events:none;letter-spacing:.2px}
 /* terminal-cmd 图标原为纯黑填充，深色主题反白保证可见 */
 :root[data-theme="dark"] .resume-act .term-cmd{filter:invert(1) brightness(1.4)}
+/* 该轻量弹层用更浅的遮罩：半透明即可、不加模糊（区别于正式对话框） */
+.dialog-overlay.resume-mask{background:rgba(8,10,12,0.30);backdrop-filter:none}
+:root[data-theme="dark"] .dialog-overlay.resume-mask{background:rgba(5,8,11,0.34)}
 
 /* 右下角浮动：chatbot 触发按钮 + 从右往左展开的竖向客户端图标栏 */
 .sess-float{position:absolute;right:12px;bottom:14px;z-index:60;display:flex;flex-direction:column;align-items:flex-end;gap:8px}

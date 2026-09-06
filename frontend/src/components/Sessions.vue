@@ -233,26 +233,16 @@ defineExpose({ loadClients, refresh, askDelete, state })
       </button>
     </div>
 
-    <!-- 终端恢复浮层（点击行首客户端 logo 弹出，页面水平垂直中心） -->
-    <div class="dialog-overlay" :class="{ open: resumePop }" @click.self="resumePop=null">
-      <div class="dialog resume-pop">
-        <h3>{{ t('sessions.openTerminal') }}</h3>
-        <p class="resume-sess" :title="resumePop?.path">{{ resumePop?.name }}</p>
+    <!-- 终端恢复浮层（点击行首客户端 logo 弹出，页面中心纯图标小气泡：cmd / PowerShell） -->
+    <div class="dialog-overlay resume-mask" :class="{ open: resumePop }" @click.self="resumePop=null">
+      <div class="resume-pop">
         <div class="resume-actions">
           <button class="resume-act" :title="t('sessions.resumeInCmd')" @click="doResumePop('cmd')">
-            <img class="resume-ico term-cmd" src="/logos/terminal-cmd-svgrepo-com.svg" alt="" draggable="false" />
-            <span class="resume-lab">cmd</span>
+            <img class="resume-ico term-cmd" src="/logos/terminal-cmd-svgrepo-com.svg" alt="cmd" draggable="false" />
           </button>
           <button class="resume-act" :title="t('sessions.resumeInPS')" @click="doResumePop('powershell')">
-            <img class="resume-ico" src="/logos/shell-svgrepo-com.svg" alt="" draggable="false" />
-            <span class="resume-lab">PowerShell</span>
+            <img class="resume-ico" src="/logos/shell-svgrepo-com.svg" alt="PowerShell" draggable="false" />
           </button>
-        </div>
-        <div class="dialog-foot">
-          <span></span>
-          <div class="right">
-            <button class="btn btn-ghost btn-sm" type="button" @click="resumePop=null">{{ t('dlg.cancel') }}</button>
-          </div>
         </div>
       </div>
     </div>
