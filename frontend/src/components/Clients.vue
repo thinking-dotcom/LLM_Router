@@ -111,7 +111,7 @@ import {
   loadAgyAliasPanel,
 } from './sync/agy'
 import {
-  cbForm, cbPermRows, initCodebuddy, cbConnUrl, cbConnKey, cbFillConn,
+  cbForm, cbPermRows, initCodebuddy, cbConnUrl, cbConnKey,
   cbModelsObj, cbModelsContent, cbModelsExists, cbModelsFile,
   cbMcpContent, cbMcpExists, cbMcpFile, cbAddModel, cbDelModel,
 } from './sync/codebuddy'
@@ -1241,7 +1241,6 @@ const customGrokRows = computed(() =>
                 <div class="field-row" style="margin-top:2px">
                   <div class="field fw-l"><label>{{ t('sync.cb.url') }}</label><input v-model="cbConnUrl" placeholder="http://127.0.0.1:3000/router" /></div>
                   <div class="field fw-l"><label>{{ t('sync.apiKey') }}</label><input v-model="cbConnKey" :placeholder="t('sync.routeToken')" /></div>
-                  <button type="button" class="btn btn-xs btn-ghost" style="align-self:flex-end;margin-bottom:4px" @click="cbFillConn()">{{ t('sync.cb.fillRouter') }}</button>
                 </div>
                 <div v-if="cbModelsObj.models && cbModelsObj.models.length" class="cb-mrows" style="margin-top:8px">
                   <div v-for="(row, i) in cbModelsObj.models" :key="i" class="pi-model-block cb-mrow">

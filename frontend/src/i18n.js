@@ -542,7 +542,6 @@ export const I18N = {
     // codebuddy (CodeBuddy CLI)
     'sync.cb.endpoints': '接入端点与模型（models.json）',
     'sync.cb.endpointTip': '顶部端点地址与密钥为统一连接：保存时写入 models.json 的每个模型行（url / apiKey），CLI 全部模型请求都经该端点转发；下方各模型行只配模型标识与能力开关；需要按行差异化端点时请用 models.json 源码页签直接编辑该行。',
-    'sync.cb.fillRouter': '接入本路由器',
     'sync.cb.url': '端点地址 (url)',
     'sync.cb.images': '图像支持',
     'sync.cb.modelsTip': '模型行编辑 id / name / vendor / 能力开关；端点 url / apiKey 统一取顶部连接。行内未列字段与顶层其余键（availableModels 等）保存时原样保留，JSON 源码页签可整文件维护。',
@@ -1472,7 +1471,6 @@ export const I18N = {
     // codebuddy (CodeBuddy CLI)
     'sync.cb.endpoints': 'Endpoints & models (models.json)',
     'sync.cb.endpointTip': 'The endpoint URL and key above are the shared connection: on save they are written into every model row (url / apiKey) of models.json, so all CLI model traffic goes through that endpoint. Rows below only configure model identity and capability flags. For per-row endpoint overrides, edit the row directly in the models.json source tab.',
-    'sync.cb.fillRouter': 'Route via this router',
     'sync.cb.url': 'Endpoint URL (url)',
     'sync.cb.images': 'Image support',
     'sync.cb.modelsTip': 'Rows edit id / name / vendor / capability flags only; url / apiKey come from the shared connection above. Unlisted per-row fields and other top-level keys (availableModels etc.) are preserved on save; the JSON source tab edits the whole file.',

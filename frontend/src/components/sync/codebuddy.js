@@ -22,7 +22,6 @@
 // MCP 声明在 ~/.codebuddy/mcp.json（mcpServers 对象），源码页签直编。
 import { ref, watch } from 'vue'
 import { cfgObj, cfgEdit, cfgTarget, jsonEcho, syncToJson, routerBase } from './store'
-import api from '../../api'
 
 // ---- mcp.json 源码（~/.codebuddy/mcp.json）----
 export const cbMcpContent = ref('')
@@ -108,23 +107,6 @@ export function cbAddModel() {
 export function cbDelModel(i) {
   const o = cbModelsObj.value
   if (Array.isArray(o.models)) o.models.splice(i, 1)
-}
-// 顶部共享连接一键回填：'url' 填本路由器端点；'key' 填路由令牌（读配置 authToken，未设则置空）
-export async function cbFillRoute(mode) {
-  if (mode === 'url') cbConnUrl.value = cbRouterUrl()
-  if (mode === 'key') {
-    let tk = ''
-    try {
-      const c = await api.GetConfig()
-      const v = String((c && c.authToken) || '').trim()
-      if (v && v !== '****') tk = v
-    } catch (e) {}
-    cbConnKey.value = tk
-  }
-}
-export function cbFillConn() {
-  cbFillRoute('url')
-  cbFillRoute('key')
 }
 
 // 接入地址：统一 /router（与其它客户端一致）
