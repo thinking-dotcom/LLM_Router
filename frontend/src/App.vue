@@ -12,6 +12,7 @@ import Mcps from './components/Mcps.vue'
 import McpMappingDialog from './components/McpMappingDialog.vue'
 import Clients from './components/Clients.vue'
 import TokenChart from './components/TokenChart.vue'
+import Sessions from './components/Sessions.vue'
 import ProviderDialog from './components/ProviderDialog.vue'
 import DeleteDialog from './components/DeleteDialog.vue'
 import ClearLogsDialog from './components/ClearLogsDialog.vue'
@@ -43,6 +44,7 @@ const rightTabs = [
   { mode: 'sync',      key: 'nav.sync' },
   { mode: 'settings',  key: 'nav.settings' },
   { mode: 'status',    key: 'nav.chart' },
+  { mode: 'sessions',  key: 'nav.sessions' },
 ]
 const sortedTabs = computed(() =>
   [...rightTabs].sort((a, b) => t(a.key).length - t(b.key).length)
@@ -176,6 +178,12 @@ onUnmounted(() => {
         <div v-show="activeRight === 'status'" class="right-content p-status">
           <div class="page-head"></div>
           <div class="panel-body board-status"><TokenChart /></div>
+        </div>
+
+        <!-- 会话管理 -->
+        <div v-show="activeRight === 'sessions'" class="right-content p-sessions">
+          <div class="page-head"></div>
+          <div class="panel-body"><Sessions /></div>
         </div>
       </section>
     </main>

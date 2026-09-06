@@ -311,6 +311,31 @@ func (a *App) DeleteSkill(name string) map[string]any {
 	return map[string]any{"ok": true}
 }
 
+// ---- 会话管理（各 AI CLI 客户端落盘的历史会话记录）----
+
+// GetSessionClients 返回登记了会话目录的客户端概览（数量/体积/最近活跃）。
+func (a *App) GetSessionClients() []agent.SessionClient {
+	return agent.ListSessionClients()
+}
+
+// GetSessionItems 返回指定客户端的会话条目列表（修改时间新→旧）。
+func (a *App) GetSessionItems(clientID string) map[string]any {
+	items, err := agent.ListSessionItems(clientID)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true, "items": items}
+}
+
+// DeleteSessionItems 批量删除指定客户端的会话条目（逐路径校验位于该客户端
+// 会话根目录内且层级相符后才删除；目录型会话整棵移除）。删除不可恢复。
+func (a *App) DeleteSessionItems(clientID string, paths []string) map[string]any {
+	if err := agent.DeleteSessionItems(clientID, paths); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true}
+}
+
 // GetMcps 返回 MCP 配置（路由器地址 + 服务项列表）。
 func (a *App) GetMcps() map[string]any {
 	base, servers := agent.GetMcps()
