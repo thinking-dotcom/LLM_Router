@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, reactive, onMounted } from 'vue'
 import { t } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
@@ -18,6 +18,22 @@ const confirming = ref(false)   // 删除确认对话框
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
+
+// 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
+const state = reactive({
+  summary: '',        // 「共 N 个会话 · 大小」
+  sel: 0,             // 已选会话数（删除按钮计数/禁用）
+  canOpenRoot: false, // 当前客户端根目录存在（打开目录按钮可用）
+  root: '',           // 当前客户端会话根目录（按钮 title 提示）
+})
+function syncUi() {
+  const ac = activeClient.value
+  state.summary = ac ? t('sessions.total', { n: items.value.length, size: fmtBytes(ac.totalSize) }) : ''
+  state.sel = selected.value.size
+  state.canOpenRoot = !!(ac && ac.managed && ac.rootExists)
+  state.root = ac?.root || ''
+}
+watch([activeClient, items, selected], syncUi, { immediate: true })
 
 function fmtBytes(n) {
   if (!n) return '0 B'
@@ -121,8 +137,18 @@ async function doDelete() {
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
 }
 
+// ---- 暴露给 App.vue 顶部工具条（.page-head）的动作 ----
+// 刷新：重载客户端概览并保持当前选中
+function refresh() { return loadClients(activeId.value) }
+// 打开当前客户端的会话根目录
+async function openRoot() {
+  const ac = activeClient.value
+  if (!ac || !ac.managed || !ac.rootExists) { toast(t('sessions.noRoot')); return }
+  await openLocation(ac.root)
+}
+
 onMounted(() => loadClients())
-defineExpose({ loadClients })
+defineExpose({ loadClients, refresh, openRoot, askDelete, state })
 </script>
 
 <template>
@@ -140,23 +166,7 @@ defineExpose({ loadClients })
       <div v-if="!clients.length" class="empty-tip">{{ t('sessions.noClients') }}</div>
     </div>
 
-    <!-- 工具条 -->
-    <div class="sess-bar">
-      <span class="sess-total" :title="activeClient?.root || ''">
-        {{ activeClient ? t('sessions.total', { n: items.length, size: fmtBytes(activeClient.totalSize) }) : '' }}
-      </span>
-      <div class="sess-actions">
-        <button class="btn btn-xs btn-ghost" :title="t('sessions.refresh')" @click="loadClients(activeId)">↻ {{ t('sessions.refresh') }}</button>
-        <button
-          class="btn btn-xs btn-ghost" :class="{ disabled: !activeClient?.rootExists }"
-          :title="activeClient?.root || t('sessions.noRoot')"
-          @click="openLocation(activeClient?.root)"
-        >📁 {{ t('sessions.openRoot') }}</button>
-        <button class="btn btn-xs btn-danger" :class="{ disabled: !selected.size }" @click="askDelete">
-          {{ t('sessions.deleteSelected') }}<template v-if="selected.size"> ({{ selected.size }})</template>
-        </button>
-      </div>
-    </div>
+    <!-- 工具条已上移至 App.vue 页面顶部 .page-head（本组件只保留图标条与会话表格） -->
 
     <!-- 会话条目表 -->
     <div class="recent-card sess-card">

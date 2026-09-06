@@ -922,9 +922,7 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-chip.empty{opacity:0.45}
 .sess-chip.unmanaged{opacity:.4;border-style:dashed;cursor:default}
 .sess-chip.unmanaged:hover{border-color:var(--border);background:var(--s2)}
-.sess-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0}
-.sess-total{font-size:9.5px;color:var(--t3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sess-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.sess-total{flex:1;min-width:0;font-size:9.5px;color:var(--t3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sess-card{flex:1;min-height:0;display:flex;flex-direction:column;padding:0;border:0;border-radius:0;overflow:hidden}
 .sess-card .logs-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none}
 .sess-card .logs-scroll::-webkit-scrollbar{display:none}

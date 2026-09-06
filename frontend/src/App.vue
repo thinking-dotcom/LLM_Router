@@ -34,6 +34,7 @@ const panels = [
 const providersRef = ref(null)
 const skillsRef = ref(null)
 const mcpsRef = ref(null)
+const sessionsRef = ref(null)
 
 // 右区顶部导航：按当前语言标签文字长度升序（文字多的排后面，等长保持原顺序）
 const rightTabs = [
@@ -182,8 +183,21 @@ onUnmounted(() => {
 
         <!-- 会话管理 -->
         <div v-show="activeRight === 'sessions'" class="right-content p-sessions">
-          <div class="page-head"></div>
-          <div class="panel-body"><Sessions /></div>
+          <div class="page-head">
+            <span class="sess-total" :title="sessionsRef?.state?.root || ''">{{ sessionsRef?.state?.summary || '' }}</span>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+              <button class="btn btn-xs btn-ghost" :title="t('sessions.refresh')" @click="sessionsRef?.refresh()">↻ {{ t('sessions.refresh') }}</button>
+              <button
+                class="btn btn-xs btn-ghost" :class="{ disabled: !sessionsRef?.state?.canOpenRoot }"
+                :title="sessionsRef?.state?.root || t('sessions.noRoot')"
+                @click="sessionsRef?.openRoot()"
+              >📁 {{ t('sessions.openRoot') }}</button>
+              <button class="btn btn-xs btn-danger" :class="{ disabled: !sessionsRef?.state?.sel }" @click="sessionsRef?.askDelete()">
+                {{ t('sessions.deleteSelected') }}<template v-if="sessionsRef?.state?.sel"> ({{ sessionsRef?.state.sel }})</template>
+              </button>
+            </div>
+          </div>
+          <div class="panel-body"><Sessions ref="sessionsRef" /></div>
         </div>
       </section>
     </main>
