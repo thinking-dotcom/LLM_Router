@@ -186,11 +186,6 @@ onUnmounted(() => {
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
               <button class="btn btn-xs btn-ghost" :title="t('sessions.refresh')" @click="sessionsRef?.refresh()">↻ {{ t('sessions.refresh') }}</button>
-              <button
-                class="btn btn-xs btn-ghost" :class="{ disabled: !sessionsRef?.state?.canOpenRoot }"
-                :title="sessionsRef?.state?.root || t('sessions.noRoot')"
-                @click="sessionsRef?.openRoot()"
-              >📁 {{ t('sessions.openRoot') }}</button>
               <button class="btn btn-xs btn-danger" :class="{ disabled: !sessionsRef?.state?.sel }" @click="sessionsRef?.askDelete()">
                 {{ t('sessions.deleteSelected') }}<template v-if="sessionsRef?.state?.sel"> ({{ sessionsRef?.state.sel }})</template>
               </button>

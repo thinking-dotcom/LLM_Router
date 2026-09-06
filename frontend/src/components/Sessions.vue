@@ -22,14 +22,9 @@ const allSelected = computed(() => items.value.length > 0 && selected.value.size
 // 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
 const state = reactive({
   sel: 0,             // 已选会话数（删除按钮计数/禁用）
-  canOpenRoot: false, // 当前客户端根目录存在（打开目录按钮可用）
-  root: '',           // 当前客户端会话根目录（按钮 title 提示）
 })
 function syncUi() {
-  const ac = activeClient.value
   state.sel = selected.value.size
-  state.canOpenRoot = !!(ac && ac.managed && ac.rootExists)
-  state.root = ac?.root || ''
 }
 watch([activeClient, items, selected], syncUi, { immediate: true })
 
@@ -138,15 +133,9 @@ async function doDelete() {
 // ---- 暴露给 App.vue 顶部工具条（.page-head）的动作 ----
 // 刷新：重载客户端概览并保持当前选中
 function refresh() { return loadClients(activeId.value) }
-// 打开当前客户端的会话根目录
-async function openRoot() {
-  const ac = activeClient.value
-  if (!ac || !ac.managed || !ac.rootExists) { toast(t('sessions.noRoot')); return }
-  await openLocation(ac.root)
-}
 
 onMounted(() => loadClients())
-defineExpose({ loadClients, refresh, openRoot, askDelete, state })
+defineExpose({ loadClients, refresh, askDelete, state })
 </script>
 
 <template>
