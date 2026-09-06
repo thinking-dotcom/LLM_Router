@@ -944,12 +944,13 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .resume-sess{font-family:var(--mono);font-size:10px;color:var(--t3);margin:0 0 12px;word-break:break-all;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .resume-actions{display:flex;justify-content:center;align-items:center;gap:14px}
 .resume-act{
-  width:52px;height:52px;border-radius:14px;cursor:pointer;padding:0;
-  display:flex;align-items:center;justify-content:center;
+  width:78px;height:70px;border-radius:14px;cursor:pointer;padding:8px 4px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
   background:var(--s2);border:1px solid var(--border);transition:var(--transition);
 }
 .resume-act:hover{background:var(--s3);border-color:var(--accent);box-shadow:0 4px 14px var(--accent-ring);transform:translateY(-1px)}
-.resume-act .resume-ico{width:24px;height:24px;object-fit:contain;display:block;pointer-events:none}
+.resume-act .resume-ico{width:26px;height:26px;object-fit:contain;display:block;pointer-events:none}
+.resume-act .resume-lab{font-size:9.5px;font-weight:800;color:var(--text);line-height:1;pointer-events:none;letter-spacing:.2px}
 /* terminal-cmd 图标原为纯黑填充，深色主题反白保证可见 */
 :root[data-theme="dark"] .resume-act .term-cmd{filter:invert(1) brightness(1.4)}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+	"unicode/utf16"
 	"unsafe"
 
 	"llm-router-go/agent"
@@ -339,23 +341,27 @@ func (a *App) DeleteSessionItems(clientID string, paths []string) map[string]any
 // OpenSessionTerminal 在系统终端中「按该客户端的恢复命令拉起会话」：
 // 例如 Claude Code 会话 → claude --resume <session-id>（在尽量还原的原始项目目录启动）。
 // 该客户端不支持按会话恢复（如 Copilot 仅支持 --continue）时返回原因。
-func (a *App) OpenSessionTerminal(clientID, path string) map[string]any {
+// shell 选择宿主：Windows 下 "cmd"（默认）经 cmd.exe 执行、"" 等同 cmd、
+// "powershell" 经 powershell.exe（无则 pwsh.exe）执行；其余平台忽略该参数。
+func (a *App) OpenSessionTerminal(clientID, path, shell string) map[string]any {
 	plan, err := agent.BuildSessionResume(clientID, path)
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
-	if err := openTerminalCommand(plan.Dir, plan.Tokens); err != nil {
+	if err := openTerminalCommand(plan.Dir, plan.Tokens, shell); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
 }
 
 // openTerminalCommand 新开一个终端窗口执行 tokens 命令（目录定位到 dir）。
-func openTerminalCommand(dir string, tokens []string) error {
+// shell 为 Windows 终端宿主选择：cmd（默认）或 powershell。
+func openTerminalCommand(dir string, tokens []string, shell string) error {
 	if len(tokens) == 0 {
 		return errors.New("恢复命令为空")
 	}
-	if _, err := exec.LookPath(tokens[0]); err != nil {
+	exe, err := exec.LookPath(tokens[0])
+	if err != nil {
 		return errors.New("未找到可执行命令: " + tokens[0] + "，请确认已安装该 CLI")
 	}
 	if dir == "" {
@@ -363,7 +369,12 @@ func openTerminalCommand(dir string, tokens []string) error {
 	}
 	switch runtime.GOOS {
 	case "windows":
-		// 各 AI CLI 多为 node .cmd shim，命令统一经 cmd /K 执行（出错留窗可看）。
+		// PowerShell 宿主走 -EncodedCommand（UTF-16LE+Base64，彻底规避引号/转义嵌套）；
+		// 其余（含未识别 shell 值）统一经 cmd.exe /K 执行（各 AI CLI 多为 node .cmd shim，
+		// 出错留窗可看）。
+		if strings.EqualFold(shell, "powershell") {
+			return openPSCommand(dir, exe, tokens[1:])
+		}
 		inner := winCmdline(tokens)
 		// 优先 Windows Terminal：wt -d <dir> cmd /K <inner>
 		if _, err := exec.LookPath("wt.exe"); err == nil {
@@ -410,6 +421,57 @@ func openTerminalCommand(dir string, tokens []string) error {
 		}
 		return errors.New("未找到可用的终端程序")
 	}
+}
+
+// openPSCommand 以 PowerShell 为宿主执行恢复命令（Windows）：
+// 先切到会话目录，再以调用运算符 & 执行 CLI（参数单引号包裹、内部单引号翻倍转义），
+// 整体经 -EncodedCommand（UTF-16LE → Base64）传给 powershell.exe，规避所有引号/转义嵌套。
+func openPSCommand(dir string, exe string, args []string) error {
+	ps, err := exec.LookPath("powershell.exe")
+	if err != nil {
+		if ps2, e2 := exec.LookPath("pwsh.exe"); e2 == nil {
+			ps = ps2
+		} else {
+			return errors.New("未找到 PowerShell，请确认已安装 powershell.exe / pwsh.exe")
+		}
+	}
+	script := "Set-Location -LiteralPath " + psQuote(dir) + "; & " + psQuote(exe)
+	for _, a := range args {
+		script += " " + psQuote(a)
+	}
+	enc := base64.StdEncoding.EncodeToString(utf16le(script))
+	// 优先 Windows Terminal：wt -d <dir> powershell -NoExit -EncodedCommand <enc>
+	if _, err := exec.LookPath("wt.exe"); err == nil {
+		wt := exec.Command("wt.exe", "-d", dir, ps, "-NoExit", "-EncodedCommand", enc)
+		if err := wt.Start(); err == nil {
+			go func() { _ = wt.Wait() }()
+			return nil
+		}
+	}
+	// 回退经典控制台：powershell 以 dir 为工作目录启动，强制新控制台窗口避免复用父进程
+	cmd := exec.Command(ps, "-NoExit", "-EncodedCommand", enc)
+	cmd.Dir = dir
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// psQuote 用单引号包裹字符串，内部单引号翻倍转义（PowerShell 字符串字面量规则）。
+func psQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+}
+
+// utf16le 把字符串编码为 UTF-16LE 字节序列（PowerShell -EncodedCommand 要求）。
+func utf16le(s string) []byte {
+	u := utf16.Encode([]rune(s))
+	b := make([]byte, 0, len(u)*2)
+	for _, r := range u {
+		b = append(b, byte(r), byte(r>>8))
+	}
+	return b
 }
 
 // winCmdline 把 argv 拼成 cmd.exe 可执行的命令行（含空格的参数加引号，引号翻倍转义）。

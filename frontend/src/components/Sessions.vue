@@ -9,7 +9,7 @@ import { targetLogo } from './sync/shared'
 // 主体为当前客户端的会话条目表，每条会话最左侧以该客户端 logo 标识归属；
 // 客户端切换收进右下角浮动按钮（chatbot 图标 → 从右往左展开竖向客户端
 // 图标栏），选中后收起。支持多选批量删除与终端恢复（终端图标收纳在
-// 客户端 logo 上：点击 logo 在页面中心弹出终端恢复浮层）。
+// 客户端 logo 上：点击 logo 在页面中心弹出 cmd / PowerShell 双宿主浮层）。
 
 const clients = ref([])      // 客户端概览（后端注册表驱动）
 const activeId = ref('')     // 当前选中的客户端
@@ -111,22 +111,23 @@ async function openLocation(p) {
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
 }
 
-// 在终端中以该客户端的恢复命令拉起会话（claude --resume <id> 等）。
-// 客户端不支持按会话恢复（Copilot/pi）时 toast 说明原因并返回 false。
-async function openTerminal(p) {
+// 在指定宿主的终端中以该客户端的恢复命令拉起会话（claude --resume <id> 等）。
+// shell: 'cmd'（默认）| 'powershell'。客户端不支持按会话恢复（Copilot/pi）时
+// toast 说明原因并返回 false。
+async function openTerminal(p, shell) {
   if (!activeClient.value?.resumeSupported) {
     toast(activeClient.value?.resumeNote || t('sessions.noResume'))
     return false
   }
   try {
-    const r = await api.OpenSessionTerminal(activeId.value, p)
+    const r = await api.OpenSessionTerminal(activeId.value, p, shell || 'cmd')
     if (r && r.ok === false) { toast(t('common.fail', { msg: r.error || '' })); return false }
     return true
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })); return false }
 }
 
-// 点击行首客户端 logo：弹出行内浮层（页面中心）展示两个终端图标供选择；
-// 客户端不支持恢复时直接提示原因，不弹浮层。
+// 点击行首客户端 logo：弹出行内浮层（页面中心）展示 cmd / PowerShell 两个
+// 终端图标供选择；客户端不支持恢复时直接提示原因，不弹浮层。
 function showResumePop(it) {
   if (!activeClient.value?.resumeSupported) {
     toast(activeClient.value?.resumeNote || t('sessions.noResume'))
@@ -134,11 +135,11 @@ function showResumePop(it) {
   }
   resumePop.value = it
 }
-// 浮层中点击某个终端图标：执行恢复，成功即收起浮层。
-async function doResumePop() {
+// 浮层中点击某个终端图标（shell='cmd'|'powershell'）：执行恢复，成功即收起浮层。
+async function doResumePop(shell) {
   const it = resumePop.value
   if (!it) return
-  const ok = await openTerminal(it.path)
+  const ok = await openTerminal(it.path, shell)
   if (ok) resumePop.value = null
 }
 
@@ -238,11 +239,13 @@ defineExpose({ loadClients, refresh, askDelete, state })
         <h3>{{ t('sessions.openTerminal') }}</h3>
         <p class="resume-sess" :title="resumePop?.path">{{ resumePop?.name }}</p>
         <div class="resume-actions">
-          <button class="resume-act" :title="t('sessions.openTerminal')" @click="doResumePop">
-            <img class="resume-ico" src="/logos/shell-svgrepo-com.svg" alt="" draggable="false" />
-          </button>
-          <button class="resume-act" :title="t('sessions.openTerminal')" @click="doResumePop">
+          <button class="resume-act" :title="t('sessions.resumeInCmd')" @click="doResumePop('cmd')">
             <img class="resume-ico term-cmd" src="/logos/terminal-cmd-svgrepo-com.svg" alt="" draggable="false" />
+            <span class="resume-lab">cmd</span>
+          </button>
+          <button class="resume-act" :title="t('sessions.resumeInPS')" @click="doResumePop('powershell')">
+            <img class="resume-ico" src="/logos/shell-svgrepo-com.svg" alt="" draggable="false" />
+            <span class="resume-lab">PowerShell</span>
           </button>
         </div>
         <div class="dialog-foot">
