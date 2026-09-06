@@ -88,6 +88,7 @@ type SessionItem struct {
 	Path  string `json:"path"`  // 绝对路径
 	Name  string `json:"name"`  // 条目名（文件/目录名）
 	ID    string `json:"id"`    // 会话 ID（按各客户端注册的恢复 ID 口径提取，无 ID 语义时兜底去扩展名的条目名）
+	Cmd   string `json:"cmd"`   // 在终端恢复该会话的命令行（展示用；客户端不支持按会话恢复时为空）
 	Group string `json:"group"` // 相对 Root 的父目录（项目/分组名，用于展示）
 	IsDir bool   `json:"isDir"`
 	Size  int64  `json:"size"`  // 字节数（目录为递归合计）
@@ -305,6 +306,36 @@ func sessionDisplayID(st SessionStore, it SessionItem) string {
 	return id
 }
 
+// sessionResumeCmd 组装该会话的展示用恢复命令行：按注册表 Resume 模板替换
+// {id} / {file} 占位，token 含空白时加引号。客户端不支持按会话恢复（Bin 空）
+// 时返回空串。
+func sessionResumeCmd(st SessionStore, it SessionItem) string {
+	if st.Resume.Bin == "" {
+		return ""
+	}
+	args := make([]string, 0, len(st.Resume.Args))
+	for _, a := range st.Resume.Args {
+		a = strings.ReplaceAll(a, "{file}", it.Path)
+		a = strings.ReplaceAll(a, "{id}", it.ID)
+		args = append(args, a)
+	}
+	return joinCmdline(args)
+}
+
+// joinCmdline 把 argv 拼成可读/可复制的命令行：含空白（空格/制表/引号）的
+// token 用双引号包裹，内部双引号反斜杠转义——与 posix/win 的常规展示一致。
+func joinCmdline(tokens []string) string {
+	quoted := make([]string, 0, len(tokens))
+	for _, tk := range tokens {
+		if strings.ContainsAny(tk, " \t\"") {
+			quoted = append(quoted, `"`+strings.ReplaceAll(tk, `"`, `\"`)+`"`)
+		} else {
+			quoted = append(quoted, tk)
+		}
+	}
+	return strings.Join(quoted, " ")
+}
+
 // ListSessionItems 返回指定客户端的会话条目（修改时间新→旧）。
 func ListSessionItems(clientID string) ([]SessionItem, error) {
 	st, rootAbs, ok := sessionStoreOf(clientID)
@@ -320,6 +351,7 @@ func ListSessionItems(clientID string) ([]SessionItem, error) {
 	}
 	for i := range items {
 		items[i].ID = sessionDisplayID(st, items[i])
+		items[i].Cmd = sessionResumeCmd(st, items[i])
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].Mtime > items[j].Mtime })
 	return items, nil

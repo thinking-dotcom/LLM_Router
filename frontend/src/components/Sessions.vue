@@ -19,6 +19,7 @@ const selected = ref(new Set()) // 选中的会话路径
 const confirming = ref(false)   // 删除确认对话框
 const navOpen = ref(false)      // 右下角浮动图标栏是否展开
 const resumePop = ref(null)     // 终端恢复浮层：当前会话条目对象（null=收起）
+const tip = ref(null)           // 会话 ID 悬停命令浮层：{text,x,y}（null=收起）
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
 const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
@@ -143,6 +144,25 @@ async function doResumePop(shell) {
   if (ok) resumePop.value = null
 }
 
+// ---- 会话 ID 悬停：光标处浮现该会话的恢复命令行（条目命令为空时不弹）----
+function placeCmdTip(e, text) {
+  const pad = 12
+  const estW = Math.min(560, 200 + (text?.length || 0) * 7.4)
+  const estH = 30
+  let x = e.clientX + 12
+  let y = e.clientY + 14
+  if (x + estW > innerWidth - pad) x = e.clientX - estW - 12
+  if (y + estH > innerHeight - pad) y = e.clientY - estH - 14
+  tip.value = { text, x: Math.max(pad, x), y: Math.max(pad, y) }
+}
+function showCmdTip(it, e) {
+  if (it.cmd) placeCmdTip(e, it.cmd)
+}
+function moveCmdTip(e) {
+  if (tip.value) placeCmdTip(e, tip.value.text)
+}
+function hideCmdTip() { tip.value = null }
+
 function askDelete() { if (selected.value.size) confirming.value = true }
 async function doDelete() {
   const ids = [...selected.value]
@@ -193,7 +213,11 @@ defineExpose({ loadClients, refresh, askDelete, state })
                   @click="showResumePop(it)" @keydown.enter.prevent="showResumePop(it)"
                 />
               </td>
-              <td class="sr-name" :title="it.path">{{ it.id || it.name }}</td>
+              <td
+                class="sr-name"
+                :title="it.cmd ? undefined : it.path"
+                @mouseenter="showCmdTip(it, $event)" @mousemove="moveCmdTip" @mouseleave="hideCmdTip"
+              >{{ it.id || it.name }}</td>
               <td class="sr-time">{{ it.mtime }}</td>
               <td>
                 <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>
@@ -232,6 +256,9 @@ defineExpose({ loadClients, refresh, askDelete, state })
         <img src="/logos/chatbot.svg" alt="clients" draggable="false" />
       </button>
     </div>
+
+    <!-- 会话 ID 悬停：光标处浮现恢复该会话的命令行 -->
+    <div v-if="tip" class="cmd-tip" :style="{ left: tip.x + 'px', top: tip.y + 'px' }">{{ tip.text }}</div>
 
     <!-- 终端恢复浮层（点击行首客户端 logo 弹出，页面中心纯图标小气泡：cmd / PowerShell） -->
     <div class="dialog-overlay resume-mask" :class="{ open: resumePop }" @click.self="resumePop=null">

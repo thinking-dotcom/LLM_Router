@@ -938,6 +938,14 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
 .sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}
+/* 会话 ID 悬停：光标处浮现恢复该会话的命令行 */
+.cmd-tip{
+  position:fixed;z-index:500;pointer-events:none;max-width:min(560px,70vw);
+  padding:6px 10px;border-radius:8px;
+  background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow);
+  font-family:var(--mono);font-size:10.5px;line-height:1.5;color:var(--text);
+  word-break:break-all;white-space:pre-wrap;
+}
 /* 终端恢复浮层：点击行首客户端 logo 于页面中心弹出，cmd / PowerShell 纯图标小气泡 */
 .resume-pop{
   display:flex;padding:9px;border-radius:16px;background:var(--surface);

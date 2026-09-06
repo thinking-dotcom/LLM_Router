@@ -322,3 +322,30 @@ func TestSessionDisplayID(t *testing.T) {
 		}
 	}
 }
+
+// 展示用恢复命令行：模板 {id}/{file} 替换、含空白 token 加引号；不支持时为空
+func TestSessionResumeCmd(t *testing.T) {
+	// 文件型 Claude 风格：id=stem → claude --resume <uuid>
+	fileStore := SessionStore{Kind: "file", Resume: ResumeSpec{Bin: "claude", Args: []string{"claude", "--resume", "{id}"}, IDFrom: "stem"}}
+	it := SessionItem{Name: "01a07242-f649-7162-8523-28f7093ebab4.jsonl", Path: `C:/Users/Me/Desktop/x/01a07242-f649-7162-8523-28f7093ebab4.jsonl`}
+	it.ID = sessionDisplayID(fileStore, it)
+	if got := sessionResumeCmd(fileStore, it); got != "claude --resume 01a07242-f649-7162-8523-28f7093ebab4" {
+		t.Fatalf("cmd = %q", got)
+	}
+	// 按文件恢复 + 含空格路径 → {file} 替换并加引号
+	gemStore := SessionStore{Kind: "file", Resume: ResumeSpec{Bin: "gemini", Args: []string{"gemini", "--session-file", "{file}"}}}
+	spaceDir := filepath.Join(t.TempDir(), "My Docs") // 含空格的目录
+	gIt := SessionItem{Name: "chat-a.jsonl", Path: filepath.Join(spaceDir, "chat-a.jsonl"), ID: "chat-a"}
+	if got := sessionResumeCmd(gemStore, gIt); got != `gemini --session-file "`+gIt.Path+`"` {
+		t.Fatalf("cmd = %q", got)
+	}
+	// 不支持恢复（Bin 空）→ 空
+	unsup := SessionStore{Kind: "dir", Resume: ResumeSpec{Unsupported: "n/a"}}
+	if got := sessionResumeCmd(unsup, SessionItem{Name: "chat-uuid"}); got != "" {
+		t.Fatalf("unsupported cmd = %q, want empty", got)
+	}
+	// joinCmdline 引号转义
+	if got := joinCmdline([]string{"a", `say "hi" there`, "b"}); got != `a "say \"hi\" there" b` {
+		t.Fatalf("join = %q", got)
+	}
+}
