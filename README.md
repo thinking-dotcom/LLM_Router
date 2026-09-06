@@ -144,7 +144,7 @@ Wails 绑定（`frontend/wailsjs/go/main/App.d.ts` 自动生成，勿手改）�
 - 状态 / 配置 / 服务：`GetStatus`/`GetAppInfo`/`GetConfig`/`SaveConfig`/`StartServer`/`StopServer`/`RestartServer`
 - 模型：`FetchModels`/`FetchModelsList`/`GetProviderModels`/`GetModelsByFormat`
 - 日志 / 统计：`GetLogs`/`ClearLogs`（清空并立即落盘）/`GetStats`/`GetActiveModels`
-- 会话管理：`GetSessionClients`（各客户端会话概览）/`GetSessionItems`（会话条目列表）/`DeleteSessionItems`（批量删除，逐路径校验位于会话根目录内且层级相符）
+- 会话管理：`GetSessionClients`（各客户端会话概览）/`GetSessionItems`（会话条目列表）/`DeleteSessionItems`（批量删除，逐路径校验位于会话根目录内且层级相符）/`OpenSessionTerminal`（在系统终端中打开会话所在目录：目录型进会话目录、文件型进所在目录，Windows 优先 Windows Terminal、回退经典控制台）
 - 桌面偏好：`GetAutoStartEnabled`/`SetAutoStartEnabled`/`GetTrayEnabled`/`SetTrayEnabled`/`OpenURL`（仅 `http(s)` 且拒绝 shell 元字符）
 - Skills / MCP / 同步：`GetSkillsList`/`GetSkillsDir`/`OpenSkillsDir`/`GetAgentSkills`/`GetSkillContent`/`SaveSkill`/`DeleteSkill`/`GetMcps`/`SaveMcps`/`SaveMcpFile`（单文件编辑）/`ListTargets`/`SyncTargets`/`SyncMcpMapping`（按「客户端 ↔ MCP 服务」映射批量注入）/`GetRouterBase`
 - 真实配置定位：`GetClientRealPaths`（各客户端真实配置路径清单，来源 `client-paths.json`）/`OpenFileLocation`（在文件管理器中打开所在目录并选中）

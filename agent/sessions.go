@@ -224,6 +224,36 @@ func ListSessionItems(clientID string) ([]SessionItem, error) {
 	return items, nil
 }
 
+// SessionOpenDir 校验 path 为该客户端的会话条目（与删除同口径：位于会话
+// 根目录内、层级与注册表相符），返回「终端应打开的目录」——目录型会话打开
+// 会话本身，文件型会话打开其所在目录（会话文件的项目/分组层）。
+func SessionOpenDir(clientID, path string) (string, error) {
+	st, rootAbs, ok := sessionStoreOf(clientID)
+	if !ok {
+		return "", errors.New("该客户端未登记会话目录: " + clientID)
+	}
+	rootAbs = filepath.Clean(rootAbs)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(rootAbs, abs)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return "", errors.New("路径不在会话目录内: " + path)
+	}
+	if strings.Count(rel, string(filepath.Separator))+1 != st.Depth {
+		return "", errors.New("路径层级与该客户端的会话结构不符: " + path)
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		return "", errors.New("会话不存在或不可读: " + path)
+	}
+	if !fi.IsDir() {
+		abs = filepath.Dir(abs)
+	}
+	return abs, nil
+}
+
 // DeleteSessionItems 删除指定客户端的若干会话条目。每个路径都会校验：
 // 必须位于该客户端会话根目录下、且层级与注册表口径一致（防止误删根目录或分组层）。
 // 文件型条目用 os.Remove，目录型整棵 os.RemoveAll。返回第一条失败的原因。

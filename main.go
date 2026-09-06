@@ -336,6 +336,60 @@ func (a *App) DeleteSessionItems(clientID string, paths []string) map[string]any
 	return map[string]any{"ok": true}
 }
 
+// OpenSessionTerminal 在系统终端中打开某条会话所在的目录：
+// 目录型会话进入会话目录本身，文件型会话进入其所在目录（项目/分组层）。
+func (a *App) OpenSessionTerminal(clientID, path string) map[string]any {
+	dir, err := agent.SessionOpenDir(clientID, path)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	if err := openTerminalAt(dir); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true}
+}
+
+// openTerminalAt 在系统终端中打开指定目录（新开一个终端窗口并定位到该目录）。
+func openTerminalAt(dir string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		// 优先 Windows Terminal（wt 自带新窗口）；失败（未安装）回退经典控制台。
+		// cmd 以 dir 为工作目录启动即默认落位到该目录，无需拼接 cd 命令。
+		if wt := exec.Command("wt.exe", "-d", dir); wt.Start() == nil {
+			go func() { _ = wt.Wait() }()
+			return nil
+		}
+		cmd = exec.Command("cmd.exe")
+		cmd.Dir = dir
+		cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: 0x00000010} // CREATE_NEW_CONSOLE：强制新窗口，避免复用父进程控制台
+	case "darwin":
+		quoted := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(dir)
+		cmd = exec.Command("osascript", "-e", `tell application "Terminal" to do script ("cd " & quoted form of "`+quoted+`")`)
+	default:
+		for _, cand := range [][]string{
+			{"gnome-terminal", "--working-directory=" + dir},
+			{"konsole", "--workdir", dir},
+			{"xfce4-terminal", "--working-directory=" + dir},
+		} {
+			p, err := exec.LookPath(cand[0])
+			if err != nil {
+				continue
+			}
+			cmd = exec.Command(p, cand[1:]...)
+			break
+		}
+		if cmd == nil {
+			return errors.New("未找到可用的终端程序")
+		}
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }() // 终端常驻前台，仅后台回收避免僵尸进程
+	return nil
+}
+
 // GetMcps 返回 MCP 配置（路由器地址 + 服务项列表）。
 func (a *App) GetMcps() map[string]any {
 	base, servers := agent.GetMcps()

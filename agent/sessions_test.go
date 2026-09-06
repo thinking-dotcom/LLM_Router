@@ -161,3 +161,45 @@ func TestSessionDeleteOutsideRoot(t *testing.T) {
 		t.Fatal("root itself should be rejected")
 	}
 }
+
+// 终端目录解析：文件型会话 → 其所在目录；目录型会话 → 会话目录本身
+func TestSessionOpenDir(t *testing.T) {
+	// 文件型（Claude 布局）：Root/<分组>/<会话>.jsonl → 返回 <分组> 目录
+	rootFile := t.TempDir()
+	writeFile(t, filepath.Join(rootFile, "proj1", "a.jsonl"), 10)
+	withTestStore(t, "test-of", SessionStore{Root: rootFile, Kind: "file", Pattern: "*.jsonl", Depth: 2})
+	got, err := SessionOpenDir("test-of", filepath.Join(rootFile, "proj1", "a.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(rootFile, "proj1"); got != want {
+		t.Fatalf("open dir = %q, want %q", got, want)
+	}
+	// 分组层（非会话条目）→ 拒绝
+	if _, err := SessionOpenDir("test-of", filepath.Join(rootFile, "proj1")); err == nil {
+		t.Fatal("group layer should be rejected")
+	}
+
+	// 目录型（Cline 布局）：Root/<会话目录>/ → 返回会话目录本身
+	rootDir := t.TempDir()
+	writeFile(t, filepath.Join(rootDir, "sess1", "x.jsonl"), 5)
+	withTestStore(t, "test-od", SessionStore{Root: rootDir, Kind: "dir", Depth: 1})
+	got, err = SessionOpenDir("test-od", filepath.Join(rootDir, "sess1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(rootDir, "sess1"); got != want {
+		t.Fatalf("open dir = %q, want %q", got, want)
+	}
+
+	// 越界 / 不存在 / 未登记客户端 → 拒绝
+	if _, err := SessionOpenDir("test-od", filepath.Join(t.TempDir(), "evil")); err == nil {
+		t.Fatal("outside path should be rejected")
+	}
+	if _, err := SessionOpenDir("test-of", filepath.Join(rootFile, "proj1", "ghost.jsonl")); err == nil {
+		t.Fatal("missing session file should be rejected")
+	}
+	if _, err := SessionOpenDir("no-such-client", filepath.Join(rootFile, "proj1", "a.jsonl")); err == nil {
+		t.Fatal("unknown client should be rejected")
+	}
+}

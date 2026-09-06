@@ -935,7 +935,7 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-table col.c-size{width:64px}
 .sess-table col.c-files{width:48px}
 .sess-table col.c-time{width:118px}
-.sess-table col.c-act{width:34px}
+.sess-table col.c-act{width:66px}
 .sess-table input[type=checkbox]{accent-color:var(--accent);cursor:pointer;margin:0}
 .sess-table tbody tr.sel{background:var(--accent-soft)}
 .sr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700;text-align:left}
@@ -943,6 +943,8 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-size,.sr-files{font-family:var(--mono);font-size:9.5px;color:var(--t2)}
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
+.sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}
+.sess-table td .sess-term{font-family:var(--mono);font-weight:700;color:var(--t2)}
 
 /* ===== 深色主题精修：玻璃语言贯穿导航 / 弹层 / 文本选中 ===== */
 :root[data-theme="dark"] .right-nav{
