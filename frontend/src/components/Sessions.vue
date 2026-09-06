@@ -208,7 +208,7 @@ defineExpose({ loadClients, refresh, askDelete, state })
             <tr>
               <th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
               <th></th>
-              <th>{{ t('sessions.colName') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
+              <th class="th-sess">{{ t('sessions.colName') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
             </tr>
           </thead>
           <tbody>
