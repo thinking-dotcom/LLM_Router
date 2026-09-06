@@ -103,6 +103,10 @@ type SessionClient struct {
 	Count      int    `json:"count"`      // 会话条目数
 	TotalSize  int64  `json:"totalSize"`  // 会话总体积（字节）
 	LastMod    string `json:"lastMod"`    // 最近会话修改时间（空 = 无会话）
+	// 会话存储是否已接入文件级管理（可浏览/删除）。false 的客户端（会话为
+	// 库型存储或无本地落盘）在选择条置灰，Note 给出原因。
+	Managed bool   `json:"managed"`
+	Note    string `json:"note"`
 	// 终端「按会话恢复」能力（false = 该客户端不支持，ResumeNote 给原因）
 	ResumeSupported bool   `json:"resumeSupported"`
 	ResumeNote      string `json:"resumeNote"`
@@ -219,12 +223,24 @@ func buildSessionItem(p, rel string, d fs.DirEntry, isDir bool) (SessionItem, bo
 	return item, true
 }
 
-// ListSessionClients 返回注册了会话目录的客户端概览（按名称排序）。
+// sessionUnmanagedNote 未接入文件级会话管理的注册客户端置灰原因。
+// 这些客户端的会话要么不落盘为文件（Hermes），要么存于本地库（Kilo 的
+// kilo.db、Antigravity 的数据库/历史记录），与「会话 = 磁盘上可独立枚举/
+// 删除的文件或目录」的注册表模型不兼容，故不登记枚举删除。
+var sessionUnmanagedNote = map[string]string{
+	"hermes": "Hermes 不在本机落盘会话历史文件",
+	"kilo":   "Kilo 的会话存储在本地库 kilo.db，暂未接入文件级会话管理",
+	"agy":    "Antigravity 的会话存于本地数据库与历史记录，暂未接入文件级会话管理",
+}
+
+// ListSessionClients 返回客户端选择条概览：已接入文件级会话管理的客户端
+// （sessionStores 登记，带会话数/总体积/最近修改）排在前；其余注册客户端
+// （会话为库型存储或无本地落盘）置灰列于后，Note 给出原因。两段各自按名称排序。
 func ListSessionClients() []SessionClient {
-	out := make([]SessionClient, 0, len(sessionStores))
-	for id, st := range sessionStores {
-		_, rootAbs, _ := sessionStoreOf(id)
-		sc := SessionClient{ID: id, Name: sessionClientName(id), Root: rootAbs}
+	var managed []SessionClient
+	for id := range sessionStores {
+		st, rootAbs, _ := sessionStoreOf(id)
+		sc := SessionClient{ID: id, Name: sessionClientName(id), Root: rootAbs, Managed: true}
 		if st.Resume.Bin != "" {
 			sc.ResumeSupported = true
 		} else {
@@ -241,10 +257,23 @@ func ListSessionClients() []SessionClient {
 				sc.LastMod = lastMod.Format("2006-01-02 15:04:05")
 			}
 		}
-		out = append(out, sc)
+		managed = append(managed, sc)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out
+	sort.Slice(managed, func(i, j int) bool { return managed[i].Name < managed[j].Name })
+
+	var unmanaged []SessionClient
+	for _, ti := range ListTargets() {
+		if _, ok := sessionStores[ti.ID]; ok {
+			continue
+		}
+		note := sessionUnmanagedNote[ti.ID]
+		if note == "" {
+			note = "该客户端的会话存储暂未接入会话管理"
+		}
+		unmanaged = append(unmanaged, SessionClient{ID: ti.ID, Name: ti.Name, Note: note})
+	}
+	sort.Slice(unmanaged, func(i, j int) bool { return unmanaged[i].Name < unmanaged[j].Name })
+	return append(managed, unmanaged...)
 }
 
 // ListSessionItems 返回指定客户端的会话条目（修改时间新→旧）。

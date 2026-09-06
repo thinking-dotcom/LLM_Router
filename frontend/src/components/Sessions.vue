@@ -33,9 +33,10 @@ async function loadClients(pick) {
   const ids = clients.value.map(c => c.id)
   let id = pick && ids.includes(pick) ? pick : ''
   if (!id) {
-    // 默认选中第一个有会话的客户端；都没有则选第一个
-    const withCount = clients.value.find(c => c.count > 0)
-    id = withCount ? withCount.id : ids[0]
+    // 默认选中第一个有会话的已接入客户端；都没有则选第一个已接入客户端
+    const withCount = clients.value.find(c => c.managed && c.count > 0)
+    const anyManaged = clients.value.find(c => c.managed)
+    id = withCount ? withCount.id : (anyManaged ? anyManaged.id : ids[0])
   }
   await selectClient(id)
 }
@@ -63,8 +64,18 @@ function toggle(path) {
   selected.value = next
 }
 
+// 客户端胶囊点击：已接入（managed）才进入会话条目；未接入置灰，点击提示原因。
+function pickClient(c) {
+  if (!c.managed) {
+    toast(c.note || t('sessions.unmanaged'))
+    return
+  }
+  selectClient(c.id)
+}
+
 // 客户端胶囊悬停提示：名称 + 会话统计（总大小）或缺失根目录说明。
 function chipTip(c) {
+  if (!c.managed) return [c.name, c.note || t('sessions.unmanaged')].join('\n')
   const lines = [c.name]
   if (c.rootExists) {
     lines.push(t('sessions.total', { n: c.count || 0, size: fmtBytes(c.totalSize) }))
@@ -116,13 +127,13 @@ defineExpose({ loadClients })
 
 <template>
   <div class="sessions-wrap">
-    <!-- 客户端选择条：纯图标，悬停显示会话统计 -->
+    <!-- 客户端选择条：纯图标，悬停显示会话统计；未接入会话管理的客户端置灰 -->
     <div class="sess-clients">
       <button
         v-for="c in clients" :key="c.id"
-        class="sess-chip" :class="{ on: c.id === activeId, empty: !c.rootExists }"
+        class="sess-chip" :class="{ on: c.id === activeId, empty: c.managed && !c.rootExists, unmanaged: !c.managed }"
         :title="chipTip(c)"
-        @click="selectClient(c.id)"
+        @click="pickClient(c)"
       >
         <img v-if="targetLogo(c.id)" class="sess-chip-logo" :src="targetLogo(c.id)" alt="" draggable="false" />
       </button>
