@@ -931,16 +931,11 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sess-card .logs-scroll{flex:1;min-height:0;overflow-y:auto;scrollbar-width:none}
 .sess-card .logs-scroll::-webkit-scrollbar{display:none}
 .sess-table col.c-ck{width:26px}
-.sess-table col.c-group{width:26%}
-.sess-table col.c-size{width:64px}
-.sess-table col.c-files{width:48px}
 .sess-table col.c-time{width:118px}
 .sess-table col.c-act{width:66px}
 .sess-table input[type=checkbox]{accent-color:var(--accent);cursor:pointer;margin:0}
 .sess-table tbody tr.sel{background:var(--accent-soft)}
 .sr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);font-weight:700;text-align:left}
-.sr-group{font-family:var(--mono);font-size:9.5px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
-.sr-size,.sr-files{font-family:var(--mono);font-size:9.5px;color:var(--t2)}
 .sr-time{font-family:var(--mono);font-size:9.5px;color:var(--t3)}
 .sr-path{font-family:var(--mono);font-size:9px;color:var(--t3);word-break:break-all}
 .sess-table td .btn-ico{padding:2px 5px;font-size:11px;line-height:1;vertical-align:middle}

@@ -140,21 +140,18 @@ defineExpose({ loadClients })
       <div class="logs-scroll">
         <table v-if="items.length" class="logs-table sess-table">
           <colgroup>
-            <col class="c-ck"><col class="c-name"><col class="c-group"><col class="c-size"><col class="c-files"><col class="c-time"><col class="c-act">
+            <col class="c-ck"><col class="c-name"><col class="c-time"><col class="c-act">
           </colgroup>
           <thead>
             <tr>
               <th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
-              <th>{{ t('sessions.colName') }}</th><th>{{ t('sessions.colGroup') }}</th><th>{{ t('sessions.colSize') }}</th><th>{{ t('sessions.colFiles') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
+              <th>{{ t('sessions.colName') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="it in items" :key="it.path" :class="{ sel: selected.has(it.path) }">
               <td><input type="checkbox" :checked="selected.has(it.path)" @change="toggle(it.path)"></td>
               <td class="sr-name" :title="it.path">{{ it.name }}</td>
-              <td class="sr-group" :title="it.group">{{ it.group || '—' }}</td>
-              <td class="sr-size">{{ fmtBytes(it.size) }}</td>
-              <td class="sr-files">{{ it.files }}</td>
               <td class="sr-time">{{ it.mtime }}</td>
               <td>
                 <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>

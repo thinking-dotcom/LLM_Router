@@ -31,9 +31,6 @@ export const I18N = {
     'sessions.deleted': '已删除 {n} 个会话',
     'sessions.total': '共 {n} 个会话 · {size}',
     'sessions.colName': '会话',
-    'sessions.colGroup': '项目/分组',
-    'sessions.colSize': '大小',
-    'sessions.colFiles': '文件数',
     'sessions.colTime': '修改时间',
 
     // 概览
@@ -991,9 +988,6 @@ export const I18N = {
     'sessions.deleted': 'Deleted {n} session(s)',
     'sessions.total': '{n} session(s) · {size}',
     'sessions.colName': 'Session',
-    'sessions.colGroup': 'Project/Group',
-    'sessions.colSize': 'Size',
-    'sessions.colFiles': 'Files',
     'sessions.colTime': 'Modified',
 
     'server.status': 'Server Status',
