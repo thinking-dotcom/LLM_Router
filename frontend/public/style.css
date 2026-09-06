@@ -936,10 +936,10 @@ body{font-family:var(--font);background:var(--bg-grad);color:var(--text);font-si
 .sr-logo-img:hover{transform:scale(1.15)}
 .sr-logo-img:focus-visible{outline:1.5px solid var(--accent);outline-offset:1px}
 /* 时间列：所属客户端 logo（纯标识）+ 修改时间 紧贴 */
-/* 「会话 ID」列：表头居中、数据（复制按钮+ID）左对齐 */
-.sess-table td.sr-name{text-align:left}
-.sr-name{min-width:0;overflow:hidden;text-align:left}
-.sr-name .sr-inner{display:flex;align-items:center;gap:6px;min-width:0}
+/* 「会话 ID」列：表头与数据（复制按钮+ID）整列居中 */
+.sess-table td.sr-name{text-align:center}
+.sr-name{min-width:0;overflow:hidden;text-align:center}
+.sr-name .sr-inner{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0}
 .sr-name .sr-copy{
   flex-shrink:0;width:17px;height:17px;padding:0;display:grid;place-items:center;
   border:none;background:transparent;border-radius:5px;color:var(--t3);cursor:pointer;
