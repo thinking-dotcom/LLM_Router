@@ -32,6 +32,21 @@ func ClearFetchedModel(providerID string) {
 	fetchedModels.Delete(providerID)
 }
 
+// GetFetchedModels returns the upstream-fetched model list cached for a
+// provider id (populated by FetchModels and the background fetchers). Unlike
+// GetProviderModels it deliberately ignores the statically configured
+// p.Models, so callers that must report exactly what the upstream /models
+// endpoint returned (桌面端供应商卡片的模型个数) get the raw upstream list.
+// Returns a copy so callers cannot mutate the cache.
+func GetFetchedModels(providerID string) []string {
+	if v, ok := fetchedModels.Load(providerID); ok {
+		if m, ok := v.([]string); ok {
+			return append([]string(nil), m...)
+		}
+	}
+	return nil
+}
+
 // GetProviderModels returns the model list for a provider.
 // It prefers the statically configured p.Models; if that is empty it falls
 // back to the runtime-fetched cache.
@@ -39,12 +54,7 @@ func GetProviderModels(p types.Provider) []string {
 	if len(p.Models) > 0 {
 		return p.Models
 	}
-	if v, ok := fetchedModels.Load(p.ID); ok {
-		if m, ok := v.([]string); ok {
-			return m
-		}
-	}
-	return nil
+	return GetFetchedModels(p.ID)
 }
 
 // ResolveProvider determines which provider should handle the given model
@@ -74,6 +84,26 @@ func ResolveProviderWithStrip(model string, config *types.Config) (*types.Provid
 	// 空 model 走默认/唯一启用服务商，或与 * 通配模型匹配；
 	// 带 model 的请求路由行为不受影响。
 	return resolveProviderInner(model, config)
+}
+
+// ResolveWithFallback 原模型未命中时按配置的兜底模型链（FallbackModels，按序
+// 多层兜底）逐个改写重解析，首个能路由的生效。返回 (服务商, stripAt, 生效模型)；
+// 全部落空时 provider 为 nil、model 原样返回。
+func ResolveWithFallback(model string, config *types.Config) (*types.Provider, bool, string) {
+	p, strip := ResolveProviderWithStrip(model, config)
+	if p != nil {
+		return p, strip, model
+	}
+	for _, fb := range config.FallbackModels {
+		fb = strings.TrimSpace(fb)
+		if fb == "" || fb == model {
+			continue
+		}
+		if p2, s2 := ResolveProviderWithStrip(fb, config); p2 != nil {
+			return p2, s2, fb
+		}
+	}
+	return nil, false, model
 }
 
 func resolveProviderInner(model string, config *types.Config) (*types.Provider, bool) {

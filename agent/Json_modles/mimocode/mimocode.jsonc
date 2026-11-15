@@ -1,0 +1,16 @@
+{
+  // MiMo Code 主配置（~/.config/mimocode/mimocode.jsonc，JSONC 允许 // 注释与尾逗号）。
+  // 本模板仅作首次初始值：接入 LLM Router 后 provider.<键>.options.baseURL
+  // 指向本路由器，顶层 model / small_model 以「键/模型ID」引用。
+  "$schema": "https://mimo.xiaomi.com/mimocode/config.json",
+  "model": "",
+  "small_model": "",
+  "provider": {
+    "llm": {
+      "options": {
+        "baseURL": "",
+        "apiKey": ""
+      }
+    }
+  }
+}

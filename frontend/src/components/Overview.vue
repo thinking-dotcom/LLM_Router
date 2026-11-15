@@ -44,7 +44,7 @@ if (document.fonts?.ready) document.fonts.ready.then(() => { if (!paneFixed) ret
 onMounted(() => setTimeout(fixPaneWidth, 300))
 
 const EP_FORMATS = [
-  { key: 'openai', label: 'OpenAI 兼容' },
+  { key: 'openai', label: 'ep.fmtOpenai' },
   { key: 'anthropic', label: 'Anthropic' },
   { key: 'gemini', label: 'Gemini' },
 ]
@@ -191,7 +191,6 @@ async function openAdmin(e) {
     <!-- 接入地址 -->
     <div class="endpoint-card">
       <div class="ep-head">
-        <span>{{ t('ep.title') }}</span>
         <button
           class="btn btn-xs btn-ghost open-btn"
           :class="{ disabled: !running }"
@@ -207,6 +206,8 @@ async function openAdmin(e) {
             <button class="btn btn-xs btn-ghost copy-btn" :title="t('ep.copySdkTip')" @click="copyEndpoint(endpoint.sdk, $event)">{{ t('ep.copy') }}</button></div>
         </div>
       </div>
+      <!-- 协议切换：点击切换（epFmt 只决定展示哪套端点路径，无副作用）；
+           不做滑入切换，避免光标扫过时误换 -->
       <div class="ep-tabs">
         <button
           v-for="f in EP_FORMATS"
@@ -214,13 +215,13 @@ async function openAdmin(e) {
           class="ep-tab"
           :class="{ active: epFmt === f.key }"
           @click="epFmt = f.key"
-        >{{ f.label }}</button>
+        >{{ t(f.label) }}</button>
       </div>
       <div class="ep-body">
-        <div class="ep-row">
-          <div class="ep-label">{{ t('ep.pathLabel') }}</div>
-          <div class="ep-url"><code>{{ endpoint.path }}</code>
-            <button class="btn btn-xs btn-ghost copy-btn" :title="t('ep.copyPathTip')" @click="copyEndpoint(endpoint.path, $event)">{{ t('ep.copy') }}</button></div>
+        <div v-for="p in endpoint.paths" :key="p.p" class="ep-row">
+          <div class="ep-label">{{ t('ep.pathLabel') }}<template v-if="p.tag"> · {{ t(p.tag) }}</template></div>
+          <div class="ep-url"><code>{{ p.p }}</code>
+            <button class="btn btn-xs btn-ghost copy-btn" :title="t('ep.copyPathTip')" @click="copyEndpoint(p.p, $event)">{{ t('ep.copy') }}</button></div>
         </div>
       </div>
     </div>

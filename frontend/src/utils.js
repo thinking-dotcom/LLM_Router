@@ -6,16 +6,26 @@ export function esc(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-export const fmtNum = n => n >= 1e9 ? (n / 1e9).toFixed(2) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n)
+// 进位边界：本档四舍五入满 1000 时升到上一档单位，避免出现「1000.0k」这类越界值
+export const fmtNum = n => n >= 999.95e6 ? (n / 1e9).toFixed(2) + 'B' : n >= 999.95e3 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(n)
 
 // 百分比展示：0 显示 0.0%（此前会误入 <0.1% 分支）；大于 0 且 <0.1% 显示 <0.1%，其余保留 1 位小数
 export const fmtPct = pct => pct <= 0 ? '0.0%' : pct < 0.1 ? '<0.1%' : pct.toFixed(1) + '%'
 
-// 黄金角取色：任意数量模型都不会颜色重复
+// 黄金角取色：任意数量模型都不会颜色重复。
+// 起点取主色蓝（~215°，与界面单一主色同族）而非 0°（红色＝界面里的错误语义，
+// 且首个模型常是最主要的一条）；饱和度压到 46% 与中性面色同档，避免图表比界面
+// 更抢眼；奇偶索引交替明暗，相邻扇区在色相之外多一层亮度区分。
 export const chartColor = i => {
-  const hue = Math.round(i * 137.508) % 360
-  return `hsl(${hue}, 72%, 62%)`
+  const hue = Math.round(215 + i * 137.508) % 360
+  return `hsl(${hue}, 46%, ${i % 2 ? 52 : 60}%)`
 }
+
+// 模板内延迟执行。模板表达式里的裸 setTimeout 会被编译成 `_ctx.setTimeout`——
+// render proxy 上并无该属性（它只回退到 setup 绑定与 app.config.globalProperties，
+// 而 setTimeout 两者都不在），运行时会抛 "is not a function"，延迟关闭弹层静默失效。
+// 同理裸写 window.setTimeout 也会变成 `_ctx.window`。故模板里一律走此 helper。
+export const delay = (fn, ms = 120) => setTimeout(fn, ms)
 
 // 本地日期键，须与后端 ComputeStats 的 localDateKey 完全一致
 export function todayKey() {
@@ -26,9 +36,13 @@ export function todayKey() {
 // 客户端接入信息：统一 /router 地址，协议由路由器按请求路径自动识别
 export function endpointInfo(baseURL, fmt) {
   const base = String(baseURL || '').replace(/\/+$/, '') + '/router'
-  if (fmt === 'anthropic') return { sdk: base, path: base + '/v1/messages' }
-  if (fmt === 'gemini') return { sdk: base, path: base + '/v1beta/models/{model}:generateContent' }
-  return { sdk: base, path: base + '/chat/completions' }
+  // paths：{ p: 完整路径, tag: 区分用 i18n 键（单路径为空串） }
+  if (fmt === 'anthropic') return { sdk: base, paths: [{ p: base + '/v1/messages', tag: '' }] }
+  // OpenAI 兼容两代接口：Chat Completions + Responses API
+  if (fmt === 'openai') return { sdk: base, paths: [{ p: base + '/chat/completions', tag: 'ep.openaiChat' }, { p: base + '/v1/responses', tag: 'ep.openaiResponses' }] }
+  // Gemini 两代协议并列展示：legacy generateContent + 新协议 Interactions（2026 GA）
+  if (fmt === 'gemini') return { sdk: base, paths: [{ p: base + '/v1beta/models/{model}:generateContent', tag: 'ep.geminiLegacy' }, { p: base + '/v1beta/interactions', tag: 'ep.geminiInter' }] }
+  return { sdk: base, paths: [{ p: base + '/chat/completions', tag: 'ep.openaiChat' }] }
 }
 
 // 复制文本；silent=true 时由调用方自己提示

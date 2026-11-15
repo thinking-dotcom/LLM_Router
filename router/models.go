@@ -43,6 +43,8 @@ func FetchModels(provider types.Provider) types.FetchModelsResult {
 		} else {
 			setModelsHeaders(req, provider)
 		}
+		// opencode 网关的 /models 同样要求 x-opencode-session（后台探测无入站可透传，用派生值）
+		applyOpencodeSession(req.Header, provider, nil)
 		resp, err := modelsClient.Do(req)
 		if err != nil {
 			// 传输层错误串含完整 URL（Gemini 的 ?key=APIKEY），先脱敏再记录

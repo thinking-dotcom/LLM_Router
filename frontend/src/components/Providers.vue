@@ -34,7 +34,9 @@ function dotTitle(p) {
   return t('prov.untested')
 }
 
-// 模型数：优先用 GetProviderModels（不发网络），无结果时对启用项再 FetchModels
+// 模型数：只统计「上游返回的模型列表」——先读不发网络的上游拉取缓存
+// （GetProviderModels 只返回上游缓存），缓存为空时（含未启用项）再 FetchModels
+// 实时拉取一次；失败才显示「拉取失败」，不再用配置里的静态 models 充当模型数。
 function modelCountText(p) {
   const c = provModels[p.id]
   if (!c) return ''
@@ -53,13 +55,18 @@ async function loadModelCount(p) {
   try {
     const r = await api.GetProviderModels(p)
     if (!owned()) return
-    const n = r && Array.isArray(r.models) ? r.models.length : 0
-    if (n > 0) { provModels[id] = { count: n }; return }
-    if (!p.enabled) { provModels[id] = { count: 0 }; return }
+    const cached = r && Array.isArray(r.models) ? r.models : []
+    // 后台已拉过：直接用上游缓存（列表 + 条数），不再发网络
+    if (cached.length > 0) { provModels[id] = { count: cached.length, models: cached }; return }
+    // 未拉取过（含未启用项）：实时向上游要一次模型列表
     const fr = await api.FetchModels(p)
     if (!owned()) return
-    if (fr && fr.ok) provModels[id] = { count: fr.models ? fr.models.length : 0 }
-    else provModels[id] = { failed: true }
+    if (fr && fr.ok) {
+      const list = Array.isArray(fr.models) ? fr.models : []
+      provModels[id] = { count: list.length, models: list }
+    } else {
+      provModels[id] = { failed: true }
+    }
   } catch (e) {
     if (owned()) provModels[id] = { failed: true }
   } finally {
@@ -78,7 +85,8 @@ async function checkProvider(providerId) {
     // 归属校验：响应回来时该服务商已被删除则丢弃结果
     if (!state.config?.providers?.some(p => p.id === providerId)) { delete provStatus[providerId]; return }
     provStatus[providerId] = r.ok ? 'ok' : 'fail'
-    provModels[providerId] = { count: r.ok && r.models ? r.models.length : 0, failed: !r.ok }
+    const list = r.ok && Array.isArray(r.models) ? r.models : []
+    provModels[providerId] = { count: list.length, models: list, failed: !r.ok }
     if (!r.ok) provErrors[providerId] = (r.error || '').slice(0, 50)
   } catch (e) {
     provStatus[providerId] = 'fail'
@@ -107,6 +115,16 @@ const provSig = {} // id -> 签名
 function provSignature(p) {
   const al = Object.entries(p.aliases || {}).sort((a, b) => a[0] < b[0] ? -1 : 1).map(([k, v]) => k + '=' + v).join(',')
   return `${p.id}|${p.enabled !== false}|${p.baseUrl || ''}|${p.type || ''}|${String((p.models || []).join(','))}|${al}`
+}
+
+// 卡片上的格式标签：type=gemini 时按 base 区分两种原生协议，显示端点名
+// gemini-generateContent / gemini-interactions，与添加/编辑对话框里的选项名
+// 保持一致（存储类型仍是后端的 gemini）。
+function provTypeLabel(p) {
+  if (p.type === 'gemini') {
+    return /\/interactions/i.test(p.baseUrl || '') ? 'gemini-interactions' : 'gemini-generateContent'
+  }
+  return p.type || ''
 }
 
 // 服务商列表变化时加载模型数并安排自动检测
@@ -146,17 +164,21 @@ function openMenu(p, event) {
     ui.menu.open = false
     return
   }
-  ui.menu.open = true
+  // 只存纯数值：DOMRect 经 reactive 代理后属性读取不稳定（原型 getter）
+  const r = event.currentTarget.getBoundingClientRect()
   ui.menu.provider = p
-  ui.menu.rect = event.currentTarget.getBoundingClientRect()
+  ui.menu.rect = { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+  ui.menu.open = true
 }
 
-watch(() => ui.menu.open, async (open) => {
-  if (open) {
-    await nextTick()
-    if (menuEl.value && ui.menu.rect) placePopup(menuEl.value, ui.menu.rect)
-  }
-})
+// 定位到锚点：菜单已 Teleport 到 body，坐标与视口一致
+async function placeMenu() {
+  await nextTick()
+  if (menuEl.value && ui.menu.rect) placePopup(menuEl.value, ui.menu.rect)
+}
+
+// open 首次打开、rect 切换服务商（open 不变）都要重新定位
+watch(() => [ui.menu.open, ui.menu.rect], ([open]) => { if (open) placeMenu() })
 
 async function menuAction(action) {
   const p = ui.menu.provider
@@ -186,9 +208,18 @@ function onDocClick(e) {
   ui.menu.open = false
 }
 
-onMounted(() => document.addEventListener('click', onDocClick))
+// 菜单锚在卡片上，一旦滚动/改窗口就与锚点脱节，直接关闭
+function closeMenu() { ui.menu.open = false }
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  window.addEventListener('resize', closeMenu)
+  window.addEventListener('scroll', closeMenu, true) // 捕获阶段：兼容 panel-body 内部滚动
+})
 onUnmounted(() => {
   document.removeEventListener('click', onDocClick)
+  window.removeEventListener('resize', closeMenu)
+  window.removeEventListener('scroll', closeMenu, true)
   clearTimeout(autoCheckTimer)
 })
 
@@ -210,16 +241,17 @@ defineExpose({ addProvider })
             <div style="display:flex;align-items:center;gap:6px">
               <span class="prov-dot" :class="dotClass(p)" :title="dotTitle(p)"></span>
               <span class="pname" :title="p.name">{{ p.name }}</span>
-              <span class="ptype">{{ p.type }}</span>
+              <span class="ptype">{{ provTypeLabel(p) }}</span>
             </div>
             <div style="display:flex;align-items:center;gap:6px">
               <label class="toggle">
                 <input type="checkbox" :checked="p.enabled" @change="toggleProvider(p, $event.target.checked)">
                 <span class="slider"></span>
               </label>
-              <span class="menu-btn" :title="t('prov.more')" @click.stop="openMenu(p, $event)">⋯</span>
+              <span class="menu-btn" :title="t('prov.more')" @click.stop="openMenu(p, $event)"><i class="fa-solid fa-ellipsis"></i></span>
             </div>
           </div>
+          <!-- 卡片只给概览（地址 + 模型数），模型 ID 明细走 ⋯ 菜单的「查看模型 / 复制模型 ID」 -->
           <div class="pmeta">
             <span class="purl">{{ p.baseUrl || '' }}</span>
             <span class="pmcount">{{ modelCountText(p) }}</span>
@@ -228,13 +260,18 @@ defineExpose({ addProvider })
       </div>
     </template>
 
-    <!-- ⋯ 菜单 -->
-    <div v-if="ui.menu.open" ref="menuEl" class="popup-menu" style="position:fixed;left:0;top:0">
-      <div class="popup-item" @click="menuAction('test')">{{ t('prov.test') }}</div>
-      <div class="popup-item" @click="menuAction('edit')">{{ t('prov.edit') }}</div>
-      <div class="popup-item" @click="menuAction('viewModels')">{{ t('prov.viewModels') }}</div>
-      <div class="popup-item" @click="menuAction('ids')">{{ t('prov.copyIds') }}</div>
-      <div class="popup-item" @click="menuAction('delete')" style="color:var(--red)">{{ t('prov.delete') }}</div>
-    </div>
+    <!-- ⋯ 菜单
+         Teleport 到 body：深色主题 .panel 带 backdrop-filter，会成为 fixed 子元素的
+         包含块，留在面板内时菜单按面板原点定位（偏移到面板右下、甚至被 overflow 裁掉），
+         脱离面板后 position:fixed 才真正相对视口、与锚点坐标一致 -->
+    <Teleport to="body">
+      <div v-if="ui.menu.open" ref="menuEl" class="popup-menu" style="position:fixed;left:0;top:0">
+        <div class="popup-item" @click="menuAction('test')">{{ t('prov.test') }}</div>
+        <div class="popup-item" @click="menuAction('edit')">{{ t('prov.edit') }}</div>
+        <div class="popup-item" @click="menuAction('viewModels')">{{ t('prov.viewModels') }}</div>
+        <div class="popup-item" @click="menuAction('ids')">{{ t('prov.copyIds') }}</div>
+        <div class="popup-item" @click="menuAction('delete')" style="color:var(--red)">{{ t('prov.delete') }}</div>
+      </div>
+    </Teleport>
   </div>
 </template>

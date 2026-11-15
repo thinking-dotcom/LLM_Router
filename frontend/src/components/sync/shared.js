@@ -1,5 +1,6 @@
 // Clients.vue 拆分出的共享工具与常量（无状态，无 Vue 副作用）
 import { t } from '../../i18n'
+import { repairJsonText } from '../../utils'
 
 // ============ 常量 ============
 export const ACCESS_OPTIONS = [
@@ -112,21 +113,26 @@ export function permModeNext(mode) {
 // ============ 客户端 logo（frontend/public/logos/）============
 export const TARGET_LOGOS = {
   'claude-code': '/logos/claude.svg',
-  'gemini': '/logos/gemini.svg',
   'opencode': '/logos/opencode.svg',
   'grok-build': '/logos/grok.svg',
   'pi': '/logos/pi.svg',
   'codex': '/logos/codex.svg',
-  'cline': '/logos/cline.svg',
-  'hermes': '/logos/hermes.svg',
   'commandcode': '/logos/commandcode.svg',
   'copilot': '/logos/copilot.svg',
   'kimi': '/logos/kimi.svg',
-  'kilo': '/logos/kilo.svg',
+  'mimocode': '/logos/xiaomimimo.svg',
   'agy': '/logos/agy.svg',
   'codebuddy': '/logos/codebuddy.svg',
+  'deepcode': '/logos/deepcode.svg',
 }
 export function targetLogo(id) { return TARGET_LOGOS[id] || '' }
+
+// JSONC 宽容解析：先剥离注释/尾逗号，失败再走 repairJsonText 尝试修复
+export function parseJsonc(text) {
+  const rep = repairJsonText(text)
+  if (!rep) throw new Error('invalid jsonc')
+  return JSON.parse(rep.text)
+}
 
 // ============ TOML 引号工具 ============
 export const tq = v => '"' + String(v ?? '').replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'

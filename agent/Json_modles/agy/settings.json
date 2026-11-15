@@ -17,15 +17,20 @@
     "topP": null,
     "topK": null
   },
+  "artifactReviewPolicy": "",
   "permissions": {
     "toolPermission": "",
     "allow": [],
+    "ask": [],
     "deny": []
   },
   "enableTerminalSandbox": null,
   "allowNonWorkspaceAccess": null,
   "useG1Credits": null,
   "enableTelemetry": null,
+  "notifications": null,
+  "showTips": null,
+  "showFeedbackSurvey": null,
   "colorScheme": "",
   "altScreenMode": "",
   "runningLightSpeed": "",

@@ -8,6 +8,38 @@ import (
 	"llm-router-go/types"
 )
 
+// normFnParams 归一 Gemini 函数声明的 parameters。Gemini 协议中该字段可选
+// （无参函数可整体省略），原样透传会得到 parameters:null，严格的 OpenAI 兼容
+// 上游（serde 反序列化）按 missing field `parameters` 报 400。处理规则：
+// 优先取 parameters，其次新式 parametersJsonSchema（标准 JSON Schema 形态），
+// 都没有则补空对象 schema；已有 schema 缺 type/properties 时浅克隆补齐，
+// 不改动调用方的原始 map。
+func normFnParams(fdm map[string]any) map[string]any {
+	p, _ := fdm["parameters"].(map[string]any)
+	if p == nil {
+		p, _ = fdm["parametersJsonSchema"].(map[string]any)
+	}
+	if p == nil {
+		return map[string]any{"type": "object", "properties": map[string]any{}}
+	}
+	if _, hasType := p["type"]; hasType {
+		if _, hasProps := p["properties"]; hasProps {
+			return p
+		}
+	}
+	cloned := make(map[string]any, len(p)+2)
+	for k, v := range p {
+		cloned[k] = v
+	}
+	if _, ok := cloned["type"]; !ok {
+		cloned["type"] = "object"
+	}
+	if _, ok := cloned["properties"]; !ok {
+		cloned["properties"] = map[string]any{}
+	}
+	return cloned
+}
+
 // OpenaiFromGemini converts a Gemini request body to OpenAI chat shape
 func OpenaiFromGemini(body any) map[string]any {
 	m, _ := body.(map[string]any)
@@ -16,15 +48,23 @@ func OpenaiFromGemini(body any) map[string]any {
 	}
 	out := map[string]any{"model": strOr(m["model"], ""), "messages": []any{}, "stream": false}
 
+	// thoughtSignature 往返：按「归一化消息序号 → 签名队列」记录，由 ToGemini 按同序回填。
+	// 序号口径必须与 ToGemini 的 msgIdx 完全一致：对 messages 中每条消息（含 system）
+	// 都自增，否则带 systemInstruction 时记录整体偏移、签名被静默丢弃。
+	msgCount := 0
+	var sigRecs []any
+
 	// systemInstruction 兼容两种形式：字符串与 {parts:[...]}。
 	// 此前只处理 map 形式，字符串形式的系统提示整条丢失。
 	if si, ok := m["systemInstruction"].(string); ok && si != "" {
 		out["messages"] = append(out["messages"].([]any), map[string]any{"role": "system", "content": si})
+		msgCount++
 	} else if si, ok := m["systemInstruction"].(map[string]any); ok {
 		if siParts, ok := si["parts"].([]any); ok {
 			text := partsToText(siParts)
 			if text != "" {
 				out["messages"] = append(out["messages"].([]any), map[string]any{"role": "system", "content": text})
+				msgCount++
 			}
 		}
 	}
@@ -70,10 +110,10 @@ func OpenaiFromGemini(body any) map[string]any {
 					} else if fu, _ := fd["file_uri"].(string); fu != "" {
 						userParts = append(userParts, map[string]any{"type": "image_url", "image_url": map[string]any{"url": fu}})
 					}
-				} else if _, ok := pm["executableCode"]; ok {
-					userParts = append(userParts, map[string]any{"type": "text", "text": "[executableCode]"})
-				} else if _, ok := pm["codeExecutionResult"]; ok {
-					userParts = append(userParts, map[string]any{"type": "text", "text": "[codeExecutionResult]"})
+				} else if ec, ok := pm["executableCode"].(map[string]any); ok {
+					userParts = append(userParts, map[string]any{"type": "text", "text": renderExecutableCode(ec)})
+				} else if cr, ok := pm["codeExecutionResult"].(map[string]any); ok {
+					userParts = append(userParts, map[string]any{"type": "text", "text": renderCodeExecutionResult(cr)})
 				} else if fr, ok := pm["functionResponse"].(map[string]any); ok {
 					cid, _ := fr["id"].(string)
 					if cid == "" {
@@ -109,6 +149,7 @@ func OpenaiFromGemini(body any) map[string]any {
 			if len(toolResults) > 0 {
 				msgs := out["messages"].([]any)
 				out["messages"] = append(msgs, toolResults...)
+				msgCount += len(toolResults)
 			}
 			if len(userParts) > 0 {
 				if len(userParts) == 1 && isTextPart(userParts[0]) {
@@ -116,10 +157,14 @@ func OpenaiFromGemini(body any) map[string]any {
 				} else {
 					out["messages"] = append(out["messages"].([]any), map[string]any{"role": "user", "content": userParts})
 				}
+				msgCount++
 			}
 		} else {
 			modelParts := []any{}
 			toolCalls := []any{}
+			var modelSigs []any // 本条模型消息的全部签名（并集，供无分类信息时按序兜底）
+			var textSigs []any  // 挂在 text 类 part 上的签名（按序）
+			var fcSigs []any    // 挂在 functionCall 上的签名（按序）
 			for _, p := range partsIn {
 				pm, _ := p.(map[string]any)
 				if pm == nil {
@@ -129,9 +174,23 @@ func OpenaiFromGemini(body any) map[string]any {
 				if th, _ := pm["thought"].(bool); th {
 					continue
 				}
+				// thoughtSignature（Gemini 3 思维签名，不透明 base64）：跨型往返保真
+				// 所需，随消息序号入 IR。签名与具体 part 绑定，故按 part 类型分别入队，
+				// 由 ToGemini 精确回填——只按序盲配会在「一条消息里既有文本又有工具
+				// 调用、签名却只在 functionCall 上」时把签名贴到 text，反使
+				// functionCall 丢签名（上游报 MISSING_THOUGHT_SIGNATURE）。
+				sig, _ := pm["thoughtSignature"].(string)
 				if text, _ := pm["text"].(string); text != "" {
 					modelParts = append(modelParts, map[string]any{"type": "text", "text": text})
+					if sig != "" {
+						textSigs = append(textSigs, sig)
+						modelSigs = append(modelSigs, sig)
+					}
 				} else if fc, ok := pm["functionCall"].(map[string]any); ok {
+					if sig != "" {
+						fcSigs = append(fcSigs, sig)
+						modelSigs = append(modelSigs, sig)
+					}
 					cid, _ := fc["id"].(string)
 					if cid == "" {
 						cid = fmt.Sprintf("call_%d", seq)
@@ -148,6 +207,18 @@ func OpenaiFromGemini(body any) map[string]any {
 						"function": map[string]any{"name": fc["name"], "arguments": string(argsB)},
 					})
 					seq++
+				} else if ec, ok := pm["executableCode"].(map[string]any); ok {
+					modelParts = append(modelParts, map[string]any{"type": "text", "text": renderExecutableCode(ec)})
+					if sig != "" {
+						textSigs = append(textSigs, sig)
+						modelSigs = append(modelSigs, sig)
+					}
+				} else if cr, ok := pm["codeExecutionResult"].(map[string]any); ok {
+					modelParts = append(modelParts, map[string]any{"type": "text", "text": renderCodeExecutionResult(cr)})
+					if sig != "" {
+						textSigs = append(textSigs, sig)
+						modelSigs = append(modelSigs, sig)
+					}
 				}
 			}
 			amsg := map[string]any{"role": "assistant"}
@@ -165,8 +236,30 @@ func OpenaiFromGemini(body any) map[string]any {
 					amsg["content"] = modelParts
 				}
 			}
+			if len(modelSigs) > 0 {
+				rec := map[string]any{
+					"message":    msgCount,
+					"signatures": modelSigs,
+				}
+				// 分类队列：回填端据此把签名贴回同类型 part；signatures 保留为
+				// 并集，供记录缺分类信息时退回按序兜底。
+				if len(textSigs) > 0 {
+					rec["textSignatures"] = textSigs
+				}
+				if len(fcSigs) > 0 {
+					rec["fcSignatures"] = fcSigs
+				}
+				sigRecs = append(sigRecs, rec)
+			}
+			msgCount++
 			out["messages"] = append(out["messages"].([]any), amsg)
 		}
+	}
+
+	// thoughtSignature 经 IR 随请求携带：原生 Gemini 出站（ToGemini）按消息序号
+	// 回填；openai / gemini-openai 上游不识别该概念，由 stripClientExtensions 剥离。
+	if len(sigRecs) > 0 {
+		types.IRSet(out, types.ExtGeminiThoughtSigs, sigRecs)
 	}
 
 	// Generation config
@@ -255,7 +348,7 @@ func OpenaiFromGemini(body any) map[string]any {
 				}
 				openaiTools = append(openaiTools, map[string]any{
 					"type":     "function",
-					"function": map[string]any{"name": fdm["name"], "description": fdm["description"], "parameters": fdm["parameters"]},
+					"function": map[string]any{"name": fdm["name"], "description": fdm["description"], "parameters": normFnParams(fdm)},
 				})
 			}
 			if _, ok := tm["codeExecution"]; ok {
@@ -309,34 +402,50 @@ func OpenaiFromGemini(body any) map[string]any {
 }
 
 // reasoningEffortFromThinking 把 Gemini thinkingConfig 折算为统一推理档位
-// （reasoning_effort）。Gemini 3 系模型用 thinkingLevel（LOW/MEDIUM/HIGH），
-// 2.5 系用 thinkingBudget（token 预算），两者取其一。
+// （reasoning_effort）。取值与阈值集中在映射表（format/reasoning_table.go）：
+// 3 系模型用 thinkingLevel（LOW/MEDIUM/HIGH），2.5 系用 thinkingBudget（token
+// 预算），两者取其一。
+//
+// thinkingBudget 的官方语义：0 = 关闭思考，-1 = 动态思考（模型自行决定思考量，
+// 是 Gemini 系 CLI 的常见默认值），正数 = 固定 token 预算。负值不能折成 none
+// ——那会把「模型自决」变成「禁用思考」，语义正好相反，严格校验的 OpenAI 兼容
+// 上游还可能因 reasoning_effort=none 非法而 400；这里返回空串表示不折算，保持
+// 「未指定」，由上游按其默认动态策略执行（客户端已携带参数，路由器不会再注入
+// 全局档位：ExtGeminiThinkingConfig 存在即视为已配置）。
 func reasoningEffortFromThinking(tc map[string]any) string {
-	if lv, ok := tc["thinkingLevel"].(string); ok && lv != "" {
-		switch strings.ToUpper(lv) {
-		case "LOW":
-			return "low"
-		case "MEDIUM":
-			return "medium"
-		case "HIGH":
-			return "high"
-		default:
-			return strings.ToLower(lv)
-		}
+	return decodeGeminiThinking(tc).tier
+}
+
+// renderExecutableCode 把 Gemini executableCode part 渲染为 Markdown 代码文本，
+// 跨型转换时保留代码内容本身（此前仅输出占位符，非 Gemini 上游看到的是空占位，
+// 代码执行语境完全丢失）。
+func renderExecutableCode(ec map[string]any) string {
+	code, _ := ec["code"].(string)
+	if code == "" {
+		return "[executableCode]"
 	}
-	if b, ok := tc["thinkingBudget"].(float64); ok {
-		switch {
-		case b <= 0:
-			return "none"
-		case b < 2048:
-			return "low"
-		case b < 16384:
-			return "medium"
-		default:
-			return "high"
-		}
+	lang, _ := ec["language"].(string)
+	if lang == "" {
+		lang = "python"
 	}
-	return ""
+	return "```" + strings.ToLower(lang) + "\n" + code + "\n```"
+}
+
+// renderCodeExecutionResult 把 codeExecutionResult part 渲染为执行输出文本；
+// 非 OK 结局保留结局标记，便于上游模型理解执行失败语境。
+func renderCodeExecutionResult(cr map[string]any) string {
+	output, _ := cr["output"].(string)
+	outcome, _ := cr["outcome"].(string)
+	if output == "" {
+		if outcome == "" {
+			return "[codeExecutionResult]"
+		}
+		return "[codeExecutionResult:" + outcome + "]"
+	}
+	if outcome != "" && outcome != "OUTCOME_OK" {
+		return "[codeExecutionResult:" + outcome + "]\n" + output
+	}
+	return output
 }
 
 func isTextPart(p any) bool {

@@ -8,6 +8,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // 单入口：index.html（主界面 + --read 阅读器 / --term 内嵌终端分流）。
+    // 终端窗口复用同一 bundle，按 IsTermWindow 动态挂载 TermWindow.vue。
   },
   server: {
     port: 5173,

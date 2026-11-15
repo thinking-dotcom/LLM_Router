@@ -11,19 +11,12 @@
     "agents": "~/.config/opencode/AGENTS.md",
     "skills": "~/.config/opencode/skills"
   },
-  "gemini": {
-    "config": "~/.gemini/settings.json",
-    "mcp": "~/.gemini/settings.json",
-    "env": "~/.gemini/.env",
-    "agents": "~/.gemini/GEMINI.md",
-    "skills": "~/.gemini/skills"
-  },
   "pi": {
     "config": "~/.pi/agent/models.json",
     "settings": "~/.pi/agent/settings.json",
     "mcp": "~/.pi/agent/mcp.json",
     "agents": "~/.pi/agent/AGENTS.md",
-    "skills": "~/.pi/skills"
+    "skills": "~/.pi/agent/skills"
   },
   "grok-build": {
     "config": "~/.grok/config.toml",
@@ -37,22 +30,11 @@
     "agents": "~/.codex/AGENTS.md",
     "skills": "~/.codex/skills"
   },
-  "cline": {
-    "config": "~/.cline/data/settings/cline_mcp_settings.json",
-    "models": "~/.cline/data/settings/models.json",
-    "providers": "~/.cline/data/settings/providers.json",
-    "agents": "~/.agents/AGENTS.md",
-    "globalstate": "~/.cline/data/globalState.json"
-  },
-  "hermes": {
-    "config": "~/.hermes/config.yaml",
-    "mcp": "~/.hermes/config.yaml",
-    "skills": "~/.hermes/skills"
-  },
   "copilot": {
     "config": "~/.copilot/settings.json",
     "mcp": "~/.copilot/mcp-config.json",
-    "permissions": "~/.copilot/permissions-config.json"
+    "permissions": "~/.copilot/permissions-config.json",
+    "cliconfig": "~/.copilot/config.json"
   },
   "commandcode": {
     "config": "~/.commandcode/config.json",
@@ -67,11 +49,10 @@
     "agents": "~/.kimi-code/AGENTS.md",
     "skills": "~/.kimi-code/skills"
   },
-  "kilo": {
-    "config": "~/.config/kilo/kilo.jsonc",
-    "mcp": "~/.config/kilo/kilo.jsonc",
-    "agents": "~/.config/kilo/AGENTS.md",
-    "skills": "~/.config/kilo/skills"
+  "mimocode": {
+    "config": "~/.config/mimocode/mimocode.jsonc",
+    "mcp": "~/.config/mimocode/mimocode.jsonc",
+    "skills": "~/.config/mimocode/skills"
   },
   "agy": {
     "config": "~/.gemini/antigravity-cli/settings.json",
@@ -82,5 +63,10 @@
     "config": "~/.codebuddy/settings.json",
     "models": "~/.codebuddy/models.json",
     "mcp": "~/.codebuddy/mcp.json"
+  },
+  "deepcode": {
+    "config": "~/.deepcode/settings.json",
+    "mcp": "~/.deepcode/settings.json",
+    "skills": "~/.deepcode/skills"
   }
 }

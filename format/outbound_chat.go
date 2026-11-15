@@ -46,9 +46,15 @@ func ChatToResponses(openaiReq map[string]any) map[string]any {
 			continue
 		}
 		parts := []any{}
+		// Responses API 区分输入/输出文本：assistant 历史消息必须用 output_text，
+		// 用 input_text 上送会被上游整请求 400（多轮对话第二轮起必现）。
+		textType := "input_text"
+		if role == "assistant" {
+			textType = "output_text"
+		}
 		if s, ok := content.(string); ok {
 			if s != "" {
-				parts = append(parts, map[string]any{"type": "input_text", "text": s})
+				parts = append(parts, map[string]any{"type": textType, "text": s})
 			}
 		} else if arr, ok := content.([]any); ok {
 			for _, p := range arr {
@@ -58,7 +64,7 @@ func ChatToResponses(openaiReq map[string]any) map[string]any {
 				}
 				pt, _ := pm["type"].(string)
 				if pt == "text" {
-					parts = append(parts, map[string]any{"type": "input_text", "text": pm["text"]})
+					parts = append(parts, map[string]any{"type": textType, "text": pm["text"]})
 				} else if pt == "image_url" {
 					if iu, ok := pm["image_url"].(map[string]any); ok {
 						parts = append(parts, map[string]any{"type": "input_image", "image_url": iu["url"]})
@@ -118,10 +124,10 @@ func ChatToResponses(openaiReq map[string]any) map[string]any {
 	if v, ok := types.IRGet(openaiReq, types.ExtResponsesReasoning); ok {
 		if rm, ok := v.(map[string]any); ok && len(rm) > 0 {
 			req["reasoning"] = rm
-		} else if eff, ok := openaiReq["reasoning_effort"].(string); ok && eff != "" && eff != "none" {
+		} else if eff := ResponsesEffortOf(strOr(openaiReq["reasoning_effort"], "")); eff != "" {
 			req["reasoning"] = map[string]any{"effort": eff}
 		}
-	} else if eff, ok := openaiReq["reasoning_effort"].(string); ok && eff != "" && eff != "none" {
+	} else if eff := ResponsesEffortOf(strOr(openaiReq["reasoning_effort"], "")); eff != "" {
 		req["reasoning"] = map[string]any{"effort": eff}
 	}
 	// text.format（结构化输出 json_schema/json_object）与 prompt_cache_options 还原
@@ -164,9 +170,8 @@ func ChatToResponses(openaiReq map[string]any) map[string]any {
 	if v, ok := openaiReq["max_tool_calls"]; ok {
 		req["max_tool_calls"] = v
 	}
-	if v, ok := openaiReq["stop"]; ok {
-		req["stop"] = strList(v)
-	}
+	// stop 序列不透传：Responses API 无此参数（仅 Chat Completions 支持），
+	// 透传会被上游整请求 400，客户端显式携带 stop 时静默降级不生效。
 	if tools, ok := openaiReq["tools"].([]any); ok {
 		rt := []any{}
 		for _, t := range tools {
@@ -178,7 +183,7 @@ func ChatToResponses(openaiReq map[string]any) map[string]any {
 			if fn == nil {
 				continue
 			}
-			rt = append(rt, map[string]any{"type": "function", "name": fn["name"], "description": fn["description"], "parameters": fn["parameters"]})
+			rt = append(rt, map[string]any{"type": "function", "name": fn["name"], "description": fn["description"], "parameters": normFnParams(fn)})
 		}
 		if len(rt) > 0 {
 			req["tools"] = rt
@@ -190,7 +195,7 @@ func ChatToResponses(openaiReq map[string]any) map[string]any {
 			if fm == nil {
 				continue
 			}
-			rt = append(rt, map[string]any{"type": "function", "name": fm["name"], "description": fm["description"], "parameters": fm["parameters"]})
+			rt = append(rt, map[string]any{"type": "function", "name": fm["name"], "description": fm["description"], "parameters": normFnParams(fm)})
 		}
 		if len(rt) > 0 {
 			req["tools"] = rt

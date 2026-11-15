@@ -1,9 +1,13 @@
 package router
 
 import (
+	"fmt"
 	"log"
+	"sort"
+	"strconv"
 	"strings"
 
+	"llm-router-go/format"
 	"llm-router-go/types"
 )
 
@@ -57,42 +61,18 @@ func normalizeTier(s string) string {
 	return defaultReasoningTier
 }
 
-// openaiEffortOf 把档位折算为 OpenAI reasoning_effort 枚举（max 封顶为 high，
-// none 不应走到这里——注入前已短路返回）。
-func openaiEffortOf(tier string) string {
-	if tier == ReasoningMax {
-		return ReasoningHigh
-	}
-	return tier
-}
+// 以下「档位 → 某格式取值」助手委托映射表（format/reasoning_table.go），路由器
+// 不再自带取值表：新增/调整档位或家族只改那张表（本文件保留函数名是为了让注入
+// 逻辑读起来仍是「路由器自己的档位策略」）。
 
-// anthropicBudgetOf 把档位映射为 Anthropic 思考预算（token）。
-// 与 format.anthropicThinkingBudget 保持一致。
-func anthropicBudgetOf(tier string) int {
-	switch tier {
-	case ReasoningLow:
-		return 2048
-	case ReasoningMedium:
-		return 8192
-	case ReasoningHigh:
-		return 24576
-	case ReasoningMax:
-		return 32768
-	}
-	return 0
-}
+// openaiEffortOf 档位 → OpenAI reasoning_effort（max/xhigh 封顶 high）。
+func openaiEffortOf(tier string) string { return format.OpenAIEffortOf(tier) }
 
-// geminiLevelOf 把档位折算为 Gemini thinkingLevel 枚举。
-func geminiLevelOf(tier string) string {
-	switch tier {
-	case ReasoningLow:
-		return "LOW"
-	case ReasoningMedium:
-		return "MEDIUM"
-	default: // high / max：Gemini 上限为 HIGH
-		return "HIGH"
-	}
-}
+// anthropicBudgetOf 档位 → Anthropic 思考预算（token）。
+func anthropicBudgetOf(tier string) int { return format.AnthropicBudgetOf(tier) }
+
+// geminiLevelOf 档位 → Gemini thinkingLevel 枚举。
+func geminiLevelOf(tier string) string { return format.GeminiLevelOf(tier) }
 
 // HasReasoningDepth 判断请求是否携带了「推理深度参数」。同时检查两层载体：
 //   - 归一化 OpenAI 形状 norm（跨型管线的统一载体，ParseInbound 已把各格式的
@@ -129,41 +109,78 @@ func HasReasoningDepth(inFormat string, body, norm map[string]any) bool {
 			}
 		}
 	}
-	// 2. 原生 body 形状兜底
-	switch inFormat {
-	case "anthropic":
-		if _, ok := body["thinking"]; ok {
-			return true
-		}
-	case "gemini":
-		if gc, ok := body["generationConfig"].(map[string]any); ok {
-			if tc, ok := gc["thinkingConfig"].(map[string]any); ok && len(tc) > 0 {
-				return true
-			}
-		}
-	case "gemini-interactions":
-		if gc, ok := body["generation_config"].(map[string]any); ok {
-			if lv, ok := gc["thinking_level"].(string); ok && lv != "" {
-				return true
-			}
-		}
-	default: // openai
-		if s, _ := body["reasoning_effort"].(string); s != "" {
-			return true
-		}
-		if rs, ok := body["reasoning"].(map[string]any); ok {
-			if s, _ := rs["effort"].(string); s != "" {
-				return true
-			}
-		}
+	// 2. 原生 body 形状兜底：字段路径与映射表同源（含 openai 形状的顶层
+	//    thinking:{type:enabled|disabled}、interactions 的 thinking_budget 数值写法）。
+	//    只看「是否携带」，不看取值——thinking.type=disabled 这类显式关闭同样算已
+	//    携带：客户端已表态，路由器不再用全局档位覆盖它的意图。
+	if format.HasReasoningField(inFormat, body) {
+		return true
 	}
 	return false
 }
 
+// ClientReasoningLabel 提取客户端显式携带的推理参数展示值（供日志「推理」列）。
+//
+// 原生形状的字段路径与取值全部来自映射表（format/reasoning_table.go 的读取方向，
+// 与出站「档位 → 原生字段」用的是同一张表）：
+//   - anthropic：output_config.effort > thinking.budget_tokens > thinking.type
+//   - gemini：generationConfig.thinkingConfig（thinkingLevel > thinkingBudget；
+//     budget 为 -1 是官方「动态思考」标记，列里显示「动态」）
+//   - gemini-interactions：generation_config（thinking_level / thinking_budget）
+//   - responses：reasoning.effort
+//   - openai：reasoning_effort > reasoning.effort
+//
+// 原生形状取不到时回退归一化形状（ParseInbound 已把各家族参数折算进 IR 扩展键
+// 与统一档位 reasoning_effort）。客户端完全未携带时返回空串（日志列显示 —）。
+func ClientReasoningLabel(inFormat string, body, norm map[string]any) string {
+	if _, label, ok := format.DecodeReasoningNative(inFormat, body); ok && label != "" {
+		return label
+	}
+	if norm == nil {
+		return ""
+	}
+	// 归一化回退：显式预算 / 显式档位 / Gemini thinkingConfig 原始值 → 展示值
+	if b, ok := types.IRGet(norm, types.ExtClientAnthropicBudget); ok {
+		if s := numLabelOf(b); s != "" {
+			return s
+		}
+	}
+	if s, ok := types.IRGet(norm, types.ExtClientReasoningEffort); ok {
+		if ss, _ := s.(string); ss != "" {
+			return ss
+		}
+	}
+	if tc, ok := types.IRGet(norm, types.ExtGeminiThinkingConfig); ok {
+		if m, ok := tc.(map[string]any); ok {
+			if s := format.GeminiThinkingLabel(m); s != "" {
+				return s
+			}
+		}
+	}
+	if s, _ := norm["reasoning_effort"].(string); s != "" {
+		return s
+	}
+	return ""
+}
+
+// numLabelOf 把数值型参数转成展示值（如思考预算 8192、0）；非数值类型返回空串
+// （字符串形式的档位由调用方单独处理，不能用 numAny 兜成 "0"）。
+// （字符串形式的档位由调用方单独处理，不能用 numAny 兜成 "0"）。
+func numLabelOf(v any) string {
+	switch n := v.(type) {
+	case float64:
+		return strconv.Itoa(int(n))
+	case int:
+		return strconv.Itoa(n)
+	case int64:
+		return strconv.Itoa(int(n))
+	}
+	return ""
+}
+
 // InjectDefaultReasoning 按客户端数据格式与配置档位把路由预设的推理参数方案
 // 追加进请求。tier 为五档之一（空/非法按默认 high 处理，none 表示不注入、
-// 直接返回 false）。返回是否成功追加（Anthropic 预算受 max_tokens 约束放不下
-// 时不追加并返回 false）。
+// 直接返回 false）。返回是否成功追加。
 //
 // 仅应在 HasReasoningDepth 为 false 时调用；调用后请求必须走归一化格式转换
 // 节点（由调用方禁用同型直通保证），否则追加的参数不会被映射到上游格式。
@@ -175,59 +192,30 @@ func InjectDefaultReasoning(inFormat, tier string, body, norm map[string]any) bo
 	if tier == ReasoningNone {
 		return false // 「无」档位：不注入任何预设参数
 	}
-	switch inFormat {
-	case "openai":
-		// 方案一：OpenAI 兼容档位参数（max 封顶为 high）
-		body["reasoning_effort"] = openaiEffortOf(tier)
-
-	case "anthropic":
-		// 方案二：Anthropic extended thinking 思考预算。
-		// 协议要求 max_tokens > budget_tokens；放不下有效预算则放弃注入。
-		budget := clampAnthropicBudget(body, anthropicBudgetOf(tier))
-		if budget <= 0 {
-			return false
-		}
-		body["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
-
-	case "gemini":
-		// 方案三：Gemini thinkingConfig 思考档位（2.5 系按预算、3 系按档位，
-		// 这里与 format 出站映射一致使用 thinkingLevel）。
-		gc, _ := body["generationConfig"].(map[string]any)
-		if gc == nil {
-			gc = map[string]any{}
-			body["generationConfig"] = gc
-		}
-		tc, _ := gc["thinkingConfig"].(map[string]any)
-		if tc == nil {
-			tc = map[string]any{}
-			gc["thinkingConfig"] = tc
-		}
-		tc["thinkingLevel"] = geminiLevelOf(tier)
-
-	case "gemini-interactions":
-		// Interactions API 客户端（/v1beta/interactions）：GenerationConfig 内
-		// thinking_level 承载档位（snake_case，Gemini 3 系新标准）。
-		gc, _ := body["generation_config"].(map[string]any)
-		if gc == nil {
-			gc = map[string]any{}
-			body["generation_config"] = gc
-		}
-		gc["thinking_level"] = strings.ToLower(geminiLevelOf(tier))
-
-	case "responses":
-		// Responses 协议接入（如新版 Codex）：请求体用 reasoning.effort 承载档位。
-		// 注入后 forceConvert 会禁用同型直通，出站由归一化形状（下方 norm 双写）
-		// 统一映射，这里写入 body 仅保证 Responses 语义完整。
-		body["reasoning"] = map[string]any{"effort": openaiEffortOf(tier)}
-
-	default:
+	if !format.SupportsReasoningInjection(inFormat) {
 		return false
+	}
+	// 原生形状按映射表写入（format/reasoning_table.go）：字段名、取值、模型家族
+	// 择形（gemini 2.5 系写 thinkingBudget / 3 系写 thinkingLevel / Gemma 不写、
+	// Anthropic 新老模型 adaptive 与 enabled）都不再在本文件硬编码。
+	// 模型名取归一化请求里的客户端原始模型名：注入发生在别名改写之前
+	// （handle.go 的模型解析段在其后），家族择形以客户端模型为准；跨型路径真正
+	// 上送的原生参数由出站层按改写后的模型名重新查表编码，与这里的原生写入无关
+	//（这里的原生写入只服务同型直通与日志追溯）。
+	model, _ := norm["model"].(string)
+	format.ApplyReasoningNative(body, inFormat, model, tier)
+	if inFormat == "anthropic" {
+		// Anthropic 协议要求 max_tokens > budget_tokens：把注入的预算收敛到协议
+		// 允许的范围。
+		clampInjectedAnthropicBudget(body)
 	}
 	// 双写：统一档位落入归一化形状，供数据格式转换节点映射为上游格式参数。
 	// 取 OpenAI 安全枚举（max 折算为 high），避免严格校验的上游拒绝未知枚举；
 	// anthropic/gemini 的出站映射对 high 已是各自格式的高档位。
 	norm["reasoning_effort"] = openaiEffortOf(tier)
-	log.Printf("[reasoning] payload 未携带推理深度参数，已追加 %s 格式预设方案 (tier=%s)", inFormat, tier)
+	// 记下客户端实际的顶层字段名，便于事后核对「为何判为未携带」（只记字段名，不记值）。
+	log.Printf("[reasoning] payload 未携带推理参数（顶层字段: %s），已按映射表追加 %s 格式预设方案 (tier=%s)",
+		topLevelKeys(body), inFormat, tier)
 	return true
 }
 
@@ -254,6 +242,27 @@ func clampAnthropicBudget(body map[string]any, target int) int {
 	return target
 }
 
+// clampInjectedAnthropicBudget 对映射表注入的 Anthropic 思考预算做协议约束收敛
+// （协议要求 max_tokens > budget_tokens）。预算连 1024 都放不下时移除 body 里的
+// thinking——归一化档位仍保留，出站层会把 max_tokens 抬到 budget+1024，因此不会
+// 像更早的实现那样静默丢掉全局档位。
+func clampInjectedAnthropicBudget(body map[string]any) {
+	th, _ := body["thinking"].(map[string]any)
+	if th == nil {
+		return
+	}
+	target := int(numAny(th["budget_tokens"]))
+	if target <= 0 {
+		return
+	}
+	safe := clampAnthropicBudget(body, target)
+	if safe <= 0 {
+		delete(body, "thinking")
+		return
+	}
+	th["budget_tokens"] = safe
+}
+
 // numAny 把 any 数值（json 反序列化只会得到 float64，内部代码可能写 int）
 // 安全转为 float64，非数值返回 0。
 func numAny(v any) float64 {
@@ -266,4 +275,34 @@ func numAny(v any) float64 {
 		return float64(n)
 	}
 	return 0
+}
+
+// topLevelKeys 返回请求体顶层字段名（排序、最多 12 个，超出以 … 结尾；IR 扩展键
+// 不计入）；数组型字段附元素个数（如 messages(1)、tools(14)），便于区分「主对话」
+// 与「客户端辅助子调用」。只记字段名与个数，不记值。
+func topLevelKeys(body map[string]any) string {
+	names := make([]string, 0, len(body))
+	counts := make(map[string]int, len(body))
+	for k, v := range body {
+		if types.IRIsExtKey(k) {
+			continue
+		}
+		names = append(names, k)
+		if arr, ok := v.([]any); ok {
+			counts[k] = len(arr)
+		}
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, k := range names {
+		if n, ok := counts[k]; ok {
+			parts = append(parts, fmt.Sprintf("%s(%d)", k, n))
+			continue
+		}
+		parts = append(parts, k)
+	}
+	if len(parts) > 12 {
+		return strings.Join(parts[:12], ",") + ",…"
+	}
+	return strings.Join(parts, ",")
 }

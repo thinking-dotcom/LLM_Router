@@ -18,8 +18,18 @@ type SSEEvent struct {
 // Each event is delimited by a blank line. Lines starting with "data:" are
 // collected (with the "data:" prefix stripped). On a blank line the collected
 // payload is JSON-unmarshalled and emitted.
-func IterSSE(body io.ReadCloser) <-chan SSEEvent {
+//
+// 返回的 stop 函数供消费方提前退出时调用：否则若消费方停止读取而生产者
+// 恰好阻塞在发送上（缓冲已满），该 goroutine 及其缓冲事件将永久悬挂。
+func IterSSE(body io.ReadCloser) (<-chan SSEEvent, func()) {
 	ch := make(chan SSEEvent, 16)
+	done := make(chan struct{})
+	send := func(e SSEEvent) {
+		select {
+		case ch <- e:
+		case <-done:
+		}
+	}
 	go func() {
 		defer close(ch)
 		defer body.Close()
@@ -42,7 +52,7 @@ func IterSSE(body io.ReadCloser) <-chan SSEEvent {
 						if t, ok := j["type"].(string); ok {
 							event = t
 						}
-						ch <- SSEEvent{Event: event, Data: j}
+						send(SSEEvent{Event: event, Data: j})
 					} else {
 						// 解析失败不能静默丢弃：那是客户端「流无声截断、无错误可查」
 						// 的元凶。记日志留痕（事件本身无法安全重建，仍跳过）。
@@ -69,7 +79,7 @@ func IterSSE(body io.ReadCloser) <-chan SSEEvent {
 				if t, ok := j["type"].(string); ok {
 					event = t
 				}
-				ch <- SSEEvent{Event: event, Data: j}
+				send(SSEEvent{Event: event, Data: j})
 			} else {
 				log.Printf("[sse] upstream 尾部 data 行 JSON 解析失败，事件已跳过: %v | payload: %.200s", err, payload)
 			}
@@ -78,8 +88,8 @@ func IterSSE(body io.ReadCloser) <-chan SSEEvent {
 		// OpenaiStreamToChunks 会识别 error 事件并透传错误块；其它转换忽略该事件，
 		// 但至少不会让流卡死在半截响应上。
 		if err := scanner.Err(); err != nil {
-			ch <- SSEEvent{Event: "error", Data: map[string]any{"error": map[string]any{"message": "upstream SSE read failed: " + err.Error()}}}
+			send(SSEEvent{Event: "error", Data: map[string]any{"error": map[string]any{"message": "upstream SSE read failed: " + err.Error()}}})
 		}
 	}()
-	return ch
+	return ch, func() { close(done) }
 }

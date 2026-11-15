@@ -16,7 +16,7 @@ import (
 	"llm-router-go/types"
 )
 
-// stableProviderID 根据服务商特征派生确定性 ID（与 main.go 同名实现一致），
+// stableProviderID 根据供应商特征派生确定性 ID（与 main.go 同名实现一致），
 // 避免缺失 id 时每次 Normalize 都生成随机 id 导致配置/缓存漂移。
 func stableProviderID(name, baseURL, ptype string) string {
 	h := sha256.Sum256([]byte(name + "|" + baseURL + "|" + ptype))
@@ -76,6 +76,13 @@ func ConfigPath() string {
 		}
 		dir = parent
 	}
+	// 探测失败时的兜底不能用相对路径：开机自启（Run 键）由 Explorer 拉起时
+	// 工作目录通常是 System32，相对路径会读不到用户配置、还可能把默认配置
+	// 写进系统目录。回退到可执行文件所在目录的绝对路径。
+	if exe, err := os.Executable(); err == nil && filepath.Dir(exe) != "" {
+		configPathCache = filepath.Join(filepath.Dir(exe), "config.json")
+		return configPathCache
+	}
 	configPathCache = "config.json"
 	return configPathCache
 }
@@ -98,14 +105,56 @@ func Normalize(raw any) types.Config {
 	if v, ok := m["defaultProvider"].(string); ok {
 		cfg.DefaultProvider = v
 	}
+	if arr, ok := m["fallbackModels"].([]any); ok {
+		list := make([]string, 0, len(arr))
+		for _, it := range arr {
+			if sv, ok := it.(string); ok && sv != "" {
+				list = append(list, sv)
+			}
+		}
+		cfg.FallbackModels = list
+	}
 	if v, ok := m["tray"].(bool); ok {
 		cfg.Tray = v
 	}
 	if v, ok := m["reasoningDepth"].(string); ok && reasoningDepths[v] {
 		cfg.ReasoningDepth = v
 	}
+	cfg.HeaderRules = normalizeHeaderRules(m["headerRules"])
 	cfg.Providers = normalizeProviders(m["providers"])
 	return cfg
+}
+
+// normalizeHeaderRules 解析请求头注入规则：名称为空的行丢弃，名称/值/供应商
+// 去首尾空白；供应商为空 = 对全部供应商生效。
+func normalizeHeaderRules(raw any) []types.HeaderRule {
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]types.HeaderRule, 0, len(arr))
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := m["name"].(string)
+		value, _ := m["value"].(string)
+		provider, _ := m["provider"].(string)
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		out = append(out, types.HeaderRule{
+			Name:     name,
+			Value:    strings.TrimSpace(value),
+			Provider: strings.TrimSpace(provider),
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func normalizeProviders(raw any) []types.Provider {
@@ -136,7 +185,7 @@ func normalizeProviders(raw any) []types.Provider {
 		if id, ok := p["id"].(string); ok && id != "" {
 			prov.ID = id
 		} else {
-			// 缺 id 时用确定性哈希 id，同一服务商多次 Normalize 结果一致
+			// 缺 id 时用确定性哈希 id，同一供应商多次 Normalize 结果一致
 			prov.ID = stableProviderID(prov.Name, prov.BaseURL, string(prov.Type))
 		}
 		if key, ok := p["apiKey"].(string); ok {
@@ -233,10 +282,11 @@ func saveConfig(cfg types.Config, path string) error {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		// rename 失败（极少见）时退化为直接写，至少不丢数据
+		// rename 失败（极少见）时退化为直接写，至少不丢数据；成功后清掉残留 tmp
 		if werr := os.WriteFile(path, append(data, '\n'), 0o600); werr != nil {
 			return werr
 		}
+		_ = os.Remove(tmp)
 	}
 	return nil
 }
@@ -271,15 +321,15 @@ func ValidateConfig(raw any) string {
 		}
 		name, _ := p["name"].(string)
 		if name == "" {
-			return fmt.Sprintf("第 %d 个服务商缺少名称", i+1)
+			return fmt.Sprintf("第 %d 个供应商缺少名称", i+1)
 		}
 		ptype, _ := p["type"].(string)
 		if !isValidProviderType(ptype) {
-			return fmt.Sprintf("服务商「%s」的 API 格式无效", name)
+			return fmt.Sprintf("供应商「%s」的 API 格式无效", name)
 		}
 		base, _ := p["baseUrl"].(string)
 		if !urlRegex.MatchString(strings.TrimSpace(base)) {
-			return fmt.Sprintf("服务商「%s」的 Base URL 必须以 http(s):// 开头", name)
+			return fmt.Sprintf("供应商「%s」的 Base URL 必须以 http(s):// 开头", name)
 		}
 	}
 	return ""

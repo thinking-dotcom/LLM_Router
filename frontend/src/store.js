@@ -26,13 +26,12 @@ export const ui = reactive({
   deleteDialog: { open: false, provider: null },
   modelsDialog: { open: false, provider: null },
   clearLogsDialog: { open: false }, // 清空日志确认框
-  mcpMappingDialog: { open: false }, // MCP 映射注入窗口
   menu: { open: false, provider: null, rect: null }, // 服务商卡片 ⋯ 菜单
 })
 
 // 服务商状态（跨轮询保留，不随 config 刷新重置）
 export const provStatus = reactive({}) // id -> 'ok' | 'fail' | 'testing'
-export const provModels = reactive({}) // id -> { count, liveTried }
+export const provModels = reactive({}) // id -> { count, models } | { failed: true }（count/models=服务器返回的模型列表原样）
 
 // 主题：切换时写入 <html data-theme>
 export function initTheme() {

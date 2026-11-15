@@ -1,0 +1,10 @@
+{
+  "model": "",
+  "env": {
+    "BASE_URL": "http://127.0.0.1:3000/router",
+    "API_KEY": ""
+  },
+  "thinkingEnabled": true,
+  "reasoningEffort": "high",
+  "mcpServers": {}
+}

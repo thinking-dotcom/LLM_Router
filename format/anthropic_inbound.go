@@ -163,6 +163,21 @@ func OpenaiFromAnthropic(body any) map[string]any {
 	if v, ok := m["service_tier"]; ok {
 		types.IRSet(out, types.ExtAnthropicServiceTier, v)
 	}
+	// 统一档位折算：把 Anthropic 的思考配置折算为跨家族归一档位，供「上游不是
+	// Anthropic」时按映射表（format/reasoning_table.go）映射成上游格式的推理参数
+	// （此前只进 IR，Anthropic 客户端 → OpenAI/Gemini 上游时思考配置会被整个丢掉）。
+	// 原生 thinking 仍原样留在 IR 扩展键里，Anthropic 出站优先还原它
+	// （outbound_anthropic.go），故 Anthropic 同型/Anthropic 上游行为不变。
+	// 只折算 thinking（预算/type），不折算 output_config.effort：后者在 Anthropic
+	// 侧是独立顶层参数（IR 往返保真），若一并折算成档位，会让「只设了 effort、
+	// 没开 thinking」的请求被出站额外补上 thinking，属越权修改客户端意图。
+	if s, _ := out["reasoning_effort"].(string); s == "" {
+		if th, ok := m["thinking"].(map[string]any); ok {
+			if r := decodeAnthropicThinking(map[string]any{"thinking": th}); r.present && r.tier != "" {
+				out["reasoning_effort"] = r.tier
+			}
+		}
+	}
 	return out
 }
 

@@ -9,6 +9,18 @@ import (
 	"llm-router-go/types"
 )
 
+// numInt 兼容读取 map 中 float64 / int 两种数值类型（Go 内存中构造的 usage
+// 中间层是 int，JSON 解析出来的是 float64，两侧断言必须对称，否则统计静默归零）。
+func numInt(m map[string]any, key string) (int, bool) {
+	switch v := m[key].(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	}
+	return 0, false
+}
+
 // isJSONModeRequest 判断归一化后的 OpenAI 请求是否声明了 response_format
 // （json_object / json_schema）。请求侧降级为工具调用（json_output）时，
 // 响应侧据此把 tool_use 的 input 还原回 OpenAI 的 content，而不是 tool_calls。
@@ -114,11 +126,11 @@ func ResponsesToOpenai(body map[string]any, openaiReq map[string]any) map[string
 	// Usage
 	if usage, ok := body["usage"].(map[string]any); ok {
 		u := map[string]any{}
-		if v, ok := usage["input_tokens"].(float64); ok {
-			u["prompt_tokens"] = int(v)
+		if v, ok := numInt(usage, "input_tokens"); ok {
+			u["prompt_tokens"] = v
 		}
-		if v, ok := usage["output_tokens"].(float64); ok {
-			u["completion_tokens"] = int(v)
+		if v, ok := numInt(usage, "output_tokens"); ok {
+			u["completion_tokens"] = v
 		}
 		// usage 明细：缓存命中 / 推理 token，统计与计费依赖这些字段
 		if inDetails, ok := usage["input_tokens_details"].(map[string]any); ok {
@@ -255,11 +267,11 @@ func AnthropicToOpenai(body map[string]any, openaiReq map[string]any) map[string
 	// Usage
 	if usage, ok := body["usage"].(map[string]any); ok {
 		u := map[string]any{}
-		if v, ok := usage["input_tokens"].(float64); ok {
-			u["prompt_tokens"] = int(v)
+		if v, ok := numInt(usage, "input_tokens"); ok {
+			u["prompt_tokens"] = v
 		}
-		if v, ok := usage["output_tokens"].(float64); ok {
-			u["completion_tokens"] = int(v)
+		if v, ok := numInt(usage, "output_tokens"); ok {
+			u["completion_tokens"] = v
 		}
 		if v, ok := usage["cache_read_input_tokens"].(float64); ok && v > 0 {
 			u["prompt_tokens_details"] = map[string]any{"cached_tokens": int(v)}
@@ -308,6 +320,7 @@ func GeminiToOpenai(body map[string]any, openaiReq map[string]any) map[string]an
 
 	var textParts []string
 	var toolCalls []any
+	var thoughtSigs []any // thoughtSignature（Gemini 3 思维签名，随消息透传）
 
 	candidates := sliceOrEmpty(body["candidates"])
 	if len(candidates) > 0 {
@@ -318,6 +331,11 @@ func GeminiToOpenai(body map[string]any, openaiReq map[string]any) map[string]an
 					pm, _ := p.(map[string]any)
 					if pm == nil {
 						continue
+					}
+					// thoughtSignature（Gemini 3 思维签名）：随消息透传给客户端，
+					// 客户端回传历史时由 ToGemini 回填（仅原生 Gemini 上游）
+					if sig, ok := pm["thoughtSignature"].(string); ok && sig != "" {
+						thoughtSigs = append(thoughtSigs, sig)
 					}
 					if txt, ok := pm["text"].(string); ok {
 						textParts = append(textParts, txt)
@@ -355,6 +373,11 @@ func GeminiToOpenai(body map[string]any, openaiReq map[string]any) map[string]an
 			if len(toolCalls) > 0 {
 				msg["tool_calls"] = toolCalls
 			}
+			if len(thoughtSigs) == 1 {
+				msg["thought_signature"] = thoughtSigs[0]
+			} else if len(thoughtSigs) > 1 {
+				msg["thought_signature"] = thoughtSigs
+			}
 
 			choice := map[string]any{
 				"index":         0,
@@ -387,11 +410,11 @@ func GeminiToOpenai(body map[string]any, openaiReq map[string]any) map[string]an
 	// Usage
 	if um, ok := body["usageMetadata"].(map[string]any); ok {
 		u := map[string]any{}
-		if v, ok := um["promptTokenCount"].(float64); ok {
-			u["prompt_tokens"] = int(v)
+		if v, ok := numInt(um, "promptTokenCount"); ok {
+			u["prompt_tokens"] = v
 		}
-		if v, ok := um["candidatesTokenCount"].(float64); ok {
-			u["completion_tokens"] = int(v)
+		if v, ok := numInt(um, "candidatesTokenCount"); ok {
+			u["completion_tokens"] = v
 		}
 		// usage 明细：缓存命中 / 思考 token
 		if v, ok := um["cachedContentTokenCount"].(float64); ok && v > 0 {
@@ -551,14 +574,14 @@ func OpenaiToAnthropicBody(openaiResp map[string]any, model string) map[string]a
 	// Usage
 	if usage, ok := openaiResp["usage"].(map[string]any); ok {
 		u := map[string]any{}
-		if v, ok := usage["prompt_tokens"].(float64); ok {
-			u["input_tokens"] = int(v)
+		if v, ok := numInt(usage, "prompt_tokens"); ok {
+			u["input_tokens"] = v
 		}
-		if v, ok := usage["completion_tokens"].(float64); ok {
-			u["output_tokens"] = int(v)
+		if v, ok := numInt(usage, "completion_tokens"); ok {
+			u["output_tokens"] = v
 		}
 		if ptd, ok := usage["prompt_tokens_details"].(map[string]any); ok {
-			if cv, ok := ptd["cached_tokens"].(float64); ok && cv > 0 {
+			if cv, ok := numInt(ptd, "cached_tokens"); ok && cv > 0 {
 				u["cache_read_input_tokens"] = int(cv)
 			}
 		}
@@ -672,11 +695,11 @@ func OpenaiToGeminiBody(openaiResp map[string]any, model string) map[string]any 
 	// Usage
 	if usage, ok := openaiResp["usage"].(map[string]any); ok {
 		um := map[string]any{}
-		if v, ok := usage["prompt_tokens"].(float64); ok {
-			um["promptTokenCount"] = int(v)
+		if v, ok := numInt(usage, "prompt_tokens"); ok {
+			um["promptTokenCount"] = v
 		}
-		if v, ok := usage["completion_tokens"].(float64); ok {
-			um["candidatesTokenCount"] = int(v)
+		if v, ok := numInt(usage, "completion_tokens"); ok {
+			um["candidatesTokenCount"] = v
 		}
 		if len(um) > 0 {
 			out["usageMetadata"] = um
@@ -685,7 +708,7 @@ func OpenaiToGeminiBody(openaiResp map[string]any, model string) map[string]any 
 
 	// 无 candidates 兕底（choices 为空或 message 缺失，如内容被上游安全策略
 	// 拦截后经 OpenAI 形状中转）：Gemini 客户端对缺 candidates 的
-	// generateContent 响应会反序列化失败（对照同文件 GeminiToOpenai 的兕底）
+	// generateContent 响应会反序列化失败（对照同文件 GeminiToOpenai 的兜底）
 	if _, has := out["candidates"]; !has {
 		out["candidates"] = []any{
 			map[string]any{

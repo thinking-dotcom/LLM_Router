@@ -43,6 +43,41 @@ func ToGemini(openaiReq map[string]any) map[string]any {
 		}
 	}
 
+	// thoughtSignature 回填队列，两种来源：
+	//   1) OpenAI 客户端在 assistant 消息 / tool_calls 上透传的 thought_signature；
+	//   2) Gemini 客户端历史经 IR（ExtGeminiThoughtSigs）按消息序号携带的签名。
+	// 仅原生 Gemini 上游能表达该字段；openai / gemini-openai 上游由
+	// stripMessageThoughtSignatures / stripClientExtensions 剥离。
+	sigByMsg := map[int][]any{}
+	textSigByMsg := map[int][]any{}
+	fcSigByMsg := map[int][]any{}
+	if recs, ok := types.IRGet(openaiReq, types.ExtGeminiThoughtSigs); ok {
+		for _, r := range sliceOrEmpty(recs) {
+			rm, _ := r.(map[string]any)
+			if rm == nil {
+				continue
+			}
+			mi := 0
+			// 进程内直传时为 int，经 JSON 往返后为 float64，两者都要兼容
+			switch v := rm["message"].(type) {
+			case float64:
+				mi = int(v)
+			case int:
+				mi = v
+			}
+			if sigs := sliceOrEmpty(rm["signatures"]); len(sigs) > 0 {
+				sigByMsg[mi] = append(sigByMsg[mi], sigs...)
+			}
+			if sigs := sliceOrEmpty(rm["textSignatures"]); len(sigs) > 0 {
+				textSigByMsg[mi] = append(textSigByMsg[mi], sigs...)
+			}
+			if sigs := sliceOrEmpty(rm["fcSignatures"]); len(sigs) > 0 {
+				fcSigByMsg[mi] = append(fcSigByMsg[mi], sigs...)
+			}
+		}
+	}
+	msgIdx := 0
+
 	flushFRs := func() {
 		if len(pendingFRs) == 0 {
 			return
@@ -59,6 +94,8 @@ func ToGemini(openaiReq map[string]any) map[string]any {
 		if mm == nil {
 			continue
 		}
+		curIdx := msgIdx
+		msgIdx++
 		role, _ := mm["role"].(string)
 
 		if role == "system" {
@@ -121,6 +158,37 @@ func ToGemini(openaiReq map[string]any) map[string]any {
 			flushFRs()
 
 			parts := buildGeminiParts(mm, true)
+			// thoughtSignature 回填：消息级 thought_signature（字符串或数组）与
+			// tool_calls 上的 thought_signature 优先，其次 IR 按序队列
+			var sigs []any
+			switch ts := mm["thought_signature"].(type) {
+			case string:
+				if ts != "" {
+					sigs = append(sigs, ts)
+				}
+			case []any:
+				sigs = append(sigs, ts...)
+			}
+			for _, tc := range sliceOrEmpty(mm["tool_calls"]) {
+				tcm, _ := tc.(map[string]any)
+				if tcm == nil {
+					continue
+				}
+				if sig, ok := tcm["thought_signature"].(string); ok && sig != "" {
+					sigs = append(sigs, sig)
+				}
+			}
+			// thoughtSignature 回填：消息级 thought_signature（字符串或数组）与
+			// tool_calls 上的 thought_signature 来自 OpenAI 客户端，按序贴合。
+			parts = attachThoughtSignatures(parts, sigs)
+			// 经 IR 携带的 Gemini 历史签名与具体 part 绑定，优先按类型精确回填
+			// （按序盲配会把只在 functionCall 上的签名贴到 text）；仅当记录不含
+			// 分类信息时才退回按序兜底。
+			if ts, fs := textSigByMsg[curIdx], fcSigByMsg[curIdx]; len(ts) > 0 || len(fs) > 0 {
+				parts = attachTypedThoughtSignatures(parts, ts, fs)
+			} else if irSigs := sigByMsg[curIdx]; len(irSigs) > 0 {
+				parts = attachThoughtSignatures(parts, irSigs)
+			}
 			if len(parts) > 0 {
 				contents = append(contents, map[string]any{
 					"role":  "model",
@@ -210,18 +278,13 @@ func ToGemini(openaiReq map[string]any) map[string]any {
 	}
 	// 统一推理档位（reasoning_effort，来自 /oai 系客户端如 pi/grok/opencode 的
 	// 原生参数）→ Gemini thinkingConfig。跨型转换；Gemini 同型直通不经过此处。
-	// thinkingLevel 面向 Gemini 3 系；2.5 系上游不识别时由其忽略或报错，
-	// 如需关闭思考请用档位 none（折算为 thinkingBudget=0）。
+	// 字段与取值、模型家族择形（Gemma 不携带、2.5 系用 thinkingBudget、3 系用
+	// thinkingLevel）全部来自映射表 format/reasoning_table.go。
 	if eff, _ := openaiReq["reasoning_effort"].(string); eff != "" {
-		switch eff {
-		case "none":
-			genConfig["thinkingConfig"] = map[string]any{"thinkingBudget": 0}
-		case "minimal", "low":
-			genConfig["thinkingConfig"] = map[string]any{"thinkingLevel": "LOW"}
-		case "medium":
-			genConfig["thinkingConfig"] = map[string]any{"thinkingLevel": "MEDIUM"}
-		default: // high / xhigh / max：Gemini 3 上限为 HIGH
-			genConfig["thinkingConfig"] = map[string]any{"thinkingLevel": "HIGH"}
+		if p := EncodeReasoningNative(ReasoningFamilyGemini, strOr(openaiReq["model"], ""), eff); p != nil {
+			for k, v := range p.Value {
+				genConfig[k] = v
+			}
 		}
 	}
 	if len(genConfig) > 0 {
@@ -340,6 +403,83 @@ func ToGemini(openaiReq map[string]any) map[string]any {
 
 // buildGeminiParts converts OpenAI message content into Gemini parts.
 // For assistant messages (isAssistant=true) it also processes tool_calls into functionCall parts.
+// attachThoughtSignatures 按顺序把 thoughtSignature 回填到可签名 parts
+// （text / functionCall）上。
+//
+// 签名数多于可签名 part 数时，多余签名无法表达（每个 part 只能承载一个
+// thoughtSignature）：此时绝不能拿它们去覆盖已按序配好的签名——覆盖会让
+// part 与签名错配、并静默丢掉其余签名，反而制造 MISSING_THOUGHT_SIGNATURE。
+// 因此仅在完全没有可签名 part（异常形状）时兜底附首个签名到最后一个 part。
+func attachThoughtSignatures(parts []any, sigs []any) []any {
+	if len(sigs) == 0 || len(parts) == 0 {
+		return parts
+	}
+	signable := make([]map[string]any, 0, len(parts))
+	for _, p := range parts {
+		pm, _ := p.(map[string]any)
+		if pm == nil {
+			continue
+		}
+		_, isText := pm["text"]
+		_, isFC := pm["functionCall"]
+		if isText || isFC {
+			signable = append(signable, pm)
+		}
+	}
+	if len(signable) == 0 {
+		if pm, ok := parts[len(parts)-1].(map[string]any); ok {
+			pm["thoughtSignature"] = sigs[0]
+		}
+		return parts
+	}
+	for i, pm := range signable {
+		if i >= len(sigs) {
+			break
+		}
+		pm["thoughtSignature"] = sigs[i]
+	}
+	return parts
+}
+
+// attachTypedThoughtSignatures 把签名贴回同类型的 part：functionCall 队列只消费
+// functionCall part，text 队列只消费 text part。
+//
+// Gemini 3 的 thoughtSignature 与它所属的 part 绑定，而回填时 parts 的顺序是重建
+// 出来的（text 恒排在 functionCall 之前），与原始消息里的先后无关。因此不能用
+// 「扁平队列 + 定序 zip」：一条消息里既有文本又有工具调用、而签名只挂在
+// functionCall 上时，队列里唯一的签名会被贴给 text，functionCall 反而无签名，
+// 上游随即以 MISSING_THOUGHT_SIGNATURE 拒绝。
+func attachTypedThoughtSignatures(parts []any, textSigs, fcSigs []any) []any {
+	if len(textSigs) == 0 && len(fcSigs) == 0 {
+		return parts
+	}
+	ti, fi := 0, 0
+	for _, p := range parts {
+		pm, _ := p.(map[string]any)
+		if pm == nil {
+			continue
+		}
+		if _, isFC := pm["functionCall"]; isFC {
+			if fi < len(fcSigs) {
+				if s, ok := fcSigs[fi].(string); ok && s != "" {
+					pm["thoughtSignature"] = s
+				}
+				fi++
+			}
+			continue
+		}
+		if _, isText := pm["text"]; isText {
+			if ti < len(textSigs) {
+				if s, ok := textSigs[ti].(string); ok && s != "" {
+					pm["thoughtSignature"] = s
+				}
+				ti++
+			}
+		}
+	}
+	return parts
+}
+
 func buildGeminiParts(mm map[string]any, isAssistant bool) []any {
 	var parts []any
 	content := mm["content"]
@@ -483,4 +623,35 @@ func mergeGeminiContents(contents []any) []any {
 		merged = append(merged, c)
 	}
 	return merged
+}
+
+// ---------------------------------------------------------------------------
+// 模型家族 × 推理档位折算（thinkingConfig 择形）
+// ---------------------------------------------------------------------------
+
+// isGemmaModel 判断是否 Gemma 系模型（不支持任何思考配置，发送 thinkingConfig
+// 会被上游以 400 拒绝）。
+// 模型名大小写不做要求：官方 ID 全小写，但网关/别名里常见首字母大写写法，
+// 判定若区分大小写，这类模型会被误当作 Gemini 3 系而收到非法的 thinkingLevel。
+func isGemmaModel(model string) bool {
+	return strings.Contains(strings.ToLower(model), "gemma")
+}
+
+// isGemini25Model 判断是否 Gemini 2.5 系模型（只认 thinkingBudget，不接受
+// thinkingLevel 档位）。
+func isGemini25Model(model string) bool {
+	return strings.Contains(strings.ToLower(model), "gemini-2.5")
+}
+
+// geminiThinkingConfigForModel 按模型家族把统一推理档位（reasoning_effort）
+// 折算为 Gemini thinkingConfig。映射表（format/reasoning_table.go）的封装：
+// 返回 nil 表示该模型不应携带思考配置（Gemma 系，或 2.5-pro + none——其思考
+// 不可关闭），调用方应跳过写入。
+func geminiThinkingConfigForModel(model, eff string) map[string]any {
+	p := EncodeReasoningNative(ReasoningFamilyGemini, model, eff)
+	if p == nil {
+		return nil
+	}
+	tc, _ := p.Value["thinkingConfig"].(map[string]any)
+	return tc
 }

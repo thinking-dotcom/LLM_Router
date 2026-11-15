@@ -1,0 +1,5 @@
+# 换行符统一：Go 源码在仓库与检出时一律 LF。
+# 背景：Windows 上 core.autocrlf=true 会把检出文件转为 CRLF，gofmt 读到 CRLF 即
+# 报「未格式化」（如 tray_windows.go / hideconsole_windows.go）；本规则优先于
+# autocrlf，保证检出为 LF，消除该误报（文件内容本身本就是规范化格式）。
+*.go text eol=lf

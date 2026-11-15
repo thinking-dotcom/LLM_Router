@@ -48,9 +48,4 @@ export const OPT_KEYS = {
   // 终端执行方式
   backgroundExec: 'sync.opt.backgroundExec',
   foreground: 'sync.opt.foreground',
-  // Gemini CLI 认证方式
-  'gemini-api-key': 'sync.opt.geminiApiKey',
-  'vertex-ai': 'sync.opt.vertexAi',
-  'oauth-personal': 'sync.opt.oauthPersonal',
-  'cloud-shell': 'sync.opt.cloudShell',
 }

@@ -41,6 +41,16 @@ func BuildOutboundRequest(provider types.Provider, openaiReq map[string]any, mod
 		req[k] = v
 	}
 	req["model"] = model
+	// messages / tools 的内层结构会被出站清洗就地修改（剥离 thinking 内容块、
+	// thought_signature、JSON Schema 扩展键等）。浅拷贝只隔离顶层键，共享的内层
+	// map 会让这些清洗写穿到调用方持有的归一化请求上；同一请求重试或二次分派时
+	// 发出的就是被清洗过的 body。对这两个子树做深拷贝隔离。
+	if msgs, ok := req["messages"]; ok {
+		req["messages"] = deepCopyJSON(msgs)
+	}
+	if tools, ok := req["tools"]; ok {
+		req["tools"] = deepCopyJSON(tools)
+	}
 
 	// 流式请求默认向上游请求 usage：多数 OpenAI 兼容上游（含 gemini-openai 兼容层）
 	// 只有显式传入 stream_options.include_usage 才会在流式响应里返回 token 用量，
@@ -130,6 +140,9 @@ func BuildOutboundRequest(provider types.Provider, openaiReq map[string]any, mod
 		// Anthropic extended thinking 内容块（type=thinking）OpenAI Chat API 不识别，
 		// 跨型进 OpenAI 兼容上游前剔除，避免整请求 400。
 		stripThinkingContentParts(req)
+		// 消息级 thought_signature（Gemini 3 思维签名）同理：仅原生 Gemini 上游
+		// 经 ToGemini 消费，OpenAI 兼容上游拒绝未知消息字段。
+		stripMessageThoughtSignatures(req)
 		body = req
 	}
 
@@ -273,14 +286,41 @@ func stripThinkingContentParts(req map[string]any) {
 	}
 }
 
+// stripMessageThoughtSignatures 删除消息上的 thought_signature 字段（消息级与
+// tool_calls 级两处）。真实 OpenAI API 与 Gemini OpenAI 兼容层对未知字段校验严格；
+// 签名仅在目标为原生 gemini 时经 ToGemini 回填到 parts，而 ToGemini 的读取侧同时
+// 认这两处（消息级与 tool_calls[].thought_signature），故剥离必须与读取侧对称，
+// 否则客户端回传的签名会原样上送 OpenAI 兼容上游被 400 拒绝。
+func stripMessageThoughtSignatures(req map[string]any) {
+	msgs, ok := req["messages"].([]any)
+	if !ok {
+		return
+	}
+	for _, m := range msgs {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		delete(mm, "thought_signature")
+		for _, tc := range sliceOrEmpty(mm["tool_calls"]) {
+			if tcm, ok := tc.(map[string]any); ok {
+				delete(tcm, "thought_signature")
+			}
+		}
+	}
+}
+
 // stripGeminiUnsupported 移除 Google Gemini 不接受的 OpenAI 扩展字段：
 // 顶层 prompt_cache_key（中间商缓存键）与工具 JSON Schema 里的 protobuf
 // 无法解析的键。真实 OpenAI API 接受这些字段，但 Google 校验严格，会直接 400。
+// 注意 stream_options 不能剥离：Google OpenAI 兼容端点官方支持
+// stream_options.include_usage（不传则流式响应无 usage），且
+// BuildOutboundRequest 已为流式请求注入该字段。
 func stripGeminiUnsupported(req map[string]any) {
 	for _, k := range []string{
 		"prompt_cache_key", "reasoning_effort", "parallel_tool_calls",
 		"service_tier", "user", "logprobs", "top_logprobs", "logit_bias",
-		"seed", "n", "stream_options", "functions", "function_call",
+		"seed", "n", "functions", "function_call",
 	} {
 		delete(req, k)
 	}
@@ -370,5 +410,26 @@ func sanitizeJSONSchema(m map[string]any) {
 	}
 	if additional, ok := m["additionalProperties"].(map[string]any); ok {
 		sanitizeJSONSchema(additional) // 会在本轮 handle 后无效果，但无害
+	}
+}
+
+// deepCopyJSON 深拷贝 JSON 兼容结构（map / slice / 标量），用于隔离出站清洗
+// 的就地修改。仅处理 JSON 可表示类型，其它类型按原值共享（出站路径不会修改它们）。
+func deepCopyJSON(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(t))
+		for k, val := range t {
+			out[k] = deepCopyJSON(val)
+		}
+		return out
+	case []any:
+		out := make([]any, len(t))
+		for i, val := range t {
+			out[i] = deepCopyJSON(val)
+		}
+		return out
+	default:
+		return v
 	}
 }

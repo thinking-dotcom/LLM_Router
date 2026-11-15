@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>provcard verify</title>
+<link rel="stylesheet" href="/style.css">
+<script>
+  // 临时验证桩：模拟 Wails 注入的 window.go.main.App（仅本次渲染校验用，验完即删）
+  const AG = ['agnes-2.5-pro-alpha','agnes-video-2.5-flash','agnes-3.0-flash','agnes-image-2.1-flash','agnes-video-2.5','agnes-2.0-flash','agnes-image-2.0-flash','agnes-2.5-flash','agnes-2.5-pro','agnes-2.5-pro-beta','agnes-video-v2.0','agnes-image-2.5-flash']
+  const providers = [
+    { id: 'p-0687c9', name: 'ag', type: 'openai', baseUrl: 'https://apihub.agnes-ai.com', apiKey: 'sk-x', models: [], aliases: { 'deepseek-v4-pro': 'agnes-3.0-flash', 'gemini-3.5-flash': 'agnes-2.5-flash' }, enabled: true },
+    { id: 'p-ce35af', name: 'ds', type: 'openai', baseUrl: 'https://api.deepseek.com', apiKey: 'sk-x', models: [], aliases: {}, enabled: false },
+    { id: 'p-4066fe', name: 'zen', type: 'openai', baseUrl: 'https://opencode.ai/zen/v1', apiKey: 'sk-x', models: [], aliases: {}, enabled: false },
+  ]
+  window.go = { main: { App: {
+    GetStatus: async () => ({ running: true, port: 3000, host: '127.0.0.1', localBase: 'http://127.0.0.1:3000' }),
+    GetConfig: async () => ({ port: 3000, host: '127.0.0.1', authToken: '', defaultProvider: 'p-0687c9', providers, tray: false }),
+    GetAppInfo: async () => ({ version: '3.0.0', platform: 'windows' }),
+    // ag：后台已拉过 → 走上游缓存（12 条）
+    GetProviderModels: async (p) => (p && p.id === 'p-0687c9' ? { ok: true, models: AG, count: AG.length } : { ok: true, models: [], count: 0 }),
+    // ds（未启用）：缓存为空 → 实时拉取成功，返回 5 条
+    FetchModels: async (p) => (p && p.id === 'p-ce35af'
+      ? { ok: true, models: ['deepseek-chat','deepseek-reasoner','deepseek-coder','deepseek-v4-flash','deepseek-v4-pro'] }
+      : { ok: false, error: 'HTTP 401: unauthorized' }),
+    FetchModelsList: async () => ({ ok: true, models: AG }),
+    GetLogs: async () => [],
+    GetStats: async () => ({ days: {}, perModel: {}, perProvider: {}, today: {} }),
+    GetActiveModels: async () => ({ models: [] }),
+    ListTargets: async () => [],
+    GetRouterBase: async () => 'http://127.0.0.1:3000',
+  } } }
+  window.runtime = {}
+</script>
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

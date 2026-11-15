@@ -39,11 +39,18 @@ const logs = computed(() => {
     const u = e.usage || {}
     const prompt = Number(u.prompt_tokens) || 0
     const completion = Number(u.completion_tokens) || 0
+    // 推理列两行：上行为客户端原始值（reasoning），带 "*" 后缀 = 客户端未携带、
+    // 由路由器按全局推理深度档位注入（前端把后缀拆出来单独染色）；下行为按推理
+    // 映射表转换后真正发往上游的字段值（reasoningOut）
+    const rzRaw = String(e.reasoning || '')
+    const rzInj = rzRaw.endsWith('*')
+    const rzText = rzInj ? rzRaw.slice(0, -1) : rzRaw
+    const rzOut = String(e.reasoningOut || '')
     // 秒为单位：<10s 保留一位小数（整数省小数点），>=10s 取整，避免长文本撑破固定列宽
     const s = ms / 1000
     const msText = ms > 0 ? (s >= 10 ? String(Math.round(s)) : s.toFixed(1).replace(/\.0$/, '')) + 's' : '—'
     const key = keys[i]
-    return { mm, status, cls, name, provider: e.provider || '', msText, msCls, prompt, completion, hasTok: prompt > 0 || completion > 0, key }
+    return { mm, status, cls, name, provider: e.provider || '', rzText, rzInj, rzOut, msText, msCls, prompt, completion, hasTok: prompt > 0 || completion > 0, key }
   })
 })
 
@@ -93,11 +100,11 @@ onUnmounted(() => clearTimeout(flashTimer))
     <div class="logs-scroll">
       <table v-if="logs.length" class="logs-table">
         <colgroup>
-          <col class="c-time"><col class="c-model"><col class="c-prov"><col class="c-in"><col class="c-out"><col class="c-ms"><col class="c-st">
+          <col class="c-time"><col class="c-model"><col class="c-prov"><col class="c-rz"><col class="c-rzo"><col class="c-in"><col class="c-out"><col class="c-ms"><col class="c-st">
         </colgroup>
         <thead>
           <tr>
-            <th>{{ t('logs.colTime') }}</th><th>{{ t('logs.colModel') }}</th><th>{{ t('logs.colProvider') }}</th><th>{{ t('logs.colIn') }}</th><th>{{ t('logs.colOut') }}</th><th>{{ t('logs.colMs') }}</th><th>{{ t('logs.colStatus') }}</th>
+            <th>{{ t('logs.colTime') }}</th><th>{{ t('logs.colModel') }}</th><th>{{ t('logs.colProvider') }}</th><th>{{ t('logs.colReasoning') }}</th><th>{{ t('logs.colReasoningOut') }}</th><th>{{ t('logs.colIn') }}</th><th>{{ t('logs.colOut') }}</th><th>{{ t('logs.colMs') }}</th><th>{{ t('logs.colStatus') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -113,6 +120,11 @@ onUnmounted(() => clearTimeout(flashTimer))
               <td class="lr-time">{{ r.mm }}</td>
               <td class="lr-model" :title="r.name">{{ r.name }}</td>
               <td class="lr-prov" :title="r.provider">{{ r.provider || '—' }}</td>
+              <td class="lr-rz" :class="{ 'rz-inj': r.rzInj, 'rz-none': !r.rzText }" :title="t('logs.reasoningTip')">
+                <template v-if="r.rzText">{{ r.rzText }}<i v-if="r.rzInj">*</i></template>
+                <template v-else>—</template>
+              </td>
+              <td class="lr-rzo" :class="{ 'rz-none': !r.rzOut }" :title="r.rzOut || t('logs.rzNone')">{{ r.rzOut || t('logs.rzNone') }}</td>
               <td class="lr-tok" :class="{ 'tok-empty': !r.hasTok }">
                 <template v-if="r.hasTok">
                   <span class="tok-in" :title="t('logs.inTip')">↑{{ fmtNum(r.prompt) }}</span>
@@ -131,7 +143,7 @@ onUnmounted(() => clearTimeout(flashTimer))
           </template>
         </tbody>
       </table>
-      <div v-else class="recent-empty">{{ t('ov.recentEmpty') }}<br>{{ t('prov.emptyTip') }}</div>
+      <div v-else class="recent-empty">{{ t('ov.recentEmpty') }}</div>
     </div>
   </div>
 </template>

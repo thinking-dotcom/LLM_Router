@@ -1,0 +1,579 @@
+/* 客户端面板共享样式（自 Clients.vue 抽出）。
+ * 面板组件在自己的 scoped 样式块里 @import 本文件：
+ * Vite 会先内联 @import，再由 Vue 加作用域属性，样式只作用于该面板内部。
+ * 新增面板时按需把用到的规则追加到这里，不再复制进 Clients.vue。
+ */
+
+
+/* 面板卡片：一道弱描边圈定内容，不用投影、不用底色差 */
+.cfg-card{padding:14px 16px;border:1px solid var(--border);border-radius:8px;background:var(--s2,var(--surface))}
+
+
+/* 面板分组标题：纯文本小标题，只靠字号/字重/留白分段 */
+.panel-head{font-size:11px;font-weight:600;letter-spacing:0;padding:0;background:none;border:0;border-radius:0;color:var(--t2);margin:6px 0 0}
+
+
+/* 作用位置图标按钮：展开上拉候选列表时的激活态 */
+
+/* ===== 字段 ===== */
+/* 配置项按类集中：同卡内字段间距收紧，标签与输入更贴近 */
+.cfg-form .field{display:flex;flex-direction:column;gap:4px;min-width:0;margin-bottom:0}
+
+
+.cfg-form .field label{font-size:10.5px;font-weight:600;letter-spacing:0;color:var(--t3)}
+
+
+.cfg-form .field input,.cfg-form .field select,.cfg-form .field textarea{width:100%;min-height:26px;padding:3px 8px;background-color:var(--input-bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;font-family:inherit;line-height:1.5;box-sizing:border-box;transition:border-color var(--transition),box-shadow var(--transition)}
+
+
+/* select 不用 background 简写（会清掉全局自定义下拉箭头图），单独给箭头留出右内距 */
+.cfg-form .field select{padding-right:28px}
+
+
+.cfg-form .field input:hover:not(:focus):not([readonly]),.cfg-form .field select:hover:not(:focus),.cfg-form .field textarea:hover:not(:focus){border-color:var(--border-hover)}
+
+
+.cfg-form .field input:focus,.cfg-form .field select:focus,.cfg-form .field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+
+
+.field-row{display:flex;gap:6px 10px;flex-wrap:wrap;margin-bottom:0}
+
+
+.cfg-form .field-row{margin-bottom:1px}
+
+
+.cfg-form .claude-one-line > .field{flex:1 1 0;min-width:0;margin-bottom:0}
+
+
+.cfg-form .claude-grid > .field{margin-bottom:0}
+
+
+/* 列宽等分后控件统一撑满列宽：number 类型的空数字框不受 field-sizing:content 影响，
+   width:auto 会按 input 默认宽（约 150px）溢出到相邻列，故这里显式压成列宽 */
+.cfg-form .claude-grid > .field > input,
+.cfg-form .claude-grid > .field > select{width:100%;min-width:0;max-width:100%}
+
+
+/* codebuddy 默认模型行：标签在左、输入框在右的横排形式 */
+/* codebuddy 各行：标签在左、输入框在右的横排形式。
+   带 .cfg-form 前缀提高特异性，压过后文 .cfg-form .fw-l/.fw-m/.fw-s 的
+   flex-basis 分档（208/144/96px），否则 basis 合计超宽仍会换行。 */
+.cfg-form .fld-inline-row > .field{flex:1 1 0;min-width:0;flex-direction:row;align-items:center;gap:6px}
+
+
+.fld-inline-row > .field > label{flex:none;white-space:nowrap;font-size:11px;color:var(--t2);margin:0}
+
+
+.fld-inline-row > .field > .pi-sel,
+.fld-inline-row > .field > input,
+.fld-inline-row > .field > select,
+.fld-inline-row > .field > textarea{flex:1 1 auto;min-width:0}
+
+
+/* 同行标签定宽（按卡内最长标签），使各列控件起点一致、文本框等宽 */
+.cb-lab-fix > .field > label{flex:0 0 114px}
+
+
+/* 连接行内 .ro-url（输入+复制按钮组合）也占满标签右侧余宽 */
+.fld-inline-row > .field > .ro-url{flex:1 1 auto;min-width:0}
+
+
+.fld-inline-col > .field{display:flex;flex-direction:row;align-items:center;gap:6px;min-width:0}
+
+
+.fld-inline-col > .field > label{flex:none;white-space:nowrap;font-size:11px;color:var(--t2);margin:0}
+
+
+.fld-inline-col > .field > textarea{flex:1 1 auto;min-width:0}
+
+
+.cc-lab-left .field{display:flex;flex-direction:row;align-items:center;gap:8px}
+
+
+.cc-lab-left .field>label{margin:0;flex:none;white-space:nowrap}
+
+
+.cc-lab-left .field>input,.cc-lab-left .field>select,.cc-lab-left .field>.pi-sel{flex:1 1 0;min-width:0}
+
+
+/* Copilot 配置选项页签：同 cc-lab-left，另支持只读地址组与多行文本域 */
+.cp-lab-left .field{display:flex;flex-direction:row;align-items:center;gap:8px}
+
+
+.cp-lab-left .field>label{margin:0;flex:none;white-space:nowrap}
+
+
+.cp-lab-left .field>input,.cp-lab-left .field>select,.cp-lab-left .field>.pi-sel,.cp-lab-left .field>textarea,.cp-lab-left .field>.ro-url{flex:1 1 0;min-width:0}
+
+
+/* deepcode 面板：文本标签居左、控件居右（用户指定布局）。必须显式 flex-direction:row
+   压掉 .cfg-form .field 的 column——两者特异性相同(0,2,0)，本组靠源序覆盖 */
+.dc-lab-left .field{display:flex;flex-direction:row;align-items:center;gap:8px}
+
+
+.dc-lab-left .field>label{margin:0;flex:none;white-space:nowrap}
+
+
+.dc-lab-left .field>input,.dc-lab-left .field>select,.dc-lab-left .field>.pi-sel{flex:1 1 0;min-width:0}
+
+
+/* 「内置 ID 映射」是 4 行块：标签顶对齐（垂直居中会相对多行块漂移），块吃满右侧余宽 */
+.dc-lab-left .field.dc-map-field{align-items:flex-start}
+
+
+.dc-lab-left .field.dc-map-field>label{padding-top:2px}
+
+
+.dc-lab-left .field.dc-map-field>.agy-map-main{flex:1 1 0;min-width:0}
+
+
+.cc-lab-left .field>.cc-toggle{flex:none;align-self:center}
+
+
+.cc-lab-left .field>.cc-nologin-msg{flex:1 1 0;min-width:0}
+
+
+.cc-grid4.gm-fit .field{flex:1 1 0;min-width:96px;flex-direction:row;align-items:center;gap:6px}
+
+
+.cc-grid4.gm-fit .field>label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+.cc-grid4.gm-fit .field>select,.cc-grid4.gm-fit .field>input{flex:1 1 0;width:auto;min-width:0;max-width:100%}
+
+
+/* grok 紧凑档：.gm-row 卡片里的 gm-fit 改为「按内容定位、不参与等分拉伸」。
+   gm-fit 的 flex:1 1 0 是流式排列的等分设计——控件随字段一起拉伸，
+   行尾不会露白；grok 的控件是内容宽（field-sizing:content），字段若仍被等分，
+   整块余量就堆在控件后面，看起来「配置项之间缝隙很大」。
+   这里让字段与控件都回到内容宽（6ch~24ch 夹取，24ch 为容纳
+   「always_allow_all_sessions」这类长占位符），项间只留 10px 列距，
+   一行能多容纳几项，右侧留白只出现一次而不是每项一次。
+   注：field-sizing:content 是 width/height 一起跟随内容——空 option 的 select、
+   无内容的 input 高度会塌陷到只剩内边距（实测 8px vs 正常 22px），同行控件因此
+   对不齐甚至看不见，故凡内容自适应的控件一律补 min-height:2em 兜底。 */
+.card.gm-row .cc-grid4.gm-fit .field{flex:0 0 auto;min-width:0}
+
+
+.card.gm-row .cc-grid4.gm-fit .field>input,
+.card.gm-row .cc-grid4.gm-fit .field>select{flex:0 0 auto;width:auto;field-sizing:content;min-width:52px;max-width:24ch;min-height:24px}
+
+
+/* 面板字段行：每个配置项尽量同行显示——行内项目不换行、允许收缩，标签过长省略号兜底 */
+.card.gm-row .field-row{flex-wrap:nowrap}
+
+
+.card.gm-row .field-row .field>label{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+
+/* fw-fit 字段（温度/TopP/TopK/最大输出/轮数/压缩阈值等短内容）：输入框按内容自适应宽度，剩余空间让给 fw-l/fw-m 字段 */
+.card.gm-row .field.fw-fit{flex:0 1 auto;width:auto}
+
+
+.card.gm-row .field.fw-fit>input,.card.gm-row .field.fw-fit>select{flex:0 1 auto;width:auto;field-sizing:content;min-width:6ch;max-width:22ch;min-height:24px}
+
+
+/* grok 模型卡「上下文长度 / [models] web_search」两列按需求配平：
+   数字列给足最小宽度（对齐 claude 模型映射行 96px 的惯例，仍随数值增长到 160px 上限），
+   搜索列回到内容宽（随所选模型名伸缩，封顶 200px），不再独占整行余量。
+   本行控件宽度都由内容决定，行尾留白与下一行「温度/Top P/…」一致，同属内容宽左对齐排布。
+   注意：这两条必须排在上一条 .fw-fit 规则之后——同特异性下靠源序覆盖 */
+.card.gm-row .field.gm-ctx{flex:0 0 auto}
+
+
+.card.gm-row .field.gm-ctx>input{min-width:112px;max-width:160px}
+
+
+.card.gm-row .field.gm-ws{flex:0 1 auto;min-width:0}
+
+
+.card.gm-row .field.gm-ws>label{flex:none;overflow:visible;text-overflow:clip}
+
+
+.card.gm-row .field.gm-ws>select{flex:0 1 auto;width:auto;field-sizing:content;min-width:6ch;max-width:200px;min-height:24px}
+
+
+/* gm-wrap 行：窗口装不下时字段整体折行（不压缩字段），标签始终完整显示 */
+.card.gm-row .field-row.gm-wrap{flex-wrap:wrap;row-gap:8px}
+
+
+.card.gm-row .field-row.gm-wrap .field{flex:0 0 auto}
+
+
+.card.gm-row .field-row.gm-wrap .field>label{flex:none;overflow:visible;text-overflow:clip}
+
+
+/* ===== grok 模型卡：按各字段「可能值」的实测字宽给框宽 =====
+   此前所有控件共用 fw-* 分档：短值（推理深度/温度/API 后端/后端搜索）被压到 6ch≈39px
+   （连「默认」两字都显示不全），长值字段（当前块）却被均分拉到 175px，宽窄正好反了。
+   现统一 field-sizing:content 跟随当前值伸缩，再用 min-width 预留「空值时的占位文本 /
+   常见最长值」所需宽度、max-width 兜住超长值；字段一律 flex:0 0 auto 不参与等分拉伸。
+   min 值均为实测（字体 Microsoft YaHei UI 11px）：文本框 = 文本宽 + 14px（内边距 6+6、
+   边框 1+1），下拉 = 文本宽 + 34px（再加箭头 20px），数字框另有 15px 步进器。
+   仅「接入地址 / 上游模型 / 模型描述」三个值本身可很长的字段保留 flex 吸收行尾余量。 */
+#grok-panel-model .field-row{flex-wrap:wrap;row-gap:8px}
+
+
+#grok-panel-model .field{flex:0 0 auto;min-width:0}
+
+
+#grok-panel-model .field>label{flex:none;overflow:visible;text-overflow:clip;white-space:nowrap}
+
+
+#grok-panel-model .field>input,
+#grok-panel-model .field>select{flex:0 0 auto;width:auto;field-sizing:content;min-height:24px}
+
+
+.model-row{display:flex;gap:6px 10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:3px}
+
+
+/* claude 环境变量映射行改横排（fld-inline-row）：单行不换行、垂直居中 */
+.model-row.fld-inline-row{flex-wrap:nowrap;align-items:center}
+
+
+.row-del{color:var(--t3)}
+
+
+/* 删除按钮悬停变红提示危险操作（对齐 pcl-del / perm-cap-x 的反馈）；
+   带 .cfg-dialog 前缀提高优先级，压过下方 .cfg-dialog .row-del 的白色文字覆盖 */
+.cfg-dialog .row-del:hover{color:var(--red);border-color:var(--red);background:var(--red-soft)}
+
+
+.perm-bar .perm-caps{display:flex;align-items:center;gap:6px;flex:none}
+
+
+.perm-bar .perm-cap{flex:none;white-space:nowrap}
+
+
+.ro-url{display:flex;gap:6px;align-items:center}
+
+
+.ro-url input{flex:1;min-height:26px;background:var(--s3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:3px 8px;color:var(--t2);font-size:11px}
+
+
+
+/* model-row 内未标注宽度的字段（模型选择 / 上下文长度）
+   弹窗保持原 720px 宽，行内三列在固定总宽内分配：
+   envKey 统一最长键名宽、上下文 96px 不收缩，模型 200px 为可收缩兜底列 */
+.cfg-form .model-row > .field{flex:0 1 300px}
+
+
+.cfg-form .model-row > .field.model-sel{flex:0 1 200px}
+
+
+.cfg-form .model-row > .field.ctx-len{flex:0 0 auto}
+
+
+/* 上下文长度输入框固定 96px：完整显示 200000 一类 6~7 位数并给数字步进按钮留位，
+   行宽不足时由模型列收缩让位，本列不再被压缩裁字 */
+.cfg-form .model-row > .field.ctx-len input{width:96px;flex:none}
+
+
+/* 环境变量名只读（预填钥匙不再可改），视觉弱化表明不可编辑；
+   等宽字体 + ch 宽度让输入框刚好完整显示变量名（14px = 左右内边距 + 边框）。
+   选择器带 .field 提升优先级，压过 .cfg-form .field input 的 font-family:inherit */
+.cfg-form .model-row > .field.env-key{flex:0 0 auto}
+
+
+.cfg-form .field .env-ro{background:var(--s3,var(--bg));color:var(--t3);cursor:not-allowed;font-family:var(--mono);flex:none}
+
+
+/* 配置项标签只做颜色提示：鼠标移入该项或控件聚焦时提亮，不做位移/缩放 */
+.cfg-dialog .cfg-body .field>label{transition:color .12s var(--ease)}
+
+
+.cfg-dialog .cfg-body .field:hover>label,
+.cfg-dialog .cfg-body .field:focus-within>label{color:var(--text)}
+
+
+/* agy 权限配置：工具权限 5 项 / 命令 3 项，两个单选组各被一个「淡绿胶囊背景」容器包裹归类。
+   组内为原生 radio + 文字（圆圈可见、11px、互斥；不带 .field 包装，不受
+   .cfg-form .field label{9px}
+
+
+/* 能力卡片右侧状态标记（✓=开 / ＋=关） */
+.perm-cap-mark{flex:none;font-size:10px;font-weight:800;color:var(--t3)}
+
+
+.perm-rule-card.on .perm-cap-mark{color:var(--accent)}
+
+
+.cc-lab-left .field>.cc-toggle-lab{align-self:center;justify-self:start}
+
+
+.agy-grid .field{margin-bottom:0}
+
+
+/* 映射表表头：列宽口径与下方行一致（内置 ID 150px + 目标模型撑满） */
+.agy-map-main .agy-map-head{display:flex;align-items:center;gap:6px;padding:3px 6px;border-bottom:1px solid var(--border);background:var(--s3);border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:9.5px;font-weight:700;letter-spacing:.3px;color:var(--t3)}
+
+
+.agy-map-main .agy-map-head>span:first-child{flex:0 0 150px;min-width:0}
+
+
+.agy-map-main .agy-map-head>span:last-child{flex:1;min-width:0}
+
+
+/* ---- agy 模型映射面板：配对行 + aliases 行编辑器 ---- */
+.agy-map-main{display:flex;flex-direction:column;gap:8px}
+
+
+/* 注意不能加 overflow:hidden（即便为了圆角裁切）：会裁掉行内绝对定位的 .pi-sel-drop
+   模型下拉；内层 .agy-map-rows 自带 padding，子元素碰不到边框圆角，无需裁切 */
+.agy-map-main .agy-map-list{border:1px solid var(--border);border-radius:var(--radius-sm)}
+
+
+.agy-map-main .agy-map-rows{padding:4px 6px}
+
+
+.agy-map-main .agy-map-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+
+
+.agy-map-main .agy-map-row:last-child{margin-bottom:0}
+
+
+/* 内置 ID 只读标签：等宽字体、固定宽度，右侧文本框为映射目标 */
+.agy-map-main .agy-map-builtin{flex:0 0 150px;min-width:0;padding:2px 5px;background:var(--s2);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:10px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+
+.agy-map-main .agy-map-val{flex:1;min-width:0;padding:2px 5px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:10px;font-family:var(--mono)}
+
+
+.agy-map-main .agy-map-val:focus{outline:none;border-color:var(--accent-ring)}
+
+
+.agy-map-main .agy-map-eq{color:var(--t3);font-size:10px;font-family:var(--mono)}
+
+
+/* deepcode 内置 ID 映射：ID 较长（deepseek-v4-flash-vision-exp），标签列单独加宽；
+   该面板行内不画等号；说明文字用常显纯文本（.dc-note），不用问号浮层 */
+.deepcode-map .agy-map-builtin{flex:0 0 196px}
+
+
+.dc-note{margin:2px 0 0;font-size:9.5px;line-height:1.55;color:var(--t3)}
+
+
+
+/* ===== pi/grok 模型下拉 ===== */
+.pi-sel{position:relative}
+
+
+.pi-sel > input{width:100%;min-height:26px;padding:3px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:11px;line-height:1.5;box-sizing:border-box;transition:border-color var(--transition),box-shadow var(--transition)}
+
+
+.pi-sel > input:hover:not(:focus){border-color:var(--border-hover)}
+
+
+.pi-sel > input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+
+
+.pi-sel-drop{position:absolute;z-index:50;top:calc(100% + 2px);left:0;right:0;max-height:150px;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:0 8px 24px rgba(0,0,0,.25);padding:3px}
+
+
+.pi-sel-letter{padding:1px 8px;font-size:9px;font-weight:800;color:var(--t3);text-transform:uppercase}
+
+
+.pi-sel-group button{display:block;width:100%;text-align:left;padding:3px 10px;background:transparent;border:0;color:var(--text);font-size:11px;cursor:pointer}
+
+
+.pi-sel-group button:hover{background:var(--accent-soft);color:var(--accent)}
+
+
+.pi-sel-empty{color:var(--t3);font-size:10px;padding:6px;text-align:center}
+
+
+.pi-sel-drop{animation:piDropIn .14s ease}
+
+
+.pi-sel-drop.pi-sel-up{animation-name:piDropInUp}
+
+
+/* 三态等裸选项下拉（.pi-sel-drop 直接子 button，此前无任何样式命中导致裸文本挤在一起）：
+   胶囊式选项 + 悬停高亮 + 当前值 ✓ 加粗 */
+.pi-sel-drop > button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;padding:4px 9px;margin:1px 0;background:transparent;border:0;border-radius:6px;color:var(--t2);font-size:11px;font-family:inherit;cursor:pointer;transition:background .12s,color .12s}
+
+
+.pi-sel-drop > button:hover{background:var(--accent-soft);color:var(--accent)}
+
+
+.pi-sel-drop > button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+
+.pi-sel-drop > button.on::after{content:'✓';font-size:10px;font-weight:700}
+
+
+/* 作用位置上拉候选（权限配置卡在页面底部，向下展开会溢出视野）：向上弹出 + 路径化美化 */
+.pi-sel-drop.pi-sel-up{top:auto;bottom:calc(100% + 4px);max-height:190px;box-shadow:0 -8px 24px rgba(0,0,0,.3)}
+
+
+.pi-sel-drop.loc-opt{padding:4px;border-radius:8px}
+
+
+.pi-sel-drop.loc-opt button{display:flex;align-items:center;gap:7px;padding:5px 9px;margin:1px 0;border-radius:6px;font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .12s,color .12s}
+
+
+.pi-sel-drop.loc-opt button::before{content:'';width:12px;height:12px;flex:0 0 auto;background:var(--t3);-webkit-mask:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");mask:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/%3E%3C/svg%3E");transition:background .12s}
+
+
+.pi-sel-drop.loc-opt button:hover,.pi-sel-drop.loc-opt button.sel{background:var(--accent-soft);color:var(--accent)}
+
+
+.pi-sel-drop.loc-opt button:hover::before,.pi-sel-drop.loc-opt button.sel::before{background:var(--accent)}
+
+
+
+/* ===== 细滚动条（下拉面板 / 配置主体），避免 Windows 默认粗滚动条 ===== */
+.pi-sel-drop,.cfg-body{scrollbar-width:thin;scrollbar-color:var(--border-hover) transparent}
+
+
+.pi-sel-drop::-webkit-scrollbar{width:6px;height:6px}
+
+
+.pi-sel-drop::-webkit-scrollbar-track{background:transparent}
+
+
+.pi-sel-drop::-webkit-scrollbar-thumb{background:var(--border-hover,#666);border-radius:3px}
+
+
+.pi-sel-drop::-webkit-scrollbar-thumb:hover{background:var(--t3,#999)}
+
+
+.pi-model-block{border:1px solid var(--border);border-radius:8px;padding:8px;margin-bottom:6px;background:var(--surface)}
+
+
+.pi-model-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+
+
+.cfg-dialog .cfg-title,
+.cfg-dialog .cfg-form .field label,
+.cfg-dialog .cfg-form .field .hint,
+.cfg-dialog .pcl-key,
+.cfg-dialog .perm-rule-text,
+.cfg-dialog .cfg-mcp-chip,
+.cfg-dialog .cfg-mcp-empty,
+.cfg-dialog .cfg-head-count,
+.cfg-dialog .pm-name,
+.cfg-dialog .pm-desc,
+.cfg-dialog .pi-sel-letter,
+.cfg-dialog .pi-sel-empty,
+.cfg-dialog .pi-fetch-bar,
+.cfg-dialog .pi-fetch-loading,
+.cfg-dialog .cc-nologin-msg,
+.cfg-dialog .perm-cap-mark,
+.cfg-dialog .row-del,
+.cfg-dialog .cfg-file-btn{color:var(--text)}
+
+
+/* 层级还原：字段标签 / 说明回到次级色，避免整窗一片白、小字号发虚 */
+.cfg-dialog .cfg-form .field label{color:var(--t2)}
+
+
+.cfg-dialog .cfg-form .field .hint{color:var(--t3)}
+
+
+
+/* ===== 配置项表格：多列多行 =====
+   卡片即表格：配置项按列自动排布（每列最小 200px），单元格之间以 1px 细线分隔，
+   表格四周有完整外框；不再是一条到底的长列表。 */
+.cfg-dialog .cfg-body .cfg-card{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:0;
+  padding:0;background:none;border:0;border-radius:0;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);border-left:1px solid var(--border);
+}
+.cfg-dialog .cfg-body .cfg-card:hover{border-color:var(--border)}
+
+/* 行容器拆散为单元格（display:contents），所有配置项汇入同一张表。
+   容器匹配一律用 :where（含 :has 排除守卫）：这些类只为命中，不参与优先级——
+   否则下方单元格规则会以更高特异性压过末尾「标签内嵌」的同属性规则，
+   内嵌标签整体失效（标签被顶回上方、单元格内距不被复合框覆盖） */
+.cfg-dialog .cfg-body .cfg-card > :where(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid):not(.model-row),
+.cfg-dialog .cfg-body .cfg-card > :where(.cc-grid4,.agy-grid):where(:not(:has(.row-del)):not(:has(.cc-del-pill))){display:contents}
+
+/* 单元格 = 一个配置项：标签在上、控件在下 */
+.cfg-dialog .cfg-body .cfg-card > .field,
+.cfg-dialog .cfg-body .cfg-card > :where(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid) > .field,
+.cfg-dialog .cfg-body .cfg-card > :where(.cc-grid4,.agy-grid):where(:not(:has(.row-del)):not(:has(.cc-del-pill))) > .field{
+  display:flex;flex-direction:column;justify-content:flex-end;gap:4px;
+  padding:10px 14px;margin:0;min-width:0;background:var(--surface);
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);border-left:0;border-top:0;
+}
+/* 标签：次级色、单行省略 */
+.cfg-dialog .cfg-body .cfg-card > .field > label,
+.cfg-dialog .cfg-body .cfg-card > :where(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid) > .field > label,
+.cfg-dialog .cfg-body .cfg-card > :where(.cc-grid4,.agy-grid):where(:not(:has(.row-del)):not(:has(.cc-del-pill))) > .field > label{
+  margin:0;min-width:0;font-size:10.5px;font-weight:600;line-height:1.4;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* 控件：吃满单元格 */
+.cfg-dialog .cfg-body .cfg-card > .field > :is(input,select,textarea,.pi-sel,.ro-url),
+.cfg-dialog .cfg-body .cfg-card > :where(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid) > .field > :is(input,select,textarea,.pi-sel,.ro-url),
+.cfg-dialog .cfg-body .cfg-card > :where(.cc-grid4,.agy-grid):where(:not(:has(.row-del)):not(:has(.cc-del-pill))) > .field > :is(input,select,textarea,.pi-sel,.ro-url){
+  width:100%!important;max-width:100%!important;min-width:0;min-height:26px;
+  field-sizing:normal!important;box-sizing:border-box;
+}
+/* 宽项（文本域 / 整行字段 / 映射表）跨满整行 */
+.cfg-dialog .cfg-body .cfg-card > .field:has(> textarea),
+.cfg-dialog .cfg-body .cfg-card > .field.fw-full,
+.cfg-dialog .cfg-body .cfg-card > .field.gm-full,
+.cfg-dialog .cfg-body .cfg-card > .field.dc-map-field,
+.cfg-dialog .cfg-body .cfg-card > :is(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid) > .field:has(> textarea),
+.cfg-dialog .cfg-body .cfg-card > :is(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid) > .field.fw-full,
+.cfg-dialog .cfg-body .cfg-card > :is(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid) > .field.gm-full{grid-column:1/-1}
+
+/* 卡内整块内容：记录行、按钮行、芯片——各占一整行 */
+.cfg-dialog .cfg-body .cfg-card > :not(.field):not(:is(.field-row,.fld-inline-row,.claude-one-line,.claude-grid,.cfg-grid,.perm-inline,.perm-bar,.agy-map-main,.pi-model-block,.agy-map-list,.model-row)){
+  grid-column:1/-1;padding:10px 14px;
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+}
+/* 记录行（模型 / 推理映射的动态增删行）：整行 */
+.cfg-dialog .cfg-body .cfg-card > .model-row{
+  grid-column:1/-1;padding:10px 14px;
+  border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+}
+/* 自带样式的块（权限胶囊、映射表、记录块）保留自身内边距，只补表格边线 */
+.cfg-dialog .cfg-body .cfg-card > :is(.perm-inline,.perm-bar,.agy-map-main,.pi-model-block,.agy-map-list){
+  grid-column:1/-1;border-right:1px solid var(--border);border-bottom:1px solid var(--border);
+}
+
+
+/* 标签内嵌：配置项统一为「左侧标签在框内 + 右侧控件」的复合框。
+   适用范围放宽到「有标签且标签后面还有任意控件」的字段——文本控件、模型下拉、
+   只读地址组、按钮、胶囊、映射表一律同构，标签宽度按文字自适应、不再固定抢宽。 */
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)){
+  flex-direction:row;align-items:stretch;justify-content:flex-start;gap:0;
+  padding:10px 0;background:var(--input-bg);border-radius:0;
+}
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > label{
+  position:relative;z-index:2;flex:0 0 auto;max-width:100%;
+  display:block;line-height:26px;margin:0;padding:0 8px 0 10px;
+  font-size:10.5px;font-weight:600;color:var(--t2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border-right:1px solid var(--border);cursor:help;
+}
+/* 文本控件：去掉自身描边与底色，框线由单元格承担 */
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > :is(input,select,textarea){
+  flex:1 1 auto;min-width:0;width:auto!important;border:0;background-color:transparent;
+  padding:3px 8px;min-height:26px;
+}
+/* 包裹型控件（模型下拉 / 只读地址组）整体吃满右侧 */
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > :is(.pi-sel,.ro-url){flex:1 1 auto;min-width:0}
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > .pi-sel > input,
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > .ro-url > input{
+  width:100%;border:0;background-color:transparent;padding:3px 8px;min-height:26px;
+}
+/* 其余控件（映射表 / 胶囊 / 列表）占满右侧，按钮按内容宽度 */
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > :not(label){flex:1 1 auto;min-width:0}
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > button{flex:0 0 auto;align-self:center;margin-left:8px}
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)):focus-within > label{color:var(--text);border-right-color:var(--accent)}
+/* 内嵌标签下的 select 同样给全局自定义箭头留位（基础规则的内距被复合框覆盖） */
+.cfg-dialog .cfg-body .cfg-card .field:has(> label):has(> :not(label)) > select{padding-right:28px}
+/* 多控件字段（如 OpenCode「模型集合」内含多条映射行 + 添加按钮）：保持纵向堆叠，
+   标签退化为框内首行分隔头，不再与各记录行横向挤在一行 */
+.cfg-dialog .cfg-body .cfg-card .field:has(> .model-row){
+  flex-direction:column;align-items:stretch;gap:6px;
+}
+.cfg-dialog .cfg-body .cfg-card .field:has(> .model-row) > label{
+  border-right:0;border-bottom:1px solid var(--border);line-height:1.4;padding:0 0 6px;
+}
+/* 字段行（display:contents）里的独立按钮：作为网格单元自适应内容宽并垂直居中 */
+.cfg-dialog .cfg-body .cfg-card .field-row > .btn{justify-self:start;align-self:center;margin-left:6px}

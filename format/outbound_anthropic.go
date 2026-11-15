@@ -83,6 +83,24 @@ func ToAnthropic(openaiReq map[string]any) map[string]any {
 		if len(content) > 0 {
 			msg["content"] = content
 		}
+		// OpenAI 形态允许连续同角色消息（assistant(tool_calls) → tool → user 归一化
+		// 后即连续两条 user），Anthropic Messages API 严格校验 user/assistant 严格
+		// 交替，连续同角色会整请求 400：把当前消息合并进前一条同角色消息。
+		if len(messages) > 0 {
+			if last, _ := messages[len(messages)-1].(map[string]any); last != nil {
+				if lr, _ := last["role"].(string); lr == msgRole {
+					lc, _ := last["content"].([]any)
+					cc, _ := msg["content"].([]any)
+					merged := append(append([]any{}, lc...), cc...)
+					if len(merged) > 0 {
+						last["content"] = merged
+					} else {
+						delete(last, "content")
+					}
+					continue
+				}
+			}
+		}
 		messages = append(messages, msg)
 	}
 
@@ -121,23 +139,21 @@ func ToAnthropic(openaiReq map[string]any) map[string]any {
 			}
 		}
 	} else if eff, _ := openaiReq["reasoning_effort"].(string); eff != "" {
-		// Claude 4.7+/5 系列与 Mythos Preview：官方推荐 thinking.type=adaptive
-		//（enabled 已弃用，对新模型设置 enabled 会触发弃用警告），且原生
-		// output_config.effort 可直接承载档位。这里按模型家族择一：
-		//   - 新模型：thinking adaptive + output_config.effort；
-		//   - 旧模型：thinking enabled + budget_tokens（原约定）。
-		if isAnthropicAdaptiveModel(strOr(openaiReq["model"], "")) {
-			if eff != "none" && eff != "" {
-				req["thinking"] = map[string]any{"type": "adaptive"}
-				if oeff := anthropicEffortOf(eff); oeff != "" {
-					req["output_config"] = map[string]any{"effort": oeff}
-				}
+		// 统一档位 → Anthropic 原生参数。字段与取值、模型家族择形（Claude 4.7+/5
+		// 与 Mythos/Fable 走 thinking adaptive + output_config.effort，enabled 已
+		// 弃用；旧模型走 enabled + budget_tokens）全部来自映射表
+		// format/reasoning_table.go，这里只负责落字段与协议约束。
+		if p := EncodeReasoningNative(ReasoningFamilyAnthropic, strOr(openaiReq["model"], ""), eff); p != nil {
+			for k, v := range p.Value {
+				req[k] = v
 			}
-		} else if budget := anthropicThinkingBudget(eff); budget > 0 {
-			req["thinking"] = map[string]any{"type": "enabled", "budget_tokens": budget}
-			// Anthropic 要求 max_tokens > budget_tokens
-			if mt := intVal(openaiReq, "max_tokens", "max_completion_tokens"); mt <= budget {
-				req["max_tokens"] = budget + 1024
+			// Anthropic 协议要求 max_tokens > budget_tokens（仅 enabled 家族带预算）
+			if th, ok := req["thinking"].(map[string]any); ok {
+				if b := toF(th["budget_tokens"]); b > 0 {
+					if mt := intVal(openaiReq, "max_tokens", "max_completion_tokens"); float64(mt) <= b {
+						req["max_tokens"] = int(b) + 1024
+					}
+				}
 			}
 		}
 	}
@@ -249,42 +265,17 @@ func isAnthropicAdaptiveModel(model string) bool {
 	return false
 }
 
-// anthropicEffortOf 把统一推理档位折算为 Anthropic output_config.effort 枚举
-// （minimal/low → low；none → 空（不设置）；其余原样）。
+// anthropicEffortOf 把统一推理档位折算为 Anthropic output_config.effort 枚举。
+// 取值来自映射表（format/reasoning_table.go）的 Anthropic(新 adaptive) 列；
+// 保留本函数仅为兼容既有调用方。
 func anthropicEffortOf(eff string) string {
-	switch eff {
-	case "none":
-		return ""
-	case "minimal", "low":
-		return "low"
-	case "medium":
-		return "medium"
-	case "high":
-		return "high"
-	case "xhigh":
-		return "xhigh"
-	case "max":
-		return "max"
-	}
-	return ""
+	return AnthropicEffortOf(eff)
 }
 
 // anthropicThinkingBudget 把统一推理档位映射为 Anthropic 思考预算（token）。
+// 取值来自映射表的 Anthropic(旧 enabled) 列；0 表示不启用 extended thinking。
 func anthropicThinkingBudget(eff string) int {
-	switch eff {
-	case "minimal":
-		return 1024
-	case "low":
-		return 2048
-	case "medium":
-		return 8192
-	case "high":
-		return 24576
-	case "xhigh", "max":
-		return 32768
-	default: // none 或未知档位：不启用 extended thinking
-		return 0
-	}
+	return AnthropicBudgetOf(eff)
 }
 
 func stringify(v any) string {

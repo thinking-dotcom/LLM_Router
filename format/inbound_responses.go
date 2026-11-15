@@ -427,14 +427,31 @@ func OpenaiToResponsesBody(openaiResp map[string]any, model string) map[string]a
 		"status":     status,
 		"model":      outModel,
 		"output":     output,
-		"usage":      map[string]any{"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+		"usage": map[string]any{"input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
+			"input_tokens_details":  map[string]any{"cached_tokens": 0},
+			"output_tokens_details": map[string]any{"reasoning_tokens": 0}},
 	}
 	if u, ok := openaiResp["usage"].(map[string]any); ok {
-		in, _ := u["prompt_tokens"].(float64)
-		out2, _ := u["completion_tokens"].(float64)
+		in, _ := numInt(u, "prompt_tokens")
+		out2, _ := numInt(u, "completion_tokens")
+		// input/output_tokens_details 是 Codex CLI 的 serde 必填字段（缺了会整条丢弃回复），
+		// 上游带 prompt/completion_tokens_details 时取其真实明细，否则填 0
+		cached, reasoning := 0, 0
+		if d, ok2 := u["prompt_tokens_details"].(map[string]any); ok2 {
+			if v, ok3 := numInt(d, "cached_tokens"); ok3 {
+				cached = v
+			}
+		}
+		if d, ok2 := u["completion_tokens_details"].(map[string]any); ok2 {
+			if v, ok3 := numInt(d, "reasoning_tokens"); ok3 {
+				reasoning = v
+			}
+		}
 		resp["usage"] = map[string]any{
 			"input_tokens": int(in), "output_tokens": int(out2),
-			"total_tokens": int(in) + int(out2),
+			"total_tokens":          int(in) + int(out2),
+			"input_tokens_details":  map[string]any{"cached_tokens": cached},
+			"output_tokens_details": map[string]any{"reasoning_tokens": reasoning},
 		}
 	}
 	return resp
@@ -457,8 +474,14 @@ type responsesSSEWriter struct {
 
 	promptTokens int
 	complTokens  int
-	finish       string
-	usageSeen    bool
+	// 明细字段：Responses 协议的 usage.input_tokens_details / output_tokens_details
+	// 是 Codex CLI 的必填项（serde 反序列化，缺字段直接整条丢弃并报
+	// missing field `input_tokens_details`），故即使上游未提供也要回填 0。
+	// 上游给得出时（OpenAI 形状的 prompt_tokens_details / completion_tokens_details）取其真实值。
+	cachedTokens    int
+	reasoningTokens int
+	finish          string
+	usageSeen       bool
 }
 
 type respToolItem struct {
@@ -557,6 +580,17 @@ func (rw *responsesSSEWriter) Write(chunk map[string]any) bool {
 			rw.complTokens = int(v)
 		} else if v, ok := usage["completion_tokens"].(int); ok {
 			rw.complTokens = v
+		}
+		// 缓存命中 / 推理 token 明细：回填到 Responses 的 input/output_tokens_details
+		if d, ok := usage["prompt_tokens_details"].(map[string]any); ok {
+			if v, ok2 := d["cached_tokens"].(float64); ok2 {
+				rw.cachedTokens = int(v)
+			}
+		}
+		if d, ok := usage["completion_tokens_details"].(map[string]any); ok {
+			if v, ok2 := d["reasoning_tokens"].(float64); ok2 {
+				rw.reasoningTokens = int(v)
+			}
 		}
 		rw.usageSeen = true
 	}
@@ -691,8 +725,12 @@ func (rw *responsesSSEWriter) Finish() {
 	}
 	final := rw.baseResponse(status)
 	final["output"] = items
+	// input/output_tokens_details 是 Codex CLI 的 serde 必填字段，缺失会让它整条丢弃
+	// 回复（missing field `input_tokens_details`）；上游给了缓存/推理明细就填真实值，否则 0
 	usage := map[string]any{"input_tokens": rw.promptTokens, "output_tokens": rw.complTokens,
-		"total_tokens": rw.promptTokens + rw.complTokens}
+		"total_tokens":          rw.promptTokens + rw.complTokens,
+		"input_tokens_details":  map[string]any{"cached_tokens": rw.cachedTokens},
+		"output_tokens_details": map[string]any{"reasoning_tokens": rw.reasoningTokens}}
 	final["usage"] = usage
 	rw.writeEvent("response.completed", map[string]any{"type": "response.completed", "response": final})
 }

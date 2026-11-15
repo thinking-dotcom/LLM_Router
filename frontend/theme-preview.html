@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<title>LLM Router — 深色主题预览</title>
+<link rel="stylesheet" href="public/style.css" />
+<style>
+  body{margin:0}
+  .demo-root{height:100vh;display:flex;flex-direction:column;min-width:0}
+  .demo-bar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:6px 14px;border-bottom:1px solid var(--border);}
+  .demo-title{font-size:12px;font-weight:800;color:var(--text);letter-spacing:.4px}
+  .demo-title em{color:var(--accent);font-style:normal}
+  .demo-sub{font-size:10px;color:var(--t3);flex:1}
+  .toggle-theme{font-size:10.5px}
+  .left-pane{width:300px}
+  .mini-sec{margin-bottom:8px}
+  .mini-cap{font-size:9.5px;font-weight:800;letter-spacing:.5px;color:var(--t3);text-transform:uppercase;margin:10px 0 5px;display:flex;align-items:center;gap:6px}
+  .mini-cap::before{content:"";width:3px;height:10px;border-radius:999px;background:var(--accent);flex-shrink:0}
+</style>
+</head>
+<body>
+<div class="demo-root">
+
+  <!-- 顶部导航胶囊 -->
+  <div class="right-nav">
+    <button class="right-tab on">概览</button>
+    <button class="right-tab">服务商</button>
+    <button class="right-tab">日志</button>
+    <button class="right-tab">技能</button>
+    <button class="right-tab">MCP</button>
+    <button class="right-tab">同步</button>
+    <button class="right-tab">设置</button>
+    <span style="flex:1"></span>
+    <button class="btn btn-xs btn-primary" onclick="document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';this.textContent=document.documentElement.dataset.theme==='dark'?'切换浅色预览':'切换深色预览'">切换浅色预览</button>
+  </div>
+
+  <div id="board" style="position:static;flex:1">
+
+    <!-- 左：概览面板 -->
+    <div class="left-pane">
+      <div class="panel" style="height:100%">
+        <div class="panel-title"><span class="p-title-dot"></span><span class="p-title-name">路由状态</span></div>
+        <div class="panel-body board-status">
+
+          <div class="overview-status on">
+            <div class="os-ring"><span class="os-dot"></span><span class="os-wave"></span><span class="os-wave w2"></span><span class="os-wave w3"></span></div>
+            <div class="os-info">
+              <div class="os-label">Router</div>
+              <div class="os-value">运行中 · 127.0.0.1:3000</div>
+            </div>
+            <button class="btn btn-sm os-btn os-stop">停止</button>
+          </div>
+
+          <div class="stats-bar">
+            <div class="sb-item"><span class="sb-value">128</span><span class="sb-label">请求</span></div>
+            <div class="sb-item"><span class="sb-value sv-out">1.24M</span><span class="sb-label">输出</span></div>
+            <div class="sb-item"><span class="sb-value sv-in">382K</span><span class="sb-label">输入</span></div>
+            <div class="sb-item"><span class="sb-value">4</span><span class="sb-label">在线</span></div>
+          </div>
+
+          <div class="mini-sec"></div>
+          <div class="mini-cap">接入地址</div>
+          <div class="endpoint-card">
+            <div class="ep-head"><span>OpenAI 兼容</span><span class="ep-tab" style="flex:none;padding:2px 10px">切换</span></div>
+            <div class="ep-tabs"><span class="ep-tab active">/oai</span><span class="ep-tab">/aai</span><span class="ep-tab">/gai</span></div>
+            <div class="ep-url"><code>http://127.0.0.1:3000/router/v1</code><span class="copy-btn ok">复制</span></div>
+          </div>
+
+          <div class="mini-cap">控件示例</div>
+          <div class="card" style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button class="btn btn-primary">主操作</button>
+              <button class="btn">次级按钮</button>
+              <button class="btn btn-ghost">幽灵按钮</button>
+              <button class="btn btn-danger">删除</button>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap">
+              <div class="field"><label>服务商名称</label><input placeholder="输入名称" /></div>
+              <div class="field"><label>格式</label>
+                <select><option>openai</option><option>anthropic</option><option>gemini</option></select>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+              <label class="toggle"><input type="checkbox" checked /><span class="slider"></span></label>
+              <span style="font-size:10.5px;color:var(--t2)">启用自动拉取模型</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：内容区 -->
+    <div class="right-pane">
+      <div class="panel" style="flex:1;min-height:0">
+        <div class="panel-title"><span class="p-title-dot"></span><span class="p-title-name">服务商</span><button class="p-title-btn p-btn-add">＋ 添加服务商</button></div>
+        <div class="panel-body">
+
+          <div class="prov-grid">
+            <div class="prov-card">
+              <div class="phead"><div><div class="pname">OpenAI</div></div><div style="display:flex;align-items:center;gap:7px"><span class="prov-dot on"></span><span class="ptype">/oai</span></div></div>
+              <div class="pmeta"><span class="purl">https://api.openai.com/v1</span><span class="pmcount">12 模型</span></div>
+            </div>
+            <div class="prov-card">
+              <div class="phead"><div><div class="pname">Anthropic</div></div><div style="display:flex;align-items:center;gap:7px"><span class="prov-dot on"></span><span class="ptype">/aai</span></div></div>
+              <div class="pmeta"><span class="purl">https://api.anthropic.com</span><span class="pmcount">6 模型</span></div>
+            </div>
+            <div class="prov-card">
+              <div class="phead"><div><div class="pname">Gemini</div></div><div style="display:flex;align-items:center;gap:7px"><span class="prov-dot fail"></span><span class="ptype">/gai</span></div></div>
+              <div class="pmeta"><span class="purl">generativelanguage.googleapis.com</span><span class="pmcount">—</span></div>
+            </div>
+          </div>
+
+          <div class="mini-cap">状态胶囊 · 权限规则</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            <span class="perm-cap allow"><span class="perm-cap-dot"></span><span class="perm-cap-text">Read(src/**)</span><span class="perm-cap-state">允许</span></span>
+            <span class="perm-cap ask"><span class="perm-cap-dot"></span><span class="perm-cap-text">Bash(npm test)</span><span class="perm-cap-state">询问</span></span>
+            <span class="perm-cap deny"><span class="perm-cap-dot"></span><span class="perm-cap-text">WebFetch(https://*)</span><span class="perm-cap-state">拒绝</span></span>
+            <span class="perm-cap def"><span class="perm-cap-dot"></span><span class="perm-cap-text">Write(/tmp/*)</span><span class="perm-cap-state">未设</span></span>
+          </div>
+
+          <div class="mini-cap">最近请求</div>
+          <div class="card" style="padding:0;overflow:hidden">
+            <table class="logs-table">
+              <colgroup><col class="c-time"/><col class="c-prov"/><col/><col class="c-in"/><col class="c-out"/><col class="c-ms"/><col class="c-st"/></colgroup>
+              <thead><tr><th>时间</th><th>服务商</th><th>模型</th><th>输入</th><th>输出</th><th>耗时</th><th>状态</th></tr></thead>
+              <tbody>
+                <tr><td class="lr-time">21:41:03</td><td><span class="lr-prov">openai</span></td><td class="lr-model">gpt-4o-mini</td><td class="lr-tok"><span class="tok-in">1.2K</span></td><td class="lr-tok"><span class="tok-out">3.4K</span></td><td class="lr-ms">842ms</td><td class="lr-status"><span class="st-pill ok">200</span></td></tr>
+                <tr><td class="lr-time">21:41:01</td><td><span class="lr-prov">anthropic</span></td><td class="lr-model">claude-sonnet-4</td><td class="lr-tok"><span class="tok-in">640</span></td><td class="lr-tok"><span class="tok-out">980</span></td><td class="lr-ms warn">1.24s</td><td class="lr-status"><span class="st-pill ok">200</span></td></tr>
+                <tr><td class="lr-time">21:40:57</td><td><span class="lr-prov">gemini</span></td><td class="lr-model">gemini-2.5-flash</td><td class="lr-tok"><span class="tok-in">2.0K</span></td><td class="lr-tok"><span class="tok-out">—</span></td><td class="lr-ms slow">8.93s</td><td class="lr-status"><span class="st-pill err">429</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

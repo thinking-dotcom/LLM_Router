@@ -1,10 +1,8 @@
-import { setCcMuted, setCcModelsReady, setCcModelsSeeded } from './cc'
-import { setClineModelsMuted, setClineConnMuted, setClineGlobalMuted, setClineCapsMuted } from './cline'
-import { setOcMuted } from './opencode'
-import { setHermesMuted } from './hermes'
-import { setCodexMuted } from './codex'
-import { setKimiMuted } from './kimi'
-import { setGrokMuted } from './grok'
+import { setCcMuted, setCcModelsReady, setCcModelsSeeded } from './clients/cc'
+import { setOcMuted } from './clients/opencode'
+import { setCodexMuted } from './clients/codex'
+import { setKimiMuted } from './clients/kimi'
+import { setGrokMuted } from './clients/grok'
 import { setGenericMuted, setJsonEcho } from './store'
 // Clients.vue 中枢：currentCfgFile/currentCfgExists、switchMode、通用表单↔源码联动、
 // buildFormText / saveTargetConfig / openTargetConfig，以及跨客户端的统一模型下拉。
@@ -15,27 +13,26 @@ import { t } from '../../i18n'
 import api from '../../api'
 import { jsonErrorPos, repairJsonText, pruneIllegalTemplateKeys } from '../../utils'
 import {
-  cfgEdit, cfgInfoOpen, cfgTarget, cfgLoading, cfgSaving, cfgMode, cfgFormat, cfgFile, cfgExists,
+  cfgEdit, cfgTarget, cfgLoading, cfgSaving, cfgMode, cfgFormat, cfgFile, cfgExists,
   cfgContent, cfgObj, ensureClientPaths, loadModelOptions, modelOptions, syncToJson, genericMuted,
   jsonEcho, GENERIC_EXCLUDED_IDS, routerHintForTarget,
 } from './store'
-import { claudeEnvModels, normalizeClaudeEnvModels, initClaudeExtra, syncClaudeEnvModelsToObj, syncClaudeExtraToObj, claudeBuildFormText, loadClaudeMarkdown, saveClaudeMarkdown } from './claude'
-import { initPiForm, piBuildModelsText, piSettingsBuildText, piSettingsContent, piSettingsExists, piSettingsFile, syncSettingsFromSource, piMcpContent, piMcpExists, piMcpFile, piAgentsContent, piAgentsExists, piAgentsFile, piSettingsPreset, initPiSettingsForm, fetchPiBaseModels } from './pi'
-import { grokBuildToml, grokReadToml, grokMuted, grokAgentsContent, grokAgentsExists, grokAgentsFile, grokTomlPreset, grokBlocks, grokOrder, grokUnmanaged, grokUiExtras, grokForm, grokEmptyForm, fetchGrokBaseModels } from './grok'
-import { codexInitFrom, codexWriteToml, codexMuted, codexAgentsContent, codexAgentsExists, codexAgentsFile, codexTomlPreset, codexForm, CODEX_RESERVED_PROVIDERS } from './codex'
-import { kimiBuildToml, kimiReadToml, kimiMuted, kimiAgentsContent, kimiAgentsExists, kimiAgentsFile, kimiTomlPreset, kimiForm, kimiProviderRows, kimiModelRows, kimiThinking, kimiPermRows, kimiUnmanaged } from './kimi'
-import { geminiApplyToObj, initGeminiForm, geminiSettingsPreset, geminiEnvContent, geminiEnvExists, geminiEnvFile, geminiAgentsContent, geminiAgentsExists, geminiAgentsFile, geminiApiKey, geminiApiKeyFromEnv, geminiForm } from './gemini'
-import { ocApplyToObj, initOcForm, ocMuted, ocAgentsContent, ocAgentsExists, ocAgentsFile, ocModels } from './opencode'
-import { clineModelsContent, clineModelsExists, clineModelsFile, clineProvidersContent, clineProvidersExists, clineProvidersFile, clineAgentsContent, clineAgentsExists, clineAgentsFile, clineGlobalStateContent, clineGlobalStateExists, clineGlobalStateFile, initClineModelsForm, initClineConnForm, initClineGlobalForm, clineModelsMuted, clineConnMuted, clineGlobalMuted, applyClineModelsForm, clineAutoFillModels } from './cline'
-import { ccApplyToObj, initCcForm, ccSeedModelsFromList, ccLoadNoLogin, ccSettingsContent, ccSettingsExists, ccSettingsFile, ccProvidersContent, ccProvidersExists, ccProvidersFile, ccApplyToSettings, ccApplyToProviders, ccNoLogin, ccForm, ccMuted, ccModelsReady, ccModelsSeeded, ccNoLoginMsg, ccModelOpen, ccEffortOpen, ccEffortPick } from './cc'
-import { writeCopilotEnv, saveCopilotPerm, loadCopilotEnv, loadCopilotPerm, copilotPermFile, copilotPermExists } from './copilot'
-import { hermesInitFrom, hermesWriteYaml, hermesMuted, hermesYamlPreset } from './hermes'
-import { kiloApplyToObj, kiloFromSource, initKiloForm, kiloModels, kiloModel, kiloSmallModel, kiloSubagentModel, kiloApiKey, kiloProviderKey, kiloProviderPrefix, kiloQualifyModel, kiloAgentsContent, kiloAgentsExists, kiloAgentsFile, parseJsonc, setKiloMuted } from './kilo'
-import { agyApplyToObj, initAgyForm, agySettingsPreset, agyMcpContent, agyMcpExists, agyMcpFile, agyForm, writeAgyEnv, loadAgyEnv, loadAgyAliasPanel, applyAgyAliases } from './agy'
+import { claudeEnvModels, normalizeClaudeEnvModels, initClaudeExtra, syncClaudeEnvModelsToObj, syncClaudeExtraToObj, claudeBuildFormText, loadClaudeMarkdown, saveClaudeMarkdown } from './clients/claude'
+import { initPiForm, piBuildModelsText, piSettingsBuildText, piSettingsContent, piSettingsExists, piSettingsFile, syncSettingsFromSource, piMcpContent, piMcpExists, piMcpFile, piAgentsContent, piAgentsExists, piAgentsFile, piSettingsPreset, initPiSettingsForm, fetchPiBaseModels } from './clients/pi'
+import { grokBuildToml, grokReadToml, grokMuted, grokAgentsContent, grokAgentsExists, grokAgentsFile, grokTomlPreset, grokBlocks, grokOrder, grokUnmanaged, grokUiExtras, grokForm, grokEmptyForm, fetchGrokBaseModels } from './clients/grok'
+import { codexInitFrom, codexWriteToml, codexMuted, codexAgentsContent, codexAgentsExists, codexAgentsFile, codexTomlPreset, codexForm, CODEX_RESERVED_PROVIDERS, loadCodexMappings, applyCodexMappings } from './clients/codex'
+import { kimiBuildToml, kimiReadToml, kimiMuted, kimiAgentsContent, kimiAgentsExists, kimiAgentsFile, kimiTomlPreset, kimiForm, kimiProviderRows, kimiModelRows, kimiThinking, kimiPermRows, kimiUnmanaged } from './clients/kimi'
+import { ocApplyToObj, initOcForm, ocMuted, ocAgentsContent, ocAgentsExists, ocAgentsFile, ocModels } from './clients/opencode'
+import { ccApplyToObj, initCcForm, ccSeedModelsFromList, ccLoadNoLogin, ccSettingsContent, ccSettingsExists, ccSettingsFile, ccProvidersContent, ccProvidersExists, ccProvidersFile, ccApplyToSettings, ccApplyToProviders, ccNoLogin, ccNoLoginTouched, ccForm, ccMuted, ccModelsReady, ccModelsSeeded, ccNoLoginMsg, ccModelOpen, ccEffortOpen, ccEffortPick } from './clients/cc'
+import { writeCopilotEnv, saveCopilotPerm, loadCopilotEnv, loadCopilotPerm, copilotPermFile, copilotPermExists, copilotPermContent } from './clients/copilot'
+import { mimoApplyToObj, mimoFromSource, initMimoForm, mimoModel, mimoSmallModel, mimoApiKey, mimoProviderKey, mimoProviderPrefix, mimoQualifyModel, setMimoMuted } from './clients/mimocode'
+import { parseJsonc } from './shared'
+import { agyApplyToObj, initAgyForm, agySettingsPreset, agyMcpContent, agyMcpExists, agyMcpFile, agyForm, writeAgyEnv, loadAgyEnv, loadAgyAliasPanel, applyAgyAliases } from './clients/agy'
 import {
   codebuddyPreset, initCodebuddyForm, codebuddyApplyToObj, cbModelsObj, cbModelsFromText, cbModelsBuildText,
   cbModelsContent, cbModelsExists, cbModelsFile, cbMcpContent, cbMcpExists, cbMcpFile,
-} from './codebuddy'
+} from './clients/codebuddy'
+import { initDeepcodeForm, deepcodeApplyToObj, setDeepcodeMuted, loadDeepcodeAliasPanel, applyDeepcodeAliases } from './clients/deepcode'
 
 // ============ 当前编辑文件 / 存在态（各客户端专属页签） ============
 export function currentCfgFile() {
@@ -47,19 +44,9 @@ export function currentCfgFile() {
   if (cfgTarget.value?.id === 'grok-build' && cfgMode.value === 'grokagents') return grokAgentsFile.value
   if (cfgTarget.value?.id === 'codex' && cfgMode.value === 'codexagents') return codexAgentsFile.value
   if (cfgTarget.value?.id === 'kimi' && cfgMode.value === 'kimiagents') return kimiAgentsFile.value
-  if (cfgTarget.value?.id === 'cline') {
-    if (cfgMode.value === 'clinemodels') return clineModelsFile.value
-    if (cfgMode.value === 'clineproviders') return clineProvidersFile.value
-    if (cfgMode.value === 'clineagents') return clineAgentsFile.value
-    if (cfgMode.value === 'clineglobalstate') return clineGlobalStateFile.value
-  }
   if (cfgTarget.value?.id === 'commandcode') {
     if (cfgMode.value === 'ccsettings') return ccSettingsFile.value
     if (cfgMode.value === 'ccproviders') return ccProvidersFile.value
-  }
-  if (cfgTarget.value?.id === 'gemini') {
-    if (cfgMode.value === 'geminienv') return geminiEnvFile.value
-    if (cfgMode.value === 'geminimd') return geminiAgentsFile.value
   }
   if (cfgTarget.value?.id === 'copilot' && cfgMode.value === 'copilotperm') return copilotPermFile.value
   if (cfgTarget.value?.id === 'agy' && cfgMode.value === 'agymcp') return agyMcpFile.value
@@ -78,19 +65,9 @@ export function currentCfgExists() {
   if (cfgTarget.value?.id === 'grok-build' && cfgMode.value === 'grokagents') return grokAgentsExists.value
   if (cfgTarget.value?.id === 'codex' && cfgMode.value === 'codexagents') return codexAgentsExists.value
   if (cfgTarget.value?.id === 'kimi' && cfgMode.value === 'kimiagents') return kimiAgentsExists.value
-  if (cfgTarget.value?.id === 'cline') {
-    if (cfgMode.value === 'clinemodels') return clineModelsExists.value
-    if (cfgMode.value === 'clineproviders') return clineProvidersExists.value
-    if (cfgMode.value === 'clineagents') return clineAgentsExists.value
-    if (cfgMode.value === 'clineglobalstate') return clineGlobalStateExists.value
-  }
   if (cfgTarget.value?.id === 'commandcode') {
     if (cfgMode.value === 'ccsettings') return ccSettingsExists.value
     if (cfgMode.value === 'ccproviders') return ccProvidersExists.value
-  }
-  if (cfgTarget.value?.id === 'gemini') {
-    if (cfgMode.value === 'geminienv') return geminiEnvExists.value
-    if (cfgMode.value === 'geminimd') return geminiAgentsExists.value
   }
   if (cfgTarget.value?.id === 'copilot' && cfgMode.value === 'copilotperm') return copilotPermExists.value
   if (cfgTarget.value?.id === 'agy' && cfgMode.value === 'agymcp') return agyMcpExists.value
@@ -101,14 +78,13 @@ export function currentCfgExists() {
   return cfgExists.value
 }
 
-// JSON 源码页签标题：统一显示实际文件名（取配置文件路径末段，pi/gemini/grok/kimi 固定知名文件）
+// JSON 源码页签标题：统一显示实际文件名（取配置文件路径末段，pi/grok/kimi 固定知名文件）
 export const tabJsonLabel = computed(() => {
   const id = cfgTarget.value?.id
   if (id === 'pi') return 'models.json'
-  if (id === 'gemini') return 'settings.json'
   if (id === 'grok-build') return 'config.toml'
   if (id === 'kimi') return 'config.toml'
-  if (id === 'kilo') return 'kilo.jsonc'
+  if (id === 'mimocode') return 'mimocode.jsonc'
   const base = String(cfgFile.value || '').split(/[\\/]/).pop()
   return base || t('sync.tabJson')
 })
@@ -121,38 +97,44 @@ export function switchMode(m) {
       else if (cfgTarget.value?.id === 'codex') cfgContent.value = codexWriteToml(cfgContent.value)
       else if (cfgTarget.value?.id === 'kimi') cfgContent.value = kimiBuildToml()
     }
-    else if (cfgTarget.value?.id === 'hermes') cfgContent.value = hermesWriteYaml(cfgContent.value)
     else if (cfgTarget.value?.id === 'pi') cfgContent.value = piBuildModelsText()
     else if (cfgTarget.value?.id === 'opencode') { ocApplyToObj(); syncToJson() }
-    else if (cfgTarget.value?.id === 'gemini') { geminiApplyToObj(); syncToJson() }
     else if (cfgTarget.value?.id === 'commandcode') { ccApplyToObj(); syncToJson() }
-    else if (cfgTarget.value?.id === 'kilo') { kiloApplyToObj(); syncToJson() }
+    else if (cfgTarget.value?.id === 'mimocode') { mimoApplyToObj(); syncToJson() }
     else if (cfgTarget.value?.id === 'agy') { agyApplyToObj(); syncToJson() }
     else if (cfgTarget.value?.id === 'codebuddy') { codebuddyApplyToObj(); syncToJson() }
+    else if (cfgTarget.value?.id === 'deepcode') { deepcodeApplyToObj(); syncToJson() }
     else syncToJson()
   }
   if (m === 'form' && cfgMode.value === 'json') {
     // TOML/YAML 原文流不做 JSON 回填，由下方各客户端专属回读处理
     if (cfgFormat.value !== 'toml' && cfgFormat.value !== 'yaml') {
-      // Kilo 为 JSONC（可含注释/尾逗号）：走 JSONC 宽容解析回填
-      if (cfgTarget.value?.id === 'kilo') { if (!kiloFromSource()) return }
+      // MimoCode 为 JSONC（可含注释/尾逗号）：走 JSONC 宽容解析回填
+      if (cfgTarget.value?.id === 'mimocode') { if (!mimoFromSource()) return }
       else if (!syncToObjFromSource()) return
     }
     // initXxxForm 整体替换表单会触发回写 watcher；统一静默包裹，
-    // 避免刚从 JSON 解析出的源码被表单重建（丢失未管字段）无提示覆写
+    // 避免刚从 JSON 解析出的源码被表单重建（丢失未管字段）无提示覆写。
+    // try/finally 保证即使某个 init 抛异常也必复位——否则 genericMuted 卡死，
+    // 表单改动不再同步进 cfgObj，保存会静默写回旧内容（成功提示但文件没变）
     setGenericMuted(true)
-    if (cfgTarget.value?.id === 'pi') initPiForm()
-    if (cfgTarget.value?.id === 'opencode') initOcForm()
-    if (cfgTarget.value?.id === 'gemini') initGeminiForm()
-    if (cfgTarget.value?.id === 'commandcode') initCcForm()
-    if (cfgTarget.value?.id === 'kilo') { setKiloMuted(true); initKiloForm(); nextTick(() => { setKiloMuted(false) }) }
-    if (cfgTarget.value?.id === 'grok-build') { setGrokMuted(true); grokReadToml(cfgContent.value); nextTick(() => { setGrokMuted(false) }) }
-    if (cfgTarget.value?.id === 'codex') { setCodexMuted(true); codexInitFrom(cfgContent.value); nextTick(() => { setCodexMuted(false) }) }
-    if (cfgTarget.value?.id === 'hermes') { setHermesMuted(true); hermesInitFrom(cfgContent.value); nextTick(() => { setHermesMuted(false) }) }
-    if (cfgTarget.value?.id === 'kimi') { setKimiMuted(true); kimiReadToml(cfgContent.value); nextTick(() => { setKimiMuted(false) }) }
-    if (cfgTarget.value?.id === 'agy') initAgyForm()
-    if (cfgTarget.value?.id === 'codebuddy') initCodebuddyForm()
-    nextTick(() => { setGenericMuted(false) })
+    try {
+      if (cfgTarget.value?.id === 'pi') initPiForm()
+      // opencode 的 watcher 只看 ocMuted（不看 genericMuted）：initOcForm 整体替换表单会
+      // 立刻触发 ocApplyToObj 重建 provider.llm，导致源码框键序与磁盘文件不一致
+      if (cfgTarget.value?.id === 'opencode') { setOcMuted(true); initOcForm(); nextTick(() => { setOcMuted(false) }) }
+      if (cfgTarget.value?.id === 'commandcode') initCcForm()
+      if (cfgTarget.value?.id === 'mimocode') { setMimoMuted(true); initMimoForm(); nextTick(() => { setMimoMuted(false) }) }
+      if (cfgTarget.value?.id === 'grok-build') { setGrokMuted(true); grokReadToml(cfgContent.value); nextTick(() => { setGrokMuted(false) }) }
+      if (cfgTarget.value?.id === 'codex') { setCodexMuted(true); codexInitFrom(cfgContent.value); nextTick(() => { setCodexMuted(false) }) }
+      if (cfgTarget.value?.id === 'kimi') { setKimiMuted(true); kimiReadToml(cfgContent.value); nextTick(() => { setKimiMuted(false) }) }
+      if (cfgTarget.value?.id === 'agy') initAgyForm()
+      if (cfgTarget.value?.id === 'codebuddy') initCodebuddyForm()
+      // 同上：deepcode 的 watcher 也只认 deepcodeMuted
+      if (cfgTarget.value?.id === 'deepcode') { setDeepcodeMuted(true); initDeepcodeForm(); nextTick(() => { setDeepcodeMuted(false) }) }
+    } finally {
+      nextTick(() => { setGenericMuted(false) })
+    }
   }
   // 离开全局设置源码页签时回填表单；进入时序列化源码
   if (cfgMode.value === 'globjson' && m !== 'globjson') {
@@ -180,13 +162,11 @@ function syncToObjFromSource() {
   } catch (e) { toast(t('sync.jsonError')); return false }
 }
 
-// ============ 统一模型下拉（pi-sel 样式）：claude / opencode / gemini 复用 ============
+// ============ 统一模型下拉（pi-sel 样式）：claude / opencode 复用 ============
 export const claudeModelOpen = ref(-1)
 export const ocModelOpen = ref(-1)
-export const geminiModelOpen = ref(false)
 export function pickClaudeModel(i, m) { if (claudeEnvModels.value[i]) claudeEnvModels.value[i].modelId = m; claudeModelOpen.value = -1 }
 export function pickOcModel(i, m) { if (ocModels.value[i]) ocModels.value[i].id = m; ocModelOpen.value = -1 }
-export function pickGeminiModel(m) { geminiForm.value.modelName = m; geminiModelOpen.value = false }
 
 // ============ 构建 / 保存 / 打开 ============
 export function buildFormText() {
@@ -195,47 +175,46 @@ export function buildFormText() {
     return claudeBuildFormText()
   }
   if (id === 'pi') return piBuildModelsText()
-  if (id === 'gemini') { geminiApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'opencode') { ocApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'commandcode') { ccApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
-  if (id === 'kilo') { kiloApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
+  if (id === 'mimocode') { mimoApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'agy') { agyApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'codebuddy') { codebuddyApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
+  if (id === 'deepcode') { deepcodeApplyToObj(); return JSON.stringify(cfgObj.value, null, 2) }
   if (id === 'grok-build') return grokBuildToml()
   if (id === 'codex') return codexWriteToml(cfgContent.value)
-  if (id === 'hermes') return hermesWriteYaml(cfgContent.value)
   if (id === 'kimi') return kimiBuildToml()
   return JSON.stringify(cfgObj.value, null, 2)
 }
 
-export async function saveTargetConfig() {
+export async function saveTargetConfig(stayOpen = false) {
   if (!cfgTarget.value) return
   // codex：提供商标识不得使用 Codex 内置保留 ID（会被忽略导致接入失效）
   if (cfgTarget.value.id === 'codex') {
     const pk = (codexForm.value.providerKey || '').trim() || 'llmrouter'
     if (CODEX_RESERVED_PROVIDERS.includes(pk)) { toast(t('sync.codexReserved', { pk })); return }
   }
-  // Gemini .env 源码模式：只保存 ~/.gemini/.env，不动主配置
-  if (cfgTarget.value.id === 'gemini' && cfgMode.value === 'geminienv') {
-    cfgSaving.value = true
-    try {
-      const g = await api.SaveGeminiDotEnv(geminiEnvContent.value)
-      if (g && g.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: g?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
-  // Copilot CLI 环境变量 BYOK 模式：不落盘配置文件，直接写入用户环境变量
+  // Copilot CLI「配置选项」BYOK 模式：写入用户环境变量 + settings.json；权限批准面板同步落盘 permissions-config.json
   if (cfgTarget.value.id === 'copilot' && cfgMode.value === 'copilotenv') {
-    if (await writeCopilotEnv()) cfgEdit.value = false
+    if (await writeCopilotEnv()) {
+      // 权限配置胶囊条可能改写过源码：非空时校验 JSON 后一并保存（失败则保持窗口打开）
+      const pc = copilotPermContent.value
+      if (pc.trim()) {
+        try { JSON.parse(pc) } catch (e) { const p = jsonErrorPos(pc); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
+        if (!await saveCopilotPerm(true)) return
+      }
+      if (!stayOpen) cfgEdit.value = false
+    }
     return
   }
-  // Copilot CLI 工具审批权限：保存 ~/.copilot/permissions-config.json（源码直编）
+  // Copilot CLI 工具审批权限：保存 ~/.copilot/permissions-config.json（源码直编，JSON 校验后落盘）
   if (cfgTarget.value.id === 'copilot' && cfgMode.value === 'copilotperm') {
+    const pc = copilotPermContent.value
+    try { if (pc.trim()) JSON.parse(pc) } catch (e) { const p = jsonErrorPos(pc); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
     cfgSaving.value = true
     let ok = false
     try { ok = await saveCopilotPerm() } finally { cfgSaving.value = false }
-    if (ok) cfgEdit.value = false
+    if (ok) if (!stayOpen) cfgEdit.value = false
     return
   }
   // Antigravity CLI mcp_config.json 源码模式：只保存 ~/.gemini/config/mcp_config.json，不动主配置
@@ -244,7 +223,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const am = await api.SaveAgyMcp(agyMcpContent.value)
-      if (am && am.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (am && am.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: am?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -255,7 +234,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const bm = await api.SaveCodebuddyModels(cbModelsContent.value)
-      if (bm && bm.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (bm && bm.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: bm?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -266,18 +245,8 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const cm = await api.SaveCodebuddyMcp(cbMcpContent.value)
-      if (cm && cm.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (cm && cm.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: cm?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
-  // Gemini GEMINI.md 源码模式：只保存 ~/.gemini/GEMINI.md，不动主配置
-  if (cfgTarget.value.id === 'gemini' && cfgMode.value === 'geminimd') {
-    cfgSaving.value = true
-    try {
-      const ga = await api.SaveGeminiAgents(geminiAgentsContent.value)
-      if (ga && ga.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: ga?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
   }
@@ -286,18 +255,8 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const oa = await api.SaveOpencodeAgents(ocAgentsContent.value)
-      if (oa && oa.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (oa && oa.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: oa?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
-  // Kilo AGENTS.md 源码模式：只保存 AGENTS.md，不动主配置
-  if (cfgTarget.value.id === 'kilo' && cfgMode.value === 'kiloagents') {
-    cfgSaving.value = true
-    try {
-      const ka = await api.SaveKiloAgents(kiloAgentsContent.value)
-      if (ka && ka.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: ka?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
   }
@@ -306,39 +265,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveCodexAgents(codexAgentsContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: r?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
-  // Cline models.json 源码模式：只保存 ~/.cline/data/settings/models.json，不动主配置
-  if (cfgTarget.value.id === 'cline' && cfgMode.value === 'clinemodels') {
-    try { if (clineModelsContent.value.trim()) JSON.parse(clineModelsContent.value) } catch (e) { const p = jsonErrorPos(clineModelsContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
-    cfgSaving.value = true
-    try {
-      const r = await api.SaveClineModels(clineModelsContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: r?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
-  // Cline providers.json 源码模式：只保存 ~/.cline/data/settings/providers.json，不动主配置
-  if (cfgTarget.value.id === 'cline' && cfgMode.value === 'clineproviders') {
-    try { if (clineProvidersContent.value.trim()) JSON.parse(clineProvidersContent.value) } catch (e) { const p = jsonErrorPos(clineProvidersContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
-    cfgSaving.value = true
-    try {
-      const r = await api.SaveClineProviders(clineProvidersContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: r?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
-  // Cline AGENTS.md 源码模式：只保存 ~/.agents/AGENTS.md，不动主配置
-  if (cfgTarget.value.id === 'cline' && cfgMode.value === 'clineagents') {
-    cfgSaving.value = true
-    try {
-      const r = await api.SaveClineAgents(clineAgentsContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (r && r.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -349,24 +276,13 @@ export async function saveTargetConfig() {
     try { refv.value = JSON.stringify(JSON.parse(refv.value), null, 2) + '\n'; return true }
     catch (e) { return false }
   }
-  // Cline globalState.json 源码模式：只保存 ~/.cline/data/globalState.json（真实文件直写），不动主配置
-  if (cfgTarget.value.id === 'cline' && cfgMode.value === 'clineglobalstate') {
-    if (clineGlobalStateContent.value.trim() && !autoFormatJson(clineGlobalStateContent)) { const p = jsonErrorPos(clineGlobalStateContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
-    cfgSaving.value = true
-    try {
-      const r = await api.SaveClineGlobalState(clineGlobalStateContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
-      else toast(t('common.fail', { msg: r?.error || '?' }))
-    } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
-    return
-  }
   // Command Code settings.json 源码模式：只保存 ~/.commandcode/settings.json，不动主配置
   if (cfgTarget.value.id === 'commandcode' && cfgMode.value === 'ccsettings') {
     if (ccSettingsContent.value.trim() && !autoFormatJson(ccSettingsContent)) { const p = jsonErrorPos(ccSettingsContent.value); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
     cfgSaving.value = true
     try {
       const r = await api.SaveCommandcodeSettings(ccSettingsContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (r && r.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -377,7 +293,7 @@ export async function saveTargetConfig() {
     cfgSaving.value = true
     try {
       const r = await api.SaveCommandcodeProviders(ccProvidersContent.value)
-      if (r && r.ok) { toast(t('sync.configSaved')); cfgEdit.value = false }
+      if (r && r.ok) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
       else toast(t('common.fail', { msg: r?.error || '?' }))
     } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
     return
@@ -388,7 +304,7 @@ export async function saveTargetConfig() {
     try {
       const cmErr = await saveClaudeMarkdown()
       if (cmErr) toast(t('common.fail', { msg: cmErr }))
-      else toast(t('sync.configSaved')); cfgEdit.value = false
+      else { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
     } finally { cfgSaving.value = false }
     return
   }
@@ -397,12 +313,19 @@ export async function saveTargetConfig() {
     try { text = buildFormText() } catch (e) { toast(t('sync.jsonError')); return }
   } else {
     text = cfgContent.value
-    // TOML/YAML/JSONC 源码不做前端 JSON 校验（hermes 由后端 SaveTargetConfig 做 YAML 校验；
-    // kilo 的 jsonc 允许注释/尾逗号，由后端 jsoncToJSON 宽容校验）
+    // TOML/JSONC 源码不做前端 JSON 校验（mimocode 的 jsonc 允许注释/尾逗号，
+    // 由后端 jsoncToJSON 宽容校验）
     if (cfgFormat.value !== 'toml' && cfgFormat.value !== 'yaml' && cfgFormat.value !== 'jsonc') {
       if (text.trim() && !autoFormatJson(cfgContent)) { const p = jsonErrorPos(text); toast(p ? t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg }) : t('sync.jsonError')); return }
       text = cfgContent.value
     }
+  }
+  // pi：切到「全局设置 / mcp.json / AGENTS.md」页签后，text 仍是打开窗口时的 models.json
+  // 快照，直接保存会把本窗口内对模型表单的改动静默冲掉（保存成功但模型行回退）。
+  // 这些页签下一律按当前表单重新序列化；JSON 页签下 cfgContent 就是用户正在编辑的
+  // models.json，保持原样不动。
+  if (cfgTarget.value.id === 'pi' && cfgMode.value !== 'json') {
+    try { text = piBuildModelsText() } catch (e) { toast(t('sync.jsonError')); return }
   }
   // pi 全局设置源码模式：校验 + 自动格式化后再保存
   if (cfgTarget.value.id === 'pi' && cfgMode.value === 'globjson') {
@@ -412,9 +335,18 @@ export async function saveTargetConfig() {
   // 失败（目标模型解析不到已启用服务商等）即中止整次保存，避免无效映射仍写入 settings.json
   if (cfgTarget.value.id === 'agy') {
     cfgSaving.value = true
-    const ae = await applyAgyAliases()
-    cfgSaving.value = false
+    let ae = ''
+    // try/finally：映射回写抛异常时不能把 cfgSaving 卡在 true（保存按钮会永久禁用）
+    try { ae = await applyAgyAliases() } catch (e) { ae = String(e?.message || e) } finally { cfgSaving.value = false }
     if (ae) { toast(t('common.fail', { msg: ae })); return }
+  }
+  // deepcode 合并：内置 ID → 上游模型的映射同样随「保存」落盘（定点回写服务商 aliases），
+  // 失败即中止整次保存，避免无效映射仍写进 settings.json
+  if (cfgTarget.value.id === 'deepcode') {
+    cfgSaving.value = true
+    let de = ''
+    try { de = await applyDeepcodeAliases() } catch (e) { de = String(e?.message || e) } finally { cfgSaving.value = false }
+    if (de) { toast(t('common.fail', { msg: de })); return }
   }
   cfgSaving.value = true
   try {
@@ -440,38 +372,6 @@ export async function saveTargetConfig() {
       const ka = await api.SaveKimiAgents(kimiAgentsContent.value)
       if (ka && !ka.ok && !saveErr) saveErr = ka?.error || t('sync.saveFailAgents')
     }
-    // gemini 合并：.env（含 GEMINI_API_KEY）与 settings.json 一同保存
-    if (cfgTarget.value.id === 'gemini') {
-      const ge = await api.SaveGeminiDotEnv(geminiEnvContent.value)
-      if (ge && !ge.ok && !saveErr) saveErr = ge?.error || t('sync.saveFailDotEnv')
-    }
-    // cline 合并：models.json（模型清单）、providers.json（连接凭据）与 globalState.json（全局默认）随主配置一同保存。
-    // 先校验三份源码均为合法 JSON：表单联动经 srcObj 解析，非法 JSON 会被静默当作 {}，
-    // 若不在此拦截会把损坏内容重建为最小结构落盘（与源码页签保存前的校验保持一致）
-    if (cfgTarget.value.id === 'cline') {
-      for (const [nm, rv] of [['models.json', clineModelsContent], ['providers.json', clineProvidersContent], ['globalState.json', clineGlobalStateContent]]) {
-        const t = String(rv.value || '').trim()
-        if (!t) continue
-        try { JSON.parse(t) } catch (e) {
-          const p = jsonErrorPos(rv.value)
-          toast(p ? `${nm} ${t('sync.jsonLinePos', { line: p.line, col: p.col, msg: p.msg })}` : `${nm} ${t('sync.jsonError')}`)
-          return
-        }
-      }
-      try { applyClineModelsForm() } catch (e) {}
-      if (!saveErr && clineModelsContent.value.trim()) {
-        const cm = await api.SaveClineModels(clineModelsContent.value)
-        if (!(cm && cm.ok)) saveErr = cm?.error || t('sync.saveFailModels')
-      }
-      if (!saveErr && clineProvidersContent.value.trim()) {
-        const cp = await api.SaveClineProviders(clineProvidersContent.value)
-        if (!(cp && cp.ok)) saveErr = cp?.error || t('sync.saveFailProviders')
-      }
-      if (!saveErr && clineGlobalStateContent.value.trim()) {
-        const gs = await api.SaveClineGlobalState(clineGlobalStateContent.value)
-        if (!(gs && gs.ok)) saveErr = gs?.error || t('sync.saveFailGlobal')
-      }
-    }
     // commandcode 合并：providers.json（BYOK 模型端点）与 settings.json（权限、推理深度）随主配置一同保存
     if (cfgTarget.value.id === 'commandcode') {
       // 模型清单以点选/手写为准，保存时不做自动全量合并（避免把用户点选取消的模型加回）
@@ -486,10 +386,13 @@ export async function saveTargetConfig() {
       }
       // 自动免登录：provider 指向本地服务商（非 command-code）时，保存即写入免登录凭据
       //（环境变量 setx + auth.json，当前终端立即生效），无需手动勾选；
-      // 填 command-code（官方云端订阅）时保持用户手动选择，不强行干预
+      // 填 command-code（官方云端订阅）时保持用户手动选择，不强行干预。
+      // 用户手动关过开关（ccNoLoginTouched && !ccNoLogin）时不再自动打开——否则
+      // 面板上的开关会被保存动作静默覆盖成“开”，用户永远关不掉。
       if (!saveErr) {
         const prov = String(ccForm.value.provider || '').trim() || String(ccForm.value.endpointId || '').trim() || 'llmrouter'
-        if (prov !== 'command-code') {
+        const userTurnedOff = ccNoLoginTouched.value && !ccNoLogin.value
+        if (prov !== 'command-code' && !userTurnedOff) {
           ccNoLogin.value = true
           const nl = await api.SetCommandcodeNoLogin(true)
           if (nl) saveErr = t('sync.noLoginWriteFail', { msg: nl })
@@ -509,12 +412,21 @@ export async function saveTargetConfig() {
         const se = await api.SetUserEnv(ek, String((c && c.authToken) || ''))
         if (!(se && se.ok) && !saveErr) saveErr = se?.error || t('sync.envWriteFail')
       }
+      // 模型映射随保存一并落盘：行回写启用服务商 aliases（@服务商 后缀定位归属）
+      const mm = await applyCodexMappings()
+      if (mm && !saveErr) saveErr = mm
     }
     // agy 合并：modelProvider 为 gemini 时自动写接入环境变量（agy 官方契约：
     // 端点读 GOOGLE_GEMINI_BASE_URL、API Key 读 GEMINI_API_KEY，settings.json 的
     // baseUrl/apiKey 字段不被 CLI 读取，仅靠这两个变量让 CLI 连到本路由器）
     if (cfgTarget.value.id === 'agy') {
-      const mp = String((cfgObj.value && cfgObj.value.modelProvider) || '').trim().toLowerCase()
+      // modelProvider 以「本次要落盘的内容」为准：表单模式下 cfgObj 已由 buildFormText()
+      // 同步；JSON 源码模式下 cfgObj 还是载入时的旧值，若在源码里改成 gemini，
+      // 按旧值判定就会出现「文件写了 gemini、环境变量却没自动写」的不一致。
+      let mp = String((cfgObj.value && cfgObj.value.modelProvider) || '').trim().toLowerCase()
+      if (cfgMode.value !== 'form') {
+        try { mp = String((JSON.parse(text) || {}).modelProvider || '').trim().toLowerCase() } catch (e) {}
+      }
       if (mp === 'gemini') {
         const aew = await writeAgyEnv()
         if (aew && !saveErr) saveErr = aew
@@ -540,7 +452,7 @@ export async function saveTargetConfig() {
         if (mc && !mc.ok) saveErr = mc?.error || t('sync.saveFailMcp')
       }
     }
-    if (r && r.ok && !saveErr) { toast(t('sync.configSaved')); cfgEdit.value = false }
+    if (r && r.ok && !saveErr) { toast(t('sync.configSaved')); if (!stayOpen) cfgEdit.value = false }
     else toast(t('common.fail', { msg: (r && !r.ok ? r.error : saveErr) || '?' }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '?' })) } finally { cfgSaving.value = false }
 }
@@ -553,9 +465,8 @@ export async function openTargetConfig(tg) {
   setGenericMuted(true) // 模板载入期间静默通用双向联动，避免赋值触发回写打乱源码键序
   setGrokMuted(true) // 同上：静默 grokForm 联动，避免载入时重写 config.toml 丢失注释与非受管内容
   setKimiMuted(true) // 同上：静默 kimiForm 联动，避免载入/重置时重写 config.toml
-  setKiloMuted(true) // 同上：静默 kiloForm 联动，避免载入时重写 kilo.jsonc
+  setMimoMuted(true) // 同上：静默 mimoForm 联动，避免载入时重写 mimocode.jsonc
   cfgTarget.value = tg
-  cfgInfoOpen.value = false
   cfgMode.value = 'form'
   cfgFormat.value = tg.configFormat || 'json'
   cfgFile.value = tg.configFile || ''
@@ -574,11 +485,6 @@ export async function openTargetConfig(tg) {
   kimiThinking.value = { enabled: '', effort: '', keep: '', extra: [] }
   kimiPermRows.value = []
   kimiUnmanaged.value = []
-  kiloModels.value = []
-  kiloModel.value = ''
-  kiloSmallModel.value = ''
-  kiloSubagentModel.value = ''
-  kiloApiKey.value = ''
   setCcModelsReady(false)
   setCcModelsSeeded(false)
   loadModelOptions()
@@ -670,28 +576,6 @@ export async function openTargetConfig(tg) {
           if (mr && mr.file) piMcpFile.value = mr.file
           piMcpContent.value = hasM ? mr.content : JSON.stringify({ mcpServers: {} }, null, 2)
         } catch (e) { piMcpExists.value = false; piMcpContent.value = JSON.stringify({ mcpServers: {} }, null, 2) }
-      } else if (tg.id === 'gemini') {
-        if (hasContent) {
-          try { const v = JSON.parse(r.content); cfgObj.value = v && typeof v === 'object' ? v : {} } catch (e) { cfgObj.value = {} }
-        } else {
-          cfgObj.value = { ...geminiSettingsPreset() }
-        }
-        initGeminiForm()
-        syncToJson()
-        // 同时加载 ~/.gemini/.env 源码页签
-        try {
-          const ge = await api.GetGeminiDotEnv()
-          geminiEnvExists.value = !!(ge && ge.ok && ge.exists)
-          geminiEnvContent.value = (ge && ge.ok) ? (ge.content || '') : ''
-        } catch (e) { geminiEnvExists.value = false; geminiEnvContent.value = '' }
-        // 同时加载 GEMINI.md（~/.gemini/GEMINI.md）源码页签（Markdown 源码直编）
-        try {
-          const ga = await api.GetGeminiAgents()
-          const hasGA = !!(ga && ga.ok && ga.content) // 首次初始值模板内容同样展示
-          geminiAgentsExists.value = !!(ga && ga.ok && ga.exists)
-          geminiAgentsContent.value = hasGA ? (ga.content || '') : ''
-        } catch (e) { geminiAgentsExists.value = false; geminiAgentsContent.value = '' }
-        geminiApiKey.value = geminiApiKeyFromEnv()
       } else if (tg.id === 'opencode') {
         // 直接读写真实 opencode.json（无模板中转）；真实文件缺失时后端返回首次初始值模板内容
         const ocRaw = (r.content || '').trim()
@@ -711,48 +595,6 @@ export async function openTargetConfig(tg) {
           ocAgentsExists.value = !!(ar && ar.ok && ar.exists)
           ocAgentsContent.value = hasA ? (ar.content || '') : ''
         } catch (e) { ocAgentsExists.value = false; ocAgentsContent.value = '' }
-      } else if (tg.id === 'cline') {
-        // 同时加载 models.json / providers.json / AGENTS.md（均直接读写真实文件）源码页签；
-        // 主配置（真实 cline_mcp_settings.json）解析进 cfgObj 供 JSON 页签与保存
-        if ((r.content || '').trim()) {
-          try { const v = JSON.parse(r.content); cfgObj.value = v && typeof v === 'object' ? v : {} } catch (e) { cfgObj.value = {} }
-        } else {
-          cfgObj.value = {}
-        }
-        syncToJson()
-        try {
-          const mr = await api.GetClineModels()
-          clineModelsExists.value = !!(mr && mr.ok && mr.exists)
-          clineModelsContent.value = (mr && mr.ok) ? (mr.content || '') : ''
-        } catch (e) { clineModelsExists.value = false; clineModelsContent.value = '' }
-        setClineModelsMuted(true)
-        setClineCapsMuted(true)
-        initClineModelsForm()
-        nextTick(() => { setClineCapsMuted(false); setClineModelsMuted(false) })
-        // 模型清单按提供商自动并入全部可用模型，无需手动点选添加
-        clineAutoFillModels()
-        try {
-          const pr = await api.GetClineProviders()
-          clineProvidersExists.value = !!(pr && pr.ok && pr.exists)
-          clineProvidersContent.value = (pr && pr.ok) ? (pr.content || '') : ''
-        } catch (e) { clineProvidersExists.value = false; clineProvidersContent.value = '' }
-        setClineConnMuted(true)
-        initClineConnForm()
-        nextTick(() => { setClineConnMuted(false) })
-        try {
-          const ar = await api.GetClineAgents()
-          clineAgentsExists.value = !!(ar && ar.ok && ar.exists)
-          clineAgentsContent.value = (ar && ar.ok) ? (ar.content || '') : ''
-        } catch (e) { clineAgentsExists.value = false; clineAgentsContent.value = '' }
-        try {
-          const gs = await api.GetClineGlobalState()
-          clineGlobalStateExists.value = !!(gs && gs.ok && gs.exists)
-          if (gs && gs.ok && gs.file) clineGlobalStateFile.value = gs.file
-          clineGlobalStateContent.value = (gs && gs.ok && gs.exists && gs.content) ? gs.content : ''
-        } catch (e) { clineGlobalStateExists.value = false; clineGlobalStateContent.value = '' }
-        setClineGlobalMuted(true)
-        initClineGlobalForm()
-        nextTick(() => { setClineGlobalMuted(false) })
       } else if (tg.id === 'commandcode') {
         // JSON：直接读写真实文件，解析进 cfgObj 驱动结构化表单；无内容时给官方字段骨架
         if ((r.content || '').trim()) {
@@ -789,12 +631,6 @@ export async function openTargetConfig(tg) {
         ccLoadNoLogin()
         syncToJson()
         nextTick(() => { setCcMuted(false) })
-      } else if (tg.id === 'hermes') {
-        // YAML：原文编辑 + 结构化表单；无内容时使用预设模板
-        cfgContent.value = hasContent ? (r.content || '') : hermesYamlPreset()
-        setHermesMuted(true)
-        hermesInitFrom(cfgContent.value)
-        nextTick(() => { setHermesMuted(false) })
       } else if (tg.id === 'agy') {
         // JSON：直接读写真实 settings.json，解析进 cfgObj 供表单与源码页签使用
         if (hasContent) {
@@ -850,11 +686,11 @@ export async function openTargetConfig(tg) {
           if (mcpR && mcpR.ok && mcpR.file) cbMcpFile.value = mcpR.file
           cbMcpContent.value = hasMcp ? mcpR.content : JSON.stringify({ mcpServers: {} }, null, 2) + '\n'
         } catch (e) { cbMcpExists.value = false; cbMcpContent.value = JSON.stringify({ mcpServers: {} }, null, 2) + '\n' }
-      } else if (tg.id === 'kilo') {
+      } else if (tg.id === 'mimocode') {
         // JSONC：真实文件缺失时后端返回首次初始值模板内容（同样可编辑部署）。
-        // 表单与源码直接读写真实 kilo.jsonc：含注释/尾逗号走 parseJsonc 宽容解析
+        // 表单与源码直接读写真实 mimocode.jsonc：含注释/尾逗号走 parseJsonc 宽容解析
         // 进 cfgObj 供表单与 JSON 页签使用；cfgContent 保留原文，用户改表单后
-        // 由 kilo watcher 重写（保留未管字段），避免打开即丢失 JSONC 注释。
+        // 由 mimo watcher 重写（保留未管字段），避免打开即丢失 JSONC 注释。
         if (hasContent) {
           try {
             const v = parseJsonc(r.content)
@@ -864,17 +700,9 @@ export async function openTargetConfig(tg) {
           cfgObj.value = {}
         }
         cfgContent.value = hasContent ? (r.content || '') : ''
-        setKiloMuted(true)
-        initKiloForm()
-        nextTick(() => { setKiloMuted(false) })
-        // 同时加载 AGENTS.md（~/.config/kilo/AGENTS.md）源码页签（Markdown 源码直编）
-        try {
-          const ar = await api.GetKiloAgents()
-          const hasA = !!(ar && ar.ok && ar.content) // 首次初始值模板内容同样展示
-          kiloAgentsExists.value = !!(ar && ar.ok && ar.exists)
-          kiloAgentsContent.value = hasA ? (ar.content || '') : ''
-          kiloAgentsFile.value = (ar && ar.ok) ? (ar.file || '') : ''
-        } catch (e) { kiloAgentsExists.value = false; kiloAgentsContent.value = '' }
+        setMimoMuted(true)
+        initMimoForm()
+        nextTick(() => { setMimoMuted(false) })
       } else {
         if (hasContent) {
           try { const v = JSON.parse(r.content); cfgObj.value = v && typeof v === 'object' ? v : {} } catch (e) { cfgObj.value = {} }
@@ -889,7 +717,23 @@ export async function openTargetConfig(tg) {
           initClaudeExtra()
           loadClaudeMarkdown()
         }
-        syncToJson()
+        if (tg.id === 'deepcode') {
+          // 首次（无 settings.json）时给一份可用初始值：接入地址指向本路由器
+          if (!hasContent) {
+            cfgObj.value = {
+              model: '', env: { BASE_URL: routerHintForTarget(), API_KEY: '' },
+              thinkingEnabled: true, reasoningEffort: 'high',
+            }
+          }
+          setDeepcodeMuted(true)
+          initDeepcodeForm()
+          syncToJson()
+          nextTick(() => { setDeepcodeMuted(false) })
+          // 同时加载「内置 ID → 上游模型」映射面板（写服务商 aliases）
+          try { await loadDeepcodeAliasPanel() } catch (e) {}
+        } else {
+          syncToJson()
+        }
       }
       if (tg.id === 'codex') {
         // TOML：原文编辑 + 结构化表单；无内容时使用预设模板；同时加载 AGENTS.md 页签
@@ -897,6 +741,8 @@ export async function openTargetConfig(tg) {
         setCodexMuted(true)
         codexInitFrom(cfgContent.value)
         nextTick(() => { setCodexMuted(false) })
+        // 加载模型映射行（启用服务商的 aliases 合并展示，保存时按行回写）
+        loadCodexMappings()
         // 同时加载 AGENTS.md（模版 agent/Json_modles/codex/AGENTS.md）源码页签
         try {
           const ar = await api.GetCodexAgents()
@@ -914,8 +760,8 @@ export async function openTargetConfig(tg) {
     cfgEdit.value = false
   } finally {
     cfgLoading.value = false
-    nextTick(() => { setGenericMuted(false); setGrokMuted(false); setKimiMuted(false); setKiloMuted(false) })
-    // Copilot CLI：无主配置表单，打开即进入环境变量 BYOK 面板并回显当前值
+    nextTick(() => { setGenericMuted(false); setGrokMuted(false); setKimiMuted(false) })
+    // Copilot CLI：无主配置表单，打开即进入「配置选项」BYOK 面板并回显当前值
     if (tg && tg.id === 'copilot') { cfgMode.value = 'copilotenv'; loadCopilotEnv(); loadCopilotPerm() }
   }
 }
@@ -942,11 +788,11 @@ export function initSyncController() {
     const id = cfgTarget.value?.id
     if (id === 'claude-code') { claudeEnvModels.value = []; normalizeClaudeEnvModels(); initClaudeExtra() }
     else if (id === 'pi') initPiForm()
-    else if (id === 'gemini') initGeminiForm()
     else if (id === 'opencode') initOcForm()
     else if (id === 'commandcode') initCcForm()
     else if (id === 'agy') initAgyForm()
     else if (id === 'codebuddy') initCodebuddyForm()
+    else if (id === 'deepcode') initDeepcodeForm()
     nextTick(() => { setJsonEcho(false) })
   })
 }

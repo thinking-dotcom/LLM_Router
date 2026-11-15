@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, reactive, onMounted, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, nextTick } from 'vue'
 import { t } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
@@ -9,8 +9,8 @@ import { copyText } from '../utils'
 // 会话管理：浏览 / 删除各 AI CLI 客户端落在本机磁盘上的历史会话记录。
 // 主体为当前客户端的会话条目表，每条会话最左侧以该客户端 logo 标识归属；
 // 客户端切换收进右下角浮动按钮（chatbot 图标 → 从右往左展开竖向客户端
-// 图标栏），选中后收起。支持多选批量删除与终端恢复（终端图标收纳在
-// 客户端 logo 上：点击 logo 在页面中心弹出 cmd / PowerShell 双宿主浮层）。
+// 图标栏），选中后收起。支持批量删除与终端恢复（电话图标在标题左侧：
+// 点击直接用自带终端窗口恢复该会话，不再提供宿主选择）。
 // 悬停会话 ID 在光标处浮现命令速查：该会话恢复命令 + 常用管理命令及解释。
 // 客户端图标导航栏按最近点击（选中）时间自新到旧排列，点击即置顶并持久化
 // （localStorage）；进入页面默认显示列表最上方客户端的会话记录。
@@ -19,10 +19,7 @@ const clients = ref([])      // 客户端概览（后端注册表驱动）
 const activeId = ref('')     // 当前选中的客户端
 const items = ref([])        // 当前客户端的会话条目
 const loading = ref(false)
-const selected = ref(new Set()) // 选中的会话路径
-const confirming = ref(false)   // 删除确认对话框
 const navOpen = ref(false)      // 右下角浮动图标栏是否展开
-const resumePop = ref(null)     // 终端恢复浮层：当前会话条目对象（null=收起）
 const tip = ref(null)           // 会话 ID 悬停命令速查浮层：{entries,x,y}（null=收起）
 const tipEl = ref(null)         // 命令速查浮层根节点（视口收敛用实测宽高）
 
@@ -51,9 +48,44 @@ function markRecent(id) {
 }
 
 const activeClient = computed(() => clients.value.find(c => c.id === activeId.value) || null)
-const allSelected = computed(() => items.value.length > 0 && selected.value.size === items.value.length)
 // 行首客户端图标：单客户端视图下所有条目均属当前客户端
 const rowLogo = computed(() => (activeClient.value && targetLogo(activeClient.value.id)) || '')
+
+// 标题显示：有真实标题用原文（常规字体字重）；无标题回退会话 ID 时中间省略
+// （等宽 + 次要色，避免一长串哈希主导整行视觉），完整 ID 保留在悬停提示
+function titleOf(it) {
+  if (it.title) return { text: it.title, isId: false }
+  const id = it.id || it.name || ''
+  return { text: id.length > 18 ? id.slice(0, 8) + '…' + id.slice(-6) : id, isId: true }
+}
+// 单元格悬停提示：标题会话给「ID · 路径」，ID 会话同样补全完整 ID；
+// 库型存储的会话（it.cli）没有磁盘路径，Path 是会话 ID，改给「ID · 原始工作目录」
+function tipOf(it) {
+  const id = it.title ? it.id : (it.id || it.name)
+  if (it.cli) return id ? id + (it.group ? ' · ' + it.group : '') : it.path
+  return id ? id + ' · ' + it.path : it.path
+}
+// 修改时间分级显示：今天只给时分秒、当年给月日时分、更早给完整年月日；
+// 完整时间串保留在悬停提示（title）
+function fmtMtime(m) {
+  const d = new Date(String(m || '').replace(/-/g, '/'))
+  if (isNaN(d.getTime())) return m || ''
+  const p = n => String(n).padStart(2, '0')
+  const hm = p(d.getHours()) + ':' + p(d.getMinutes())
+  const now = new Date()
+  if (d.toDateString() === now.toDateString()) return hm + ':' + p(d.getSeconds())
+  if (d.getFullYear() === now.getFullYear()) return p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + hm
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate())
+}
+// token 数压缩显示（列宽有限）：1234 → 1.2k，1234567 → 1.2M
+// 进位边界：本档四舍五入满 1000 时升到上一档单位，避免出现「1000k / 1000M」
+function fmtTokens(n) {
+  const v = Number(n) || 0
+  if (v >= 999.5e6) return (v / 1e9).toFixed(1) + 'B'
+  if (v >= 999.5e3) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M'
+  if (v >= 1e3) return (v / 1e3).toFixed(v >= 1e5 ? 0 : 1) + 'k'
+  return String(v)
+}
 // 图标栏顺序：最近点击过的按时间新→旧排最前，其余保持后端顺序垫底
 const navClients = computed(() => {
   const used = clients.value.filter(c => recent[c.id])
@@ -63,18 +95,12 @@ const navClients = computed(() => {
 })
 
 // 对外状态：驱动页面顶部工具条（.page-head 位于本组件之外，由 App.vue 渲染）
-const state = reactive({
-  sel: 0,             // 已选会话数（删除按钮计数/禁用）
-})
-function syncUi() {
-  state.sel = selected.value.size
-}
-watch([activeClient, items, selected], syncUi, { immediate: true })
 
 function fmtBytes(n) {
   if (!n) return '0 B'
-  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + ' GB'
-  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB'
+  // 进位边界：本档四舍五入满 1024 时升到上一档单位，避免出现「1024.0 KB」这类越界值
+  if (n >= 1023.5 * 1048576) return (n / 1073741824).toFixed(1) + ' GB'
+  if (n >= 1023.5 * 1024) return (n / 1048576).toFixed(1) + ' MB'
   if (n >= 1024) return (n / 1024).toFixed(1) + ' KB'
   return n + ' B'
 }
@@ -96,7 +122,6 @@ async function loadClients(pick) {
 async function selectClient(id) {
   if (loading.value) return
   activeId.value = id
-  selected.value = new Set()
   items.value = []
   loading.value = true
   try {
@@ -105,15 +130,6 @@ async function selectClient(id) {
     else toast(t('common.fail', { msg: r?.error || '' }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
   loading.value = false
-}
-
-function toggleAll() {
-  selected.value = allSelected.value ? new Set() : new Set(items.value.map(i => i.path))
-}
-function toggle(path) {
-  const next = new Set(selected.value)
-  next.has(path) ? next.delete(path) : next.add(path)
-  selected.value = next
 }
 
 // 客户端图标点击：已接入（managed）才进入会话条目；未接入置灰，点击提示原因。
@@ -149,36 +165,37 @@ async function openLocation(p) {
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
 }
 
-// 在指定宿主的终端中以该客户端的恢复命令拉起会话（claude --resume <id> 等）。
-// shell: 'cmd'（默认）| 'powershell'。客户端不支持按会话恢复（Copilot/pi）时
-// toast 说明原因并返回 false。
-async function openTerminal(p, shell) {
+// 顶部工具条：在系统文件管理器中打开「当前客户端」的会话目录
+//（原来是每行一个「打开所在目录」按钮，行多时既占地方又难找，统一挪到工具条）
+function openClientDir() {
+  const c = activeClient.value
+  if (!c || !c.root) {
+    toast(t('sessions.noRoot'))
+    return
+  }
+  openLocation(c.root)
+}
+
+// 用自带的终端窗口恢复该会话（claude --resume <id> 等命令由后端按客户端组装）。
+// 客户端不支持按会话恢复（Copilot/pi）时 toast 说明原因并返回 false。
+async function openTerminal(p) {
   if (!activeClient.value?.resumeSupported) {
     toast(activeClient.value?.resumeNote || t('sessions.noResume'))
     return false
   }
   try {
-    const r = await api.OpenSessionTerminal(activeId.value, p, shell || 'cmd')
+    // 第三个参数仅为兼容旧后端签名（早期外部终端要选 cmd / powershell 宿主），
+    // 自带终端窗口不再区分宿主，固定传 cmd。
+    const r = await api.OpenSessionTerminal(activeId.value, p, 'cmd')
     if (r && r.ok === false) { toast(t('common.fail', { msg: r.error || '' })); return false }
     return true
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })); return false }
 }
 
-// 点击行首客户端 logo：弹出行内浮层（页面中心）展示 cmd / PowerShell 两个
-// 终端图标供选择；客户端不支持恢复时直接提示原因，不弹浮层。
-function showResumePop(it) {
-  if (!activeClient.value?.resumeSupported) {
-    toast(activeClient.value?.resumeNote || t('sessions.noResume'))
-    return
-  }
-  resumePop.value = it
-}
-// 浮层中点击某个终端图标（shell='cmd'|'powershell'）：执行恢复，成功即收起浮层。
-async function doResumePop(shell) {
-  const it = resumePop.value
+// 点击行首电话图标：直接用自带终端打开该会话（不再弹 cmd / PowerShell 选择浮层）。
+function resumeInTerminal(it) {
   if (!it) return
-  const ok = await openTerminal(it.path, shell)
-  if (ok) resumePop.value = null
+  openTerminal(it.path)
 }
 
 // 各客户端「会话管理常用命令」速查（悬停会话 ID 时展示）。cmd 为可读命令原型，
@@ -198,10 +215,6 @@ const CMD_HELP = {
     { cmd: 'opencode session', k: 'sessions.hlp.sess' },
     { cmd: 'opencode export {id}', k: 'sessions.hlp.export' },
   ],
-  gemini: [
-    { cmd: 'gemini --list-sessions', k: 'sessions.hlp.list' },
-    { cmd: 'gemini --delete-session <n>', k: 'sessions.hlp.delIdx' },
-  ],
   'grok-build': [
     { cmd: 'grok --continue', k: 'sessions.hlp.cont' },
     { cmd: 'grok --resume', k: 'sessions.hlp.omit' },
@@ -211,8 +224,18 @@ const CMD_HELP = {
     { cmd: 'codex archive {id}', k: 'sessions.hlp.arch' },
     { cmd: 'codex delete {id}', k: 'sessions.hlp.del' },
   ],
-  cline: [
-    { cmd: 'cline history', k: 'sessions.hlp.hist' },
+  deepcode: [
+    { cmd: 'deepcode -l', k: 'sessions.hlp.cont' },
+    { cmd: 'deepcode -r', k: 'sessions.hlp.pick' },
+  ],
+  mimocode: [
+    { cmd: 'mimo -c', k: 'sessions.hlp.cont' },
+    { cmd: 'mimo session list', k: 'sessions.hlp.hist' },
+    { cmd: 'mimo export {id}', k: 'sessions.hlp.export' },
+  ],
+  agy: [
+    { cmd: 'agy -c', k: 'sessions.hlp.cont' },
+    { cmd: 'agy --conversation=', k: 'sessions.hlp.pick' },
   ],
   copilot: [
     { cmd: 'github-copilot --continue', k: 'sessions.hlp.cont' },
@@ -274,16 +297,54 @@ function copyCmd(it, e) {
   copyText(it.cmd, e.currentTarget)
 }
 
-function askDelete() { if (selected.value.size) confirming.value = true }
-async function doDelete() {
-  const ids = [...selected.value]
-  confirming.value = false
-  if (!ids.length || !activeId.value) return
+// 「阅读」：开独立窗口渲染该会话的对话内容（--read 精简实例，后端解析 jsonl）
+async function openReader(it) {
   try {
-    const r = await api.DeleteSessionItems(activeId.value, ids)
+    const r = await api.OpenSessionReader(activeId.value, it.path, titleOf(it).text)
+    if (r && r.ok === false) toast(t('common.fail', { msg: r.error || '' }))
+  } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
+}
+
+// 每行行尾垃圾桶图标删除：确认对话框 → 删除该单条（目录型整棵移除，不可恢复）
+const confirming = ref(false)
+const delTarget = ref(null) // 待删除的会话条目（null=收起）
+function askDeleteOne(it) { delTarget.value = it; confirming.value = true }
+async function doDelete() {
+  const it = delTarget.value
+  confirming.value = false
+  delTarget.value = null
+  if (!it || !activeId.value) return
+  try {
+    const r = await api.DeleteSessionItems(activeId.value, [it.path])
     if (r && r.ok) {
-      toast(t('sessions.deleted', { n: ids.length }))
+      toast(t('sessions.deleted', { n: 1 }))
       await loadClients(activeId.value) // 删除后刷新概览与条目
+    } else toast(t('common.fail', { msg: r?.error || '' }))
+  } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
+}
+
+// 小导航栏底部「一键清空」：清空当前客户端的全部会话（逐路径仍由后端
+// 校验位于该客户端会话根目录内且层级相符，越界一律拒绝）。
+const clearOpen = ref(false)
+const clearCount = ref(0)
+function askClearAll() {
+  if (!activeId.value) return
+  if (!items.value.length) {
+    toast(t('sessions.nothingToClear'))
+    return
+  }
+  clearCount.value = items.value.length
+  clearOpen.value = true
+}
+async function doClearAll() {
+  clearOpen.value = false
+  const paths = items.value.map(it => it.path)
+  if (!paths.length || !activeId.value) return
+  try {
+    const r = await api.DeleteSessionItems(activeId.value, paths)
+    if (r && r.ok) {
+      toast(t('sessions.cleared', { n: paths.length }))
+      await loadClients(activeId.value)
     } else toast(t('common.fail', { msg: r?.error || '' }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
 }
@@ -293,67 +354,84 @@ async function doDelete() {
 function refresh() { return loadClients(activeId.value) }
 
 onMounted(() => loadClients())
-defineExpose({ loadClients, refresh, askDelete, state })
+defineExpose({ loadClients, refresh, openClientDir, askClearAll })
 </script>
 
 <template>
   <div class="sessions-wrap">
     <!-- 会话条目表（客户端切换在右下角浮动图标栏） -->
-    <div class="recent-card sess-card">
+    <!-- 面板整体的大背景：当前客户端的 logo 居中淡显，切换客户端时自动跟随 -->
+    <div class="recent-card sess-card" :style="{ '--sess-logo': rowLogo ? 'url(' + rowLogo + ')' : 'none' }">
       <div class="logs-scroll">
         <table v-if="items.length" class="logs-table sess-table">
           <colgroup>
-            <col class="c-ck"><col class="c-logo"><col class="c-name"><col class="c-time"><col class="c-act">
+            <col class="c-name"><col class="c-msgs"><col class="c-tokens"><col class="c-time"><col class="c-logo">
           </colgroup>
           <thead>
             <tr>
-              <th><input type="checkbox" :checked="allSelected" @change="toggleAll"></th>
+              <th class="th-name">{{ t('sessions.colName') }}</th>
+              <th class="th-num">{{ t('sessions.colMsgs') }}</th>
+              <th class="th-num">{{ t('sessions.colTokens') }}</th>
+              <th>{{ t('sessions.colTime') }}</th>
+              <!-- 「恢复会话」图标列在最右：末尾空表头与它一一对应 -->
               <th></th>
-              <th>{{ t('sessions.colName') }}</th><th>{{ t('sessions.colTime') }}</th><th></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="it in items" :key="it.path" :class="{ sel: selected.has(it.path) }">
-              <td><input type="checkbox" :checked="selected.has(it.path)" @change="toggle(it.path)"></td>
-              <td class="sr-logo">
-                <img
-                  class="sr-logo-img"
-                  src="/logos/phone-call-call-svgrepo-com.svg"
-                  alt=""
-                  :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
-                  draggable="false" role="button" tabindex="0"
-                  @click="showResumePop(it)" @keydown.enter.prevent="showResumePop(it)"
-                />
-              </td>
+            <tr v-for="it in items" :key="it.path">
               <td
                 class="sr-name"
-                :title="tipEntries(it) ? undefined : it.path"
+                :title="tipEntries(it) ? undefined : tipOf(it)"
                 @mouseenter="showCmdTip(it, $event)" @mousemove="moveCmdTip" @mouseleave="hideCmdTip"
               >
                 <span class="sr-inner">
-                  <button
-                    class="sr-copy" :class="{ off: !it.cmd }"
-                    :title="it.cmd ? undefined : (activeClient?.resumeNote || t('sessions.noResume'))"
-                    :aria-label="it.cmd ? t('sessions.copyCmd') : (activeClient?.resumeNote || t('sessions.noResume'))"
-                    @click.stop="copyCmd(it, $event)"
+                  <!-- 阅读：书本图标，置于「恢复会话」电话图标左侧；
+                       库型存储的会话（it.cli，如 MiMo Code）没有可解析的转写文件，不显示 -->
+                  <span
+                    v-if="!it.cli"
+                    class="sr-logo-ico"
+                    :title="t('sessions.read')"
+                    :aria-label="t('sessions.read')"
+                    role="button" tabindex="0"
+                    @click.stop="openReader(it)" @keydown.enter.prevent="openReader(it)"
                   >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                  </button>
-                  <span class="sr-id">{{ it.id || it.name }}</span>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                  </span>
+                  <!-- 恢复会话：电话字体图标，置于标题左侧 -->
+                  <i
+                    class="fa-solid fa-phone sr-logo-ico"
+                    :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
+                    :aria-label="t('sessions.openTerminal')"
+                    role="button" tabindex="0"
+                    @click.stop="resumeInTerminal(it)" @keydown.enter.prevent="resumeInTerminal(it)"
+                  ></i>
+                  <span class="sr-id" :class="{ 'is-id': titleOf(it).isId }">{{ titleOf(it).text }}</span>
                 </span>
               </td>
+              <td class="sr-msgs" :class="{ 'sr-nil': !it.stats }">{{ it.stats ? it.msgs : '—' }}</td>
+              <td class="sr-tokens" :class="{ 'sr-nil': !(it.stats && it.tokensIn + it.tokensOut > 0) }" :title="(it.stats && it.tokensIn + it.tokensOut > 0) ? t('sessions.tokensTip', { in: fmtTokens(it.tokensIn), out: fmtTokens(it.tokensOut) }) : ''">{{ (it.stats && it.tokensIn + it.tokensOut > 0) ? fmtTokens(it.tokensIn + it.tokensOut) : '—' }}</td>
               <td class="sr-time">
-                <span class="st-cell">
-                  <img
-                    v-if="rowLogo" class="st-logo"
-                    :src="rowLogo" :alt="activeClient?.name" :title="activeClient?.name"
-                    draggable="false"
-                  />
-                  <span class="st-mtime">{{ it.mtime }}</span>
-                </span>
+                <!-- 客户端图标不再逐行占位：只在面板整体背景上淡显一次（见 .sess-card::before） -->
+                <span class="st-cell"><span class="st-mtime" :title="it.mtime">{{ fmtMtime(it.mtime) }}</span></span>
               </td>
-              <td>
-                <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openItem')" @click="openLocation(it.path)">📂</button>
+              <td class="sr-logo">
+                <!-- 复制恢复命令：原在标题胶囊右侧，与「恢复会话」电话图标互换位置 -->
+                <button
+                  class="sr-copy" :class="{ off: !it.cmd }"
+                  :title="it.cmd ? undefined : (activeClient?.resumeNote || t('sessions.noResume'))"
+                  :aria-label="it.cmd ? t('sessions.copyCmd') : (activeClient?.resumeNote || t('sessions.noResume'))"
+                  @click.stop="copyCmd(it, $event)"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+                <!-- 删除该会话：确认后单条删除（目录型整棵移除，不可恢复） -->
+                <button
+                  class="sr-copy sr-del"
+                  :title="t('sessions.deleteItem')" :aria-label="t('sessions.deleteItem')"
+                  @click.stop="askDeleteOne(it)"
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -370,16 +448,18 @@ defineExpose({ loadClients, refresh, askDelete, state })
     <div class="sess-float">
       <transition name="sess-nav">
         <div v-if="navOpen" class="sess-nav">
-          <div v-if="!clients.length" class="empty-tip" style="padding:6px 4px">{{ t('sessions.noClients') }}</div>
-          <!-- 图标自上而下：最近点击(选中)的在前，未点过的按后端顺序垫底 -->
-          <button
-            v-for="c in navClients" :key="c.id"
-            class="sess-chip" :class="{ on: c.id === activeId, empty: c.managed && !c.rootExists, unmanaged: !c.managed }"
-            :title="chipTip(c)"
-            @click="pickClient(c)"
-          >
-            <img v-if="targetLogo(c.id)" class="sess-chip-logo" :src="targetLogo(c.id)" alt="" draggable="false" />
-          </button>
+          <div class="sess-nav-list">
+            <div v-if="!clients.length" class="empty-tip" style="padding:6px 4px">{{ t('sessions.noClients') }}</div>
+            <!-- 图标自上而下：最近点击(选中)的在前，未点过的按后端顺序垫底 -->
+            <button
+              v-for="c in navClients" :key="c.id"
+              class="sess-chip" :class="{ on: c.id === activeId, empty: c.managed && !c.rootExists, unmanaged: !c.managed }"
+              :title="chipTip(c)"
+              @click="pickClient(c)"
+            >
+              <img v-if="targetLogo(c.id)" class="sess-chip-logo" :src="targetLogo(c.id)" alt="" draggable="false" />
+            </button>
+          </div>
         </div>
       </transition>
       <button
@@ -403,25 +483,15 @@ defineExpose({ loadClients, refresh, askDelete, state })
       </div>
     </Teleport>
 
-    <!-- 终端恢复浮层（点击行首客户端 logo 弹出，页面中心纯图标小气泡：cmd / PowerShell） -->
-    <div class="dialog-overlay resume-mask" :class="{ open: resumePop }" @click.self="resumePop=null">
-      <div class="resume-pop">
-        <div class="resume-actions">
-          <button class="resume-act" :title="t('sessions.resumeInCmd')" @click="doResumePop('cmd')">
-            <img class="resume-ico term-cmd" src="/logos/terminal-cmd-svgrepo-com.svg" alt="cmd" draggable="false" />
-          </button>
-          <button class="resume-act" :title="t('sessions.resumeInPS')" @click="doResumePop('powershell')">
-            <img class="resume-ico" src="/logos/shell-svgrepo-com.svg" alt="PowerShell" draggable="false" />
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- 以下弹层 Teleport 到 body：深色主题 .panel 带 backdrop-filter，会成为 fixed 子元素
+         的包含块，留在面板内时遮罩只覆盖面板、弹窗按面板居中；脱离面板才覆盖整个窗口 -->
+    <Teleport to="body">
 
     <!-- 删除确认（应用内对话框，删除不可恢复） -->
     <div class="dialog-overlay" :class="{ open: confirming }" @click.self="confirming=false">
       <div class="dialog" style="width:min(420px, calc(100% - 24px))">
-        <h3>{{ t('dlg.deleteTitle') }}</h3>
-        <p class="delete-desc">{{ t('sessions.confirmDelete', { n: selected.size }) }}</p>
+        <h3>{{ t('sessions.deleteTitle') }}</h3>
+        <p class="delete-desc">{{ t('sessions.confirmDeleteOne', { name: delTarget ? (delTarget.title || delTarget.id || delTarget.name || '') : '' }) }}</p>
         <div class="dialog-foot">
           <span></span>
           <div class="right">
@@ -431,5 +501,21 @@ defineExpose({ loadClients, refresh, askDelete, state })
         </div>
       </div>
     </div>
+
+    <!-- 一键清空确认（当前客户端全部会话，删除不可恢复） -->
+    <div class="dialog-overlay" :class="{ open: clearOpen }" @click.self="clearOpen=false">
+      <div class="dialog" style="width:min(440px, calc(100% - 24px))">
+        <h3>{{ t('sessions.clearTitle') }}</h3>
+        <p class="delete-desc">{{ t('sessions.confirmClearAll', { name: activeClient ? activeClient.name : '', n: clearCount }) }}</p>
+        <div class="dialog-foot">
+          <span></span>
+          <div class="right">
+            <button class="btn btn-ghost btn-sm" type="button" @click="clearOpen=false">{{ t('dlg.cancel') }}</button>
+            <button class="btn btn-danger btn-sm" type="button" @click="doClearAll">{{ t('dlg.confirmDeleteBtn') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </Teleport>
   </div>
 </template>

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"llm-router-go/types"
 )
@@ -37,7 +38,9 @@ func OpenaiStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 	go func() {
 		defer close(ch)
 		defer panicToErrorChunk(ch)
-		for evt := range IterSSE(r) {
+		evts, stopIter := IterSSE(r)
+		defer stopIter()
+		for evt := range evts {
 			if _, hasErr := evt.Data["error"]; hasErr {
 				msg := "upstream error"
 				if em, ok := evt.Data["error"].(map[string]any); ok {
@@ -78,7 +81,9 @@ func AnthropicStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 
 		emit := func(c map[string]any) { ch <- c }
 
-		for evt := range IterSSE(r) {
+		evts, stopIter := IterSSE(r)
+		defer stopIter()
+		for evt := range evts {
 			switch evt.Event {
 			case "error":
 				// 上游错误事件转发为错误块，避免错误流被静默截断
@@ -306,7 +311,9 @@ func GeminiStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 
 		emit := func(c map[string]any) { ch <- c }
 
-		for evt := range IterSSE(r) {
+		evts, stopIter := IterSSE(r)
+		defer stopIter()
+		for evt := range evts {
 			// --- Interactions API 事件识别 ---
 			if et, ok := evt.Data["event_type"].(string); ok && et != "" {
 				detectedInter = true
@@ -412,22 +419,26 @@ func GeminiStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 					} else {
 						lastCallArgs[id] = string(argsB)
 					}
+					tcEntry := map[string]any{
+						"index": idx,
+						"id":    id,
+						"type":  "function",
+						"function": map[string]any{
+							"name":      name,
+							"arguments": string(argsB),
+						},
+					}
+					// thoughtSignature（Gemini 3 思维签名）随工具调用分片透传，
+					// 客户端回传历史时由 ToGemini 回填（仅原生 Gemini 上游）
+					if sig, ok := pm["thoughtSignature"].(string); ok && sig != "" {
+						tcEntry["thought_signature"] = sig
+					}
 					emit(map[string]any{
 						"choices": []any{
 							map[string]any{
 								"index": 0,
 								"delta": map[string]any{
-									"tool_calls": []any{
-										map[string]any{
-											"index": idx,
-											"id":    id,
-											"type":  "function",
-											"function": map[string]any{
-												"name":      name,
-												"arguments": string(argsB),
-											},
-										},
-									},
+									"tool_calls": []any{tcEntry},
 								},
 							},
 						},
@@ -521,9 +532,7 @@ func ResponsesStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 			seenStart    bool
 			toolIndex    int
 			hasToolCall  bool
-			toolAccArgs  = map[int]string{}
 			toolAccID    = map[int]string{}
-			toolAccName  = map[int]string{}
 			promptTokens int
 			outputTokens int
 			// output_index 是所有输出项（message、function_call 等）的序号，
@@ -533,7 +542,9 @@ func ResponsesStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 
 		emit := func(c map[string]any) { ch <- c }
 
-		for evt := range IterSSE(r) {
+		evts, stopIter := IterSSE(r)
+		defer stopIter()
+		for evt := range evts {
 			switch evt.Event {
 			case "error":
 				// 上游错误事件转发为错误块，避免错误流被静默截断
@@ -573,8 +584,6 @@ func ResponsesStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 				hasToolCall = true
 				name, _ := item["name"].(string)
 				toolAccID[toolIndex] = id
-				toolAccName[toolIndex] = name
-				toolAccArgs[toolIndex] = ""
 				if oi, ok := numFloat(evt.Data, "output_index"); ok {
 					outputIdxToTool[oi] = toolIndex
 				}
@@ -647,7 +656,6 @@ func ResponsesStreamToChunks(r io.ReadCloser) <-chan map[string]any {
 						idx = 0
 					}
 				}
-				toolAccArgs[idx] += delta
 				emit(map[string]any{
 					"choices": []any{
 						map[string]any{
@@ -787,7 +795,17 @@ func drainChunks(chunks <-chan map[string]any) {
 // after each event when supported. It returns the last usage chunk seen.
 func WriteChunksToOpenai(w io.Writer, chunks <-chan map[string]any, model string) (*types.Usage, error) {
 	var lastUsage *types.Usage
+	// 同一响应的全部分片共用 id/created（与真实 OpenAI 一致）：格式互译产生的
+	// 增量 chunk 只带 choices，严格反序列化的客户端（grokcli 等 serde 实现）会因
+	// 缺顶层 id 整条丢弃并报 missing field `id`（非流式见 handleNonStream）。
+	chunkID := randID("chatcmpl-")
+	created := time.Now().Unix()
 	for chunk := range chunks {
+		// 上游 SSE 里的 `data: null` 解析出来是 nil map（Unmarshal 成功但无内容）：
+		// 后面 `chunk["model"] = model` 对 nil map 赋值会 panic，直接跳过。
+		if chunk == nil {
+			continue
+		}
 		// 剥离 IR 扩展键：OpenAI 兼容客户端不识别 _ext_* 内部字段，
 		// 原样输出会污染 wire（thinkng 明文等仅供内部还原用）。
 		types.IRDropAll(chunk)
@@ -795,6 +813,7 @@ func WriteChunksToOpenai(w io.Writer, chunks <-chan map[string]any, model string
 		if _, ok := chunk["model"]; !ok && model != "" {
 			chunk["model"] = model
 		}
+		ensureOpenAIChunkFields(chunk, chunkID, created)
 		if u := usageFromChunk(chunk); u != nil {
 			lastUsage = u
 		}
@@ -819,6 +838,23 @@ func WriteChunksToOpenai(w io.Writer, chunks <-chan map[string]any, model string
 		return lastUsage, err
 	}
 	return lastUsage, maybeFlush(w)
+}
+
+// ensureOpenAIChunkFields 为 chunk 补齐 OpenAI 流式响应的必需顶层字段
+// （id / object / created）。错误块（顶层 error）不补，保持原样让客户端直接报错。
+func ensureOpenAIChunkFields(m map[string]any, id string, created int64) {
+	if _, ok := m["error"]; ok {
+		return
+	}
+	if _, ok := m["id"]; !ok {
+		m["id"] = id
+	}
+	if _, ok := m["object"]; !ok {
+		m["object"] = "chat.completion.chunk"
+	}
+	if _, ok := m["created"]; !ok {
+		m["created"] = created
+	}
 }
 
 // usageFromChunk extracts a *types.Usage from an OpenAI-shaped chunk.
@@ -1236,6 +1272,9 @@ func WriteChunksToAnthropic(w io.Writer, chunks <-chan map[string]any, model str
 	}
 	var lastUsage *types.Usage
 	for chunk := range chunks {
+		if chunk == nil { // data: null：nil map 直接跳过
+			continue
+		}
 		if u := usageFromChunk(chunk); u != nil {
 			lastUsage = u
 		}
@@ -1465,6 +1504,9 @@ func WriteChunksToGemini(w io.Writer, chunks <-chan map[string]any, model string
 	gw := &geminiSSEWriter{w: w}
 	var lastUsage *types.Usage
 	for chunk := range chunks {
+		if chunk == nil { // data: null：nil map 直接跳过
+			continue
+		}
 		if u := usageFromChunk(chunk); u != nil {
 			lastUsage = u
 		}

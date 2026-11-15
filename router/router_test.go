@@ -303,3 +303,30 @@ func TestUpdateFetchedModels(t *testing.T) {
 		t.Error("static models should take priority over fetched")
 	}
 }
+
+// 供应商卡片口径：GetFetchedModels 只取上游拉取缓存，静态 p.Models 不参与，
+// 且返回副本（调用方改动不污染缓存）；路由口径仍是 GetProviderModels 静态优先。
+func TestGetFetchedModelsIgnoresStatic(t *testing.T) {
+	UpdateFetchedModels("p-card", []string{"upstream-a", "upstream-b"})
+	defer ClearFetchedModel("p-card")
+
+	prov := types.Provider{ID: "p-card", Models: []string{"static-only"}}
+
+	if got := GetFetchedModels(prov.ID); len(got) != 2 || got[0] != "upstream-a" || got[1] != "upstream-b" {
+		t.Fatalf("GetFetchedModels = %v, want [upstream-a upstream-b]", got)
+	}
+	// 从未拉取过的供应商 → nil（卡片据此再实时 FetchModels 一次）
+	if got := GetFetchedModels("p-never-fetched"); got != nil {
+		t.Fatalf("GetFetchedModels(unknown) = %v, want nil", got)
+	}
+	// 路由仍静态优先
+	if got := GetProviderModels(prov); len(got) != 1 || got[0] != "static-only" {
+		t.Fatalf("GetProviderModels = %v, want [static-only]", got)
+	}
+
+	got := GetFetchedModels(prov.ID)
+	got[0] = "mutated"
+	if again := GetFetchedModels(prov.ID); again[0] != "upstream-a" {
+		t.Fatalf("cache mutated by caller: %v", again)
+	}
+}

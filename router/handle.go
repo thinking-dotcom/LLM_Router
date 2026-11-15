@@ -32,7 +32,7 @@ var upstreamHTTPClient = &http.Client{
 
 // streamingHTTPClient 与 upstreamHTTPClient 共享连接池，但不设整体超时：
 // Client.Timeout 覆盖整个响应体读取，会把超过 10 分钟的 SSE 流中途捖断
-// （长推理 + 长输出很常见）。流式请求改用此 client，由客户端断连兑底。
+// （长推理 + 长输出很常见）。流式请求改用此 client，由客户端断连兜底。
 var streamingHTTPClient = &http.Client{
 	Transport: upstreamHTTPClient.Transport,
 }
@@ -44,6 +44,40 @@ var streamingHTTPClient = &http.Client{
 // 以剥离这些字段，否则上游直接 400。
 func isOpenaiLike(ptype string) bool {
 	return ptype == "openai"
+}
+
+// hoistExtraBody 把 OpenAI SDK 的 extra_body 包裹摊平到请求体顶层（就地修改），
+// 返回是否有改动。extra_body 本应由 SDK 在发请求前合并进 body；部分客户端用的是
+// 自定义 HTTP 层（如 Deep Code CLI 发 {thinking:{…}, extra_body:{reasoning_effort}}），
+// 包裹键被原样发到线上——上游只看到一个自己不认识的 extra_body 对象，推理档位等参数
+// 静默失效，而路由器此前也因「顶层没有推理字段」判定客户端未携带 → 又按全局档位兜底
+// 注入一遍。摊平后顶层就能被正常识别、转换与上送。顶层已有同名键时不覆盖（顶层优先）。
+func hoistExtraBody(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	eb, ok := body["extra_body"].(map[string]any)
+	if !ok || len(eb) == 0 {
+		return false
+	}
+	for k, v := range eb {
+		if _, exists := body[k]; !exists {
+			body[k] = v
+		}
+	}
+	delete(body, "extra_body")
+	return true
+}
+
+// upstreamReasoningFamily 目标上游的推理参数家族键：provider.Type 直接归一
+// （response → responses 等），Gemini 系若 baseUrl 指向 Interactions API
+// （含 /interactions）则用 interactions 方言——与 allowSameTypePassthrough 的
+// 同型判定口径保持一致。用于日志「推理」列读取上游原生字段。
+func upstreamReasoningFamily(p types.Provider) string {
+	if p.Type == types.ProviderGemini && strings.Contains(strings.ToLower(p.BaseURL), "/interactions") {
+		return format.ReasoningFamilyInteractions
+	}
+	return string(p.Type)
 }
 
 // sanitizeMessageRoles 清洗 OpenAI 兼容请求体里的消息角色（原地修改）。
@@ -221,6 +255,18 @@ func normalizeDoubledPath(p string) string {
 	return p
 }
 
+// isModelPath 判断路径是否属于模型调用端点：方法不对时应答 405（方法不允许），
+// 不存在的路径则应答 404。用于区分「探活/探测」与「真的调错了方法」。
+func isModelPath(p string) bool {
+	switch p {
+	case "/chat/completions", "/completions", "/responses", "/embeddings",
+		"/v1", "/v1/chat/completions", "/v1/completions", "/v1/responses", "/v1/embeddings",
+		"/v1/messages", "/v1/messages/count_tokens":
+		return true
+	}
+	return strings.HasPrefix(p, "/v1/") || strings.HasPrefix(p, "/v1beta/")
+}
+
 // HandleLLM is the main LLM request handler. It processes every incoming
 // API call: HTML landing page, model lists, and chat/completions proxying.
 //
@@ -341,10 +387,51 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 				ContentLength: int64(len(html)),
 			}
 		}
-		entry.Status = 405
+		// 探活类请求：CLI / 扩展常把根地址当健康检查（Accept 不含 text/html），
+		// 这不是错误，给一个 JSON 状态即可，避免日志里出现刺眼的 405。
+		if pathname == "/" || pathname == "/health" || pathname == "/healthz" {
+			entry.Status = 200
+			entry.Ms = int(time.Since(start).Milliseconds())
+			logger(entry)
+			body := `{"status":"ok","service":"llm-router"}`
+			return &http.Response{
+				StatusCode:    200,
+				Status:        "200 OK",
+				Proto:         "HTTP/1.1",
+				ProtoMajor:    1,
+				ProtoMinor:    1,
+				Header:        http.Header{"Content-Type": []string{"application/json; charset=utf-8"}},
+				Body:          io.NopCloser(strings.NewReader(body)),
+				ContentLength: int64(len(body)),
+			}
+		}
+		// 浏览器自动请求的站点图标：静默 204（不产生错误日志）
+		if pathname == "/favicon.ico" {
+			entry.Status = 204
+			entry.Ms = int(time.Since(start).Milliseconds())
+			logger(entry)
+			return &http.Response{
+				StatusCode: 204,
+				Status:     "204 No Content",
+				Proto:      "HTTP/1.1",
+				ProtoMajor: 1,
+				ProtoMinor: 1,
+				Header:     http.Header{},
+				Body:       io.NopCloser(strings.NewReader("")),
+			}
+		}
+		// 模型端点存在但方法不对才是 405；其它路径压根不存在，按 404 应答
+		//（此前一律 405，导致 /api/hello 这类探测在日志里显示成"方法不允许"）
+		if isModelPath(pathname) {
+			entry.Status = 405
+			entry.Ms = int(time.Since(start).Milliseconds())
+			logger(entry)
+			return ErrorResponse(405, "method not allowed", "invalid_request_error")
+		}
+		entry.Status = 404
 		entry.Ms = int(time.Since(start).Milliseconds())
 		logger(entry)
-		return ErrorResponse(405, "method not allowed", "invalid_request_error")
+		return ErrorResponse(404, "not found", "invalid_request_error")
 	}
 
 	// 6. Validate path ---------------------------------------------------------
@@ -385,7 +472,7 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 
 	// 超时控制：非流式请求保留 10 分钟整体超时；流式请求不设整体 deadline——
 	// context 截止会覆盖整个响应体读取，超长 SSE 流会被中途捖断。
-	// 流式场景由客户端断连（r.Context() 取消）兑底。
+	// 流式场景由客户端断连（r.Context() 取消）兜底。
 	if !inbound.Stream {
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
@@ -423,8 +510,9 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 		return ErrorResponse(400, "messages is required", "invalid_request_error")
 	}
 
-	// 11. Resolve provider ----------------------------------------------------
-	provider, stripAt := ResolveProviderWithStrip(model, config)
+	// 11. Resolve provider（未命中时按兜底模型链逐层改写重解析，见 ResolveWithFallback）
+	requestedModel := model // 客户端原始模型名：兜底改写后据此判断能否原始 body 直通
+	provider, stripAt, model := ResolveWithFallback(model, config)
 	if provider == nil {
 		msg := "no provider found for model: " + model
 		if model == "" {
@@ -442,6 +530,20 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 	// 支持全格式矩阵（同型直通保留原生字段、跨型经 OpenAI 归一化形状转换），
 	// 不再做格式亲和拦截；无对应转换规则的组合由下方查表步骤拒绝。
 	declaredFmt := declaredInboundFormat(rawPath)
+
+	// extra_body 摊平：必须在下面「是否携带推理参数」判定与原始 body 抓取之前，
+	// 否则包在 extra_body 里的 reasoning_effort 会被判成「客户端未携带」→ 路由器兜底
+	// 注入（日志里表现为客户端明明带了却显示 max*），且客户端档位也不会被转换上送。
+	if hoistExtraBody(bodyMap) {
+		if nb, err := json.Marshal(bodyMap); err == nil {
+			rawBody = nb
+		}
+	}
+
+	// 客户端原始推理参数（「字段=值」）在任何原地改写之前抓一份：下面的
+	// sanitizeReasoningEffort 会把 minimal 改写为 low、兜底注入会往 body 里写预设
+	// 参数，都会污染「客户端到底发的是什么」，而日志上行要显示后者。
+	origReasoning := format.DescribeReasoningNative(inbound.Format, bodyMap)
 
 	// 同型直通：客户端实际请求体格式（inbound.Format，由剥离前缀后的路径决定）
 	// 与上游 API 格式完全一致时，不再经 OpenAI 形状中转，直接按原生格式转发，
@@ -482,6 +584,15 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 		}
 		if InjectDefaultReasoning(inbound.Format, tier, bodyMap, inbound.OpenaiReq) {
 			forceConvert = true
+			// 日志「推理」列：带 "*" 后缀 = 客户端未携带，由路由器按全局档位注入
+			entry.Reasoning = normalizeTier(tier) + "*"
+		}
+	} else {
+		// 客户端显式携带：上行显示原生「字段=值」原文（不覆盖客户端的选择）；
+		// 认不出具体字段时退回展示值（如 Anthropic 只给了 thinking.type）
+		entry.Reasoning = origReasoning
+		if entry.Reasoning == "" {
+			entry.Reasoning = ClientReasoningLabel(inbound.Format, bodyMap, inbound.OpenaiReq)
 		}
 	}
 
@@ -514,7 +625,7 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 				break
 			}
 			if strings.Contains(k, "*") && MatchModel(k, outModel) {
-				// 记录首个通配命中（同一服务商内若存在多条重名模式，取其一）
+				// 记录首个通配命中（同一供应商内若存在多条重名模式，取其一）
 				wild = v
 			}
 		}
@@ -540,14 +651,14 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 	}
 
 	// 13. Build outbound request ----------------------------------------------
-	// 经格式转换规则引擎按 (接入方式 src, 服务商 API 格式 dst) 查表取得转换规则，
+	// 经格式转换规则引擎按 (接入方式 src, 供应商 API 格式 dst) 查表取得转换规则，
 	// 由该规则把客户端请求转换成目标上游格式。同型直通由规则内部按 SameType 决定
 	// 是否原样转发原生字段（triggered 在 exactOrNormalize / defaultRequest 中完成）。
 	reqRule, err := transrules.LookupRequest(declaredFmt, string(provider.Type))
 	if err != nil {
 		// 接入格式 → 目标格式无对应转换规则（如 gemini 接入指定 openai 上游），
 		// 拒绝并提示，而非静默透传错误形状。
-		msg := "该接入格式（" + declaredFmt + "）到服务商「" + provider.Name + "」的 API 格式（" + string(provider.Type) + "）暂无转换规则，已拒绝请求。"
+		msg := "该接入格式（" + declaredFmt + "）到供应商「" + provider.Name + "」的 API 格式（" + string(provider.Type) + "）暂无转换规则，已拒绝请求。"
 		entry.Status = 400
 		entry.Resp = truncateRunes(msg, 2000)
 		entry.Ms = int(time.Since(start).Milliseconds())
@@ -577,8 +688,12 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 	// 别名原样名字，报 model not found，别名功能等于失效。
 	// 追加了默认推理参数的请求禁止原始 body 直通（直通会绕过转换节点，
 	// 注入参数不会映射到上游格式），必须走重建分支。
+	// 走兜底模型时 model 已被改写成兜底名，而 rawBody 里仍是客户端原始模型名：
+	// 此时若直通，上游收到的还是那个解析不到的名字，兜底等于失效。故要求
+	// 「客户端原始模型 == 改写后模型」，兜底命中的请求必须走重建分支。
 	canPassthrough := inbound.Format == "openai" && isOpenaiLike(string(provider.Type)) &&
-		resolved == model && r.Header.Get("Content-Encoding") == "" && !forceConvert
+		resolved == model && model == requestedModel &&
+		r.Header.Get("Content-Encoding") == "" && !forceConvert
 	// 流式 openai→openai 若直通原始 body，BuildOutboundRequest 注入的
 	// stream_options.include_usage 会被丢弃，上游 SSE 不携带 usage，Token 统计恒为 0。
 	// 仅当客户端已自带 stream_options.include_usage=true 时才允许直通，否则走重建分支
@@ -621,8 +736,17 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 		upstreamBody = b
 	}
 
+	// 日志「推理」列（下行）：从真正发往上游的请求体里读回原生推理「字段=值」。
+	// 重建/同型直通读 ob.Body（映射表落下的字段），原始 body 直通读客户端 body
+	// （该分支只发生在 openai→openai，字段名与上游一致）。
+	if canPassthrough {
+		entry.ReasoningOut = format.DescribeReasoningNative(format.ReasoningFamilyOpenAI, bodyMap)
+	} else if obBody, ok := ob.Body.(map[string]any); ok {
+		entry.ReasoningOut = format.DescribeReasoningNative(upstreamReasoningFamily(*provider), obBody)
+	}
+
 	// 跨型归一化转换：目标格式白名单重建会丢弃其不认识的字段。记录这些被丢弃的
-	// 请求字段（显式降级），让“静默丢失”可查；同型直通不做重建，无需检查。
+	// 请求字段（显式降级），让"静默丢失"可查；同型直通不做重建，无需检查。
 	if !sameType {
 		logDroppedRequestFields(openaiReq, ob.Body)
 	}
@@ -639,6 +763,11 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 	for k, v := range ob.Headers {
 		upstreamReq.Header.Set(k, v)
 	}
+	// opencode Zen GO 网关要求 x-opencode-session 会话头（缺失 400），客户端
+	// 带了透传、没带则用服务商派生的确定性会话 ID
+	applyOpencodeSession(upstreamReq.Header, *provider, r)
+	// 系统设置的「请求头注入」规则：按供应商匹配后逐条追加自定义请求头
+	applyHeaderRules(upstreamReq.Header, provider, config)
 
 	// 16. Execute upstream request --------------------------------------------
 	// 流式请求用无整体超时的 client，避免 Client.Timeout 捖断超长 SSE 流
@@ -659,7 +788,7 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 		}
 		entry.Status = 502
 		// 把具体错误写进日志（此前只返回给客户端，日志里 resp 恒为空，
-		// 导致“响应到一半停止”的 502 无法追溯是超时还是被对端断连）
+		// 导致"响应到一半停止"的 502 无法追溯是超时还是被对端断连）
 		entry.Resp = truncateRunes("upstream request failed: "+redactURL(err.Error()), 2000)
 		entry.Ms = int(time.Since(start).Milliseconds())
 		logger(entry)
@@ -691,13 +820,15 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 			if ct == "" {
 				ct = "application/json"
 			}
+			h := http.Header{"Content-Type": []string{ct}}
+			passUpstreamHeaders(h, upstreamResp.Header)
 			return &http.Response{
 				StatusCode:    upstreamResp.StatusCode,
 				Status:        upstreamResp.Status,
 				Proto:         "HTTP/1.1",
 				ProtoMajor:    1,
 				ProtoMinor:    1,
-				Header:        http.Header{"Content-Type": []string{ct}},
+				Header:        h,
 				Body:          io.NopCloser(bytes.NewReader(rawErr)),
 				ContentLength: int64(len(rawErr)),
 			}
@@ -708,15 +839,15 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 		entry.Resp = truncateRunes(string(b), 2000)
 		entry.Ms = int(time.Since(start).Milliseconds())
 		logger(entry)
+		h := http.Header{"Content-Type": []string{"application/json"}}
+		passUpstreamHeaders(h, upstreamResp.Header)
 		return &http.Response{
-			StatusCode: status,
-			Status:     http.StatusText(status),
-			Proto:      "HTTP/1.1",
-			ProtoMajor: 1,
-			ProtoMinor: 1,
-			Header: http.Header{
-				"Content-Type": []string{"application/json"},
-			},
+			StatusCode:    status,
+			Status:        http.StatusText(status),
+			Proto:         "HTTP/1.1",
+			ProtoMajor:    1,
+			ProtoMinor:    1,
+			Header:        h,
 			Body:          io.NopCloser(bytes.NewReader(b)),
 			ContentLength: int64(len(b)),
 		}
@@ -860,7 +991,7 @@ func handleStream(w http.ResponseWriter, r *http.Request, upstreamResp *http.Res
 		lastUsage, readErr := passthroughOpenAIStream(w, upstreamResp.Body, canFlush, flusher)
 		entry.Status = 200
 		// 读取中断（上游断连/超时/客户端断开）时记录错误详情，
-		// 否则这类“响应到一半停止”只表现为 200 空日志，无法定位根因。
+		// 否则这类"响应到一半停止"只表现为 200 空日志，无法定位根因。
 		// 中断的流只算失败请求，不记 usage，避免 Token 统计被虚增。
 		if readErr != nil {
 			// 区分客户端断连与真正的上游/写入错误：客户端主动关闭连接时 context
@@ -970,6 +1101,11 @@ func handleNonStream(r *http.Request, upstreamResp *http.Response, provider *typ
 	if inboundFormat == "openai" && isOpenaiLike(ptype) {
 		var parsed map[string]any
 		if json.Unmarshal(bodyBytes, &parsed) == nil {
+			// 上游返回字面 null 时 Unmarshal 成功且 parsed 为 nil，
+			// 直接补齐字段会对 nil map 赋值 panic；归一化为空对象再走补齐。
+			if parsed == nil {
+				parsed = map[string]any{}
+			}
 			entry.Usage = extractUsage(parsed)
 			// 某些上游（聚合代理）返回的 OpenAI 响应缺少必需的标准字段
 			// （id / object / created），会导致客户端反序列化失败
@@ -986,15 +1122,15 @@ func handleNonStream(r *http.Request, upstreamResp *http.Response, provider *typ
 		if contentType == "" {
 			contentType = "application/json"
 		}
+		h := http.Header{"Content-Type": []string{contentType}}
+		passUpstreamHeaders(h, upstreamResp.Header)
 		return &http.Response{
-			StatusCode: upstreamResp.StatusCode,
-			Status:     upstreamResp.Status,
-			Proto:      "HTTP/1.1",
-			ProtoMajor: 1,
-			ProtoMinor: 1,
-			Header: http.Header{
-				"Content-Type": []string{contentType},
-			},
+			StatusCode:    upstreamResp.StatusCode,
+			Status:        upstreamResp.Status,
+			Proto:         "HTTP/1.1",
+			ProtoMajor:    1,
+			ProtoMinor:    1,
+			Header:        h,
 			Body:          io.NopCloser(bytes.NewReader(bodyBytes)),
 			ContentLength: int64(len(bodyBytes)),
 		}
@@ -1025,15 +1161,15 @@ func handleNonStream(r *http.Request, upstreamResp *http.Response, provider *typ
 	entry.Ms = int(time.Since(start).Milliseconds())
 	logger(*entry)
 
+	h := http.Header{"Content-Type": []string{"application/json"}}
+	passUpstreamHeaders(h, upstreamResp.Header)
 	return &http.Response{
-		StatusCode: upstreamResp.StatusCode,
-		Status:     upstreamResp.Status,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header: http.Header{
-			"Content-Type": []string{"application/json"},
-		},
+		StatusCode:    upstreamResp.StatusCode,
+		Status:        upstreamResp.Status,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        h,
 		Body:          io.NopCloser(bytes.NewReader(b)),
 		ContentLength: int64(len(b)),
 	}
@@ -1072,6 +1208,10 @@ func passthroughOpenAIStream(w http.ResponseWriter, body io.ReadCloser, canFlush
 		return nil
 	}
 
+	// 同一响应全部分片共用 id/created（与真实 OpenAI 一致）；上游缺字段时补
+	chunkID := "chatcmpl-" + randHex(16)
+	created := time.Now().Unix()
+
 	// emitLine 写出一条完整的 SSE 行（不含换行，换行由调用方补写）。
 	emitLine := func(line []byte) error {
 		// 仅对 data: 的 JSON 行做归一化 + usage 扫描；其余行原样透传
@@ -1091,12 +1231,17 @@ func passthroughOpenAIStream(w http.ResponseWriter, body io.ReadCloser, canFlush
 		if err := json.Unmarshal(data, &chunk); err != nil {
 			return writeRaw(line)
 		}
+		if chunk == nil {
+			// data: null 原样透传：Unmarshal 对 null 成功但得到 nil map，
+			// 后续补 id/object 会 panic
+			return writeRaw(line)
+		}
 		if usage := extractUsage(chunk); usage != nil {
 			lastUsage = usage
 		}
 		needRewrite := false
 		if _, ok := chunk["id"]; !ok {
-			chunk["id"] = "chatcmpl-" + randHex(16)
+			chunk["id"] = chunkID
 			needRewrite = true
 		}
 		if _, ok := chunk["object"]; !ok {
@@ -1104,7 +1249,7 @@ func passthroughOpenAIStream(w http.ResponseWriter, body io.ReadCloser, canFlush
 			needRewrite = true
 		}
 		if _, ok := chunk["created"]; !ok {
-			chunk["created"] = time.Now().Unix()
+			chunk["created"] = created
 			needRewrite = true
 		}
 		if _, ok := chunk["model"]; !ok {
@@ -1646,7 +1791,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
       </div>
       <div style="overflow-x:auto">
         <table class="data-table" id="log-table">
-          <thead><tr><th>时间</th><th>路径</th><th>模型</th><th>服务商</th><th>状态码</th><th>输入</th><th>输出</th><th>耗时</th></tr></thead>
+          <thead><tr><th>时间</th><th>路径</th><th>模型</th><th>供应商</th><th>状态码</th><th>输入</th><th>输出</th><th>耗时</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -1667,10 +1812,10 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
           <tbody></tbody>
         </table>
       </div>
-      <div class="sec-title" style="margin-top:24px">今日服务商 <span class="sec-tip">请求 · 平均延迟</span></div>
+      <div class="sec-title" style="margin-top:24px">今日供应商 <span class="sec-tip">请求 · 平均延迟</span></div>
       <div style="overflow-x:auto">
         <table class="data-table" id="stats-prov-table">
-          <thead><tr><th>服务商</th><th>请求</th><th>输入 Token</th><th>输出 Token</th><th>平均耗时</th></tr></thead>
+          <thead><tr><th>供应商</th><th>请求</th><th>输入 Token</th><th>输出 Token</th><th>平均耗时</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -1787,7 +1932,7 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
       renderEndpoints(s.localBase || ("http://localhost:" + (s.port || 3000)));
       var cards = document.getElementById("overview-cards");
       cards.innerHTML =
-        '<div class="stat-card"><div class="sc-num">' + (s.providers || 0) + '</div><div class="sc-label">已接入服务商</div></div>' +
+        '<div class="stat-card"><div class="sc-num">' + (s.providers || 0) + '</div><div class="sc-label">已接入供应商</div></div>' +
         '<div class="stat-card" id="card-req"><div class="sc-num">-</div><div class="sc-label">今日请求</div></div>' +
         '<div class="stat-card" id="card-tok"><div class="sc-num">-</div><div class="sc-label">今日 Token</div></div>';
     }).catch(function () {});
@@ -2004,4 +2149,25 @@ body { font-family:var(--sans); background:var(--bg); color:var(--text); min-hei
 
 	html = strings.ReplaceAll(html, "__PORT__", fmt.Sprintf("%d", port))
 	return html
+}
+
+// passUpstreamHeaders 把对客户端有意义的「受限」上游头透传到合成响应里：
+// 限流、重试间隔与请求 id。合成响应默认只带 Content-Type，客户端因此看不到
+// Retry-After / x-ratelimit-*，遇到 429 无法正确退避。只白名单复制，
+// 避免把 Set-Cookie 之类的敏感头上带出。
+func passUpstreamHeaders(dst, src http.Header) {
+	if dst == nil || src == nil {
+		return
+	}
+	for k, vs := range src {
+		lk := strings.ToLower(k)
+		switch {
+		case lk == "retry-after", lk == "x-request-id", lk == "request-id",
+			strings.HasPrefix(lk, "x-ratelimit-"), strings.HasPrefix(lk, "ratelimit-"),
+			strings.HasPrefix(lk, "anthropic-ratelimit-"):
+			for _, v := range vs {
+				dst.Add(k, v)
+			}
+		}
+	}
 }

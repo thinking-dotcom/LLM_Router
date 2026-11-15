@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"embed"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -20,10 +20,10 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-	"unicode/utf16"
 	"unsafe"
 
-	"llm-router-go/agent"
+	"llm-router-go/agent/clients"
+	agentcore "llm-router-go/agent/core"
 	"llm-router-go/config"
 	"llm-router-go/core"
 	"llm-router-go/router"
@@ -82,7 +82,7 @@ func (a *App) GetRouterBase() string {
 }
 
 // commandcodeNoLoginEnvVar 是 Command Code 的启动鉴权环境变量名：值非空即视为已登录，
-// 不再弹浏览器登录窗；模型请求走哪由 config.json 的 provider（BYOK 服务商）决定，与此值无关。
+// 不再弹浏览器登录窗；模型请求走哪由 config.json 的 provider（BYOK 供应商）决定，与此值无关。
 // auth.json 的 apiKey 字段是同效兜底：env 变量只对「重开终端」生效，auth.json 当前终端立刻生效。
 // 两处均为占位值，请求仍直连本路由器（providers.json 声明 apiKey:false），不会发往云端。
 const commandcodeNoLoginEnvVar = "COMMAND_CODE_API_KEY"
@@ -112,7 +112,7 @@ func readCommandcodeAuthFile() string {
 }
 
 // writeAtomicFile 原子写文件（tmp+rename），避免进程写中途崩溃留下半截配置。
-// agent 包的 writeFileAtomic 未导出，此处自带同型实现。
+// agentcore（agent/core）的 writeFileAtomic 未导出，此处自带同型实现。
 func writeAtomicFile(path string, data []byte) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
@@ -204,28 +204,35 @@ func (a *App) SetCommandcodeNoLogin(enable bool) string {
 		}
 		return ""
 	}
-	// 清除改用 agent.DelUserEnv 而非 reg delete：删除幂等（值不存在视为成功，
+	// 清除改用 agentcore.DelUserEnv 而非 reg delete：删除幂等（值不存在视为成功，
 	// 与 GetCommandcodeNoLogin 的「从未开启也能清除」预期一致），且删除后会
 	// 广播 WM_SETTINGCHANGE，已运行的 Explorer / 新开终端能立即感知变更
-	if err := agent.DelUserEnv(commandcodeNoLoginEnvVar); err != nil {
+	if err := agentcore.DelUserEnv(commandcodeNoLoginEnvVar); err != nil {
 		return "清除环境变量失败：" + err.Error()
 	}
 	return ""
 }
 
 // GetSkillsList 返回 data/skills 下的技能列表。
-func (a *App) GetSkillsList() []agent.Skill {
-	return agent.ListSkills()
+func (a *App) GetSkillsList() []agentcore.Skill {
+	return agentcore.ListSkills()
 }
 
 // GetSkillsDir 返回技能存放目录（执行文件同目录的 data/skills），供前端展示。
 func (a *App) GetSkillsDir() string {
-	return agent.SkillsDir()
+	return agentcore.SkillsDir()
+}
+
+// SyncAllSkills 一键注入（inject=true）/ 一键踢出（inject=false）：把 data/skills
+// 的全部技能整体复制进各支持客户端的技能目录，或从客户端技能目录移除本程序
+// 注入的技能副本（按注入清单，客户端自有的其它文件不受影响）。
+func (a *App) SyncAllSkills(inject bool) map[string]any {
+	return map[string]any{"ok": true, "results": agentcore.BulkSyncSkills(inject)}
 }
 
 // OpenSkillsDir 在系统文件管理器中打开技能目录（目录不存在时先创建）
-func (a *App) OpenSkillsDir() map[string]any {
-	dir := agent.SkillsDir()
+// openDirInFileManager 目录不存在则先创建，再用系统文件管理器打开。
+func openDirInFileManager(dir string) map[string]any {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
@@ -245,10 +252,53 @@ func (a *App) OpenSkillsDir() map[string]any {
 	return map[string]any{"ok": true}
 }
 
+func (a *App) OpenSkillsDir() map[string]any {
+	return openDirInFileManager(agentcore.SkillsDir())
+}
+
+// GetMcpDir 返回 MCP 配置文件存放目录（执行文件同目录的 data/mcp），供前端展示。
+func (a *App) GetMcpDir() string {
+	return agentcore.McpDir()
+}
+
+// OpenMcpDir 在系统文件管理器中打开 MCP 配置目录（目录不存在时先创建）
+func (a *App) OpenMcpDir() map[string]any {
+	return openDirInFileManager(agentcore.McpDir())
+}
+
+// EjectAllMcp 一键踢出：清空所有客户端 MCP 配置文件里的全部服务（整体替换为空，
+// 文件其它内容保留）。返回 ok / count / error（error 为空 = 全部成功）。
+func (a *App) EjectAllMcp() map[string]any {
+	n, errMsg := clients.EjectAllMcp()
+	res := map[string]any{"ok": true, "count": n}
+	if errMsg != "" {
+		res["error"] = errMsg
+	}
+	return res
+}
+
+// RemoveMcpFromClient 从指定客户端的 MCP 配置文件中剔除单个服务（「踢出」：
+// 整体替换法，其余服务与文件其它内容原样保留）。
+func (a *App) RemoveMcpFromClient(clientID, serverName string) map[string]any {
+	if errMsg := clients.RemoveMcpFromClient(clientID, serverName); errMsg != nil {
+		return map[string]any{"ok": false, "error": errMsg.Error()}
+	}
+	return map[string]any{"ok": true}
+}
+
+// OpenClientMcpLocation 在系统文件管理器中打开指定客户端 MCP 配置文件所在位置并选中。
+func (a *App) OpenClientMcpLocation(clientID string) map[string]any {
+	p, err := agentcore.ClientMcpPath(clientID)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return a.OpenFileLocation(p)
+}
+
 // GetClientRealPaths 返回各客户端真实配置路径清单（~ 已展开为绝对路径），
 // 来源 agent/Json_modles/client-paths.json（缺失时为内置默认），供前端定位真实文件。
 func (a *App) GetClientRealPaths() map[string]any {
-	return map[string]any{"ok": true, "paths": agent.ClientRealPaths()}
+	return map[string]any{"ok": true, "paths": agentcore.ClientRealPaths()}
 }
 
 // OpenFileLocation 在系统文件管理器中打开真实配置文件所在目录并选中该文件。
@@ -284,22 +334,22 @@ func (a *App) OpenFileLocation(path string) map[string]any {
 	return map[string]any{"ok": true}
 }
 
-// GetAgentSkills 返回各 Agent（Claude Code、Codex、Gemini、
-// Grok Build、OpenCode、Hermes、pi）在系统用户目录技能文件夹里
+// GetAgentSkills 返回各 Agent（Claude Code、Codex、
+// Grok Build、OpenCode、pi）在系统用户目录技能文件夹里
 // 的技能，按 Agent 分组返回。
 
-func (a *App) GetAgentSkills() []agent.AgentSkills {
-	return agent.ListAgentSkills()
+func (a *App) GetAgentSkills() []agentcore.AgentSkills {
+	return agentcore.ListAgentSkills()
 }
 
 // GetSkillContent 返回指定技能的 SKILL.md 内容。
 func (a *App) GetSkillContent(name string) string {
-	return agent.GetSkillContent(name)
+	return agentcore.GetSkillContent(name)
 }
 
 // SaveSkill 新建或更新技能。
 func (a *App) SaveSkill(name, content string) map[string]any {
-	if errMsg := agent.SaveSkill(name, content); errMsg != "" {
+	if errMsg := agentcore.SaveSkill(name, content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -307,7 +357,7 @@ func (a *App) SaveSkill(name, content string) map[string]any {
 
 // DeleteSkill 删除技能。
 func (a *App) DeleteSkill(name string) map[string]any {
-	if errMsg := agent.DeleteSkill(name); errMsg != "" {
+	if errMsg := agentcore.DeleteSkill(name); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -316,13 +366,13 @@ func (a *App) DeleteSkill(name string) map[string]any {
 // ---- 会话管理（各 AI CLI 客户端落盘的历史会话记录）----
 
 // GetSessionClients 返回登记了会话目录的客户端概览（数量/体积/最近活跃）。
-func (a *App) GetSessionClients() []agent.SessionClient {
-	return agent.ListSessionClients()
+func (a *App) GetSessionClients() []agentcore.SessionClient {
+	return agentcore.ListSessionClients()
 }
 
 // GetSessionItems 返回指定客户端的会话条目列表（修改时间新→旧）。
 func (a *App) GetSessionItems(clientID string) map[string]any {
-	items, err := agent.ListSessionItems(clientID)
+	items, err := agentcore.ListSessionItems(clientID)
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
@@ -332,136 +382,132 @@ func (a *App) GetSessionItems(clientID string) map[string]any {
 // DeleteSessionItems 批量删除指定客户端的会话条目（逐路径校验位于该客户端
 // 会话根目录内且层级相符后才删除；目录型会话整棵移除）。删除不可恢复。
 func (a *App) DeleteSessionItems(clientID string, paths []string) map[string]any {
-	if err := agent.DeleteSessionItems(clientID, paths); err != nil {
+	if err := agentcore.DeleteSessionItems(clientID, paths); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
 }
 
-// OpenSessionTerminal 在系统终端中「按该客户端的恢复命令拉起会话」：
-// 例如 Claude Code 会话 → claude --resume <session-id>（在尽量还原的原始项目目录启动）。
-// 该客户端不支持按会话恢复（如 Copilot 仅支持 --continue）时返回原因。
-// shell 选择宿主：Windows 下 "cmd"（默认）经 cmd.exe 执行、"" 等同 cmd、
-// "powershell" 经 powershell.exe（无则 pwsh.exe）执行；其余平台忽略该参数。
+// OpenSessionTerminal 拉起终端「按该客户端的恢复命令恢复会话」：
+// 例如 Claude Code 会话 → claude --resume <session-id>（在尽量还原的原始项目
+// 目录启动）。默认内嵌终端窗口（Git Bash + winpty，--term 实例），无 Git Bash
+// 时回退系统 cmd 外部窗口（管理员）。该客户端不支持按会话恢复（如 Copilot
+// 仅支持 --continue）时返回原因。shell 参数保留以兼容旧调用（外部终端时代选宿主）。
 func (a *App) OpenSessionTerminal(clientID, path, shell string) map[string]any {
-	plan, err := agent.BuildSessionResume(clientID, path)
+	plan, err := agentcore.BuildSessionResume(clientID, path)
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
-	if err := openTerminalCommand(plan.Dir, plan.Tokens, shell); err != nil {
+	if err := spawnClientTermWindow(plan.Dir, plan.Tokens, clientID); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
 }
 
-// openTerminalCommand 新开一个终端窗口执行 tokens 命令（目录定位到 dir）。
-// shell 为 Windows 终端宿主选择：cmd（默认）或 powershell。
-func openTerminalCommand(dir string, tokens []string, shell string) error {
-	if len(tokens) == 0 {
-		return errors.New("恢复命令为空")
+// IsReaderWindow 供前端判断当前 WebView 是否为会话阅读窗口实例（--read 模式）。
+func (a *App) IsReaderWindow() bool {
+	return isReaderWindowMode()
+}
+
+// OpenSessionReader 打开会话阅读窗口：拉起自身 --read 精简实例渲染该会话内容。
+func (a *App) OpenSessionReader(clientID, path, title string) map[string]any {
+	if strings.TrimSpace(clientID) == "" || strings.TrimSpace(path) == "" {
+		return map[string]any{"ok": false, "error": "缺少会话参数"}
 	}
-	exe, err := exec.LookPath(tokens[0])
-	if err != nil {
-		return errors.New("未找到可执行命令: " + tokens[0] + "，请确认已安装该 CLI")
+	if err := spawnReaderWindow(clientID, path, title); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
 	}
-	if dir == "" {
-		dir, _ = os.UserHomeDir()
+	return map[string]any{"ok": true}
+}
+
+// LoadReaderContent 阅读窗口前端取会话内容：会话参数经环境变量传入（--read 实例）。
+func (a *App) LoadReaderContent() map[string]any {
+	clientID := os.Getenv(readEnvClient)
+	path := os.Getenv(readEnvPath)
+	msgs, ok := agentcore.SessionContent(clientID, path)
+	if !ok {
+		return map[string]any{"ok": false, "error": "该会话没有可读的对话内容"}
 	}
+	return map[string]any{
+		"ok":       true,
+		"title":    os.Getenv(readEnvTitle),
+		"messages": msgs,
+	}
+}
+
+// clipboardText 读取系统剪贴板文本（尽力而为，失败/无文本返回空）。
+// Windows 经 PowerShell Get-Clipboard；无新依赖，命令本身毫秒级返回。
+func clipboardText() string {
 	switch runtime.GOOS {
 	case "windows":
-		// PowerShell 宿主走 -EncodedCommand（UTF-16LE+Base64，彻底规避引号/转义嵌套）；
-		// 其余（含未识别 shell 值）统一经 cmd.exe /K 执行（各 AI CLI 多为 node .cmd shim，
-		// 出错留窗可看）。
-		if strings.EqualFold(shell, "powershell") {
-			return openPSCommand(dir, exe, tokens[1:])
+		// 直读 Win32 剪贴板 API（微秒级）；powershell Get-Clipboard 本机实测 ~4.8s，
+		// 仅在剪贴板打不开（罕见）时兜底
+		if s, ok := clipboardTextWin(); ok {
+			return strings.TrimSpace(s)
 		}
-		inner := winCmdline(tokens)
-		// 优先 Windows Terminal：wt -d <dir> cmd /K <inner>
-		if _, err := exec.LookPath("wt.exe"); err == nil {
-			wt := exec.Command("wt.exe", "-d", dir, "cmd.exe", "/K", inner)
-			if err := wt.Start(); err == nil {
-				go func() { _ = wt.Wait() }()
-				return nil
-			}
+		cmd := exec.Command("powershell.exe", "-NoProfile", "-Command",
+			"$t = Get-Clipboard; if (-not $t) { $t = (Get-Clipboard -Format FileDropList) | ForEach-Object { $_.FullName } }; $t")
+		hideConsole(cmd) // GUI 进程拉控制台子进程必弹窗，同 reg/setx 处理
+		out, err := cmd.Output()
+		if err != nil {
+			return ""
 		}
-		// 回退经典控制台：cmd.exe /K <inner> 强制新控制台窗口（出错留窗可看）。
-		// 不经 exec.Command——其 nil 标准句柄会被接到 NUL，新窗口只剩光标闪烁；
-		// 由 spawnInNewConsole 直启，系统把标准 I/O 绑定到新建控制台。
-		return spawnInNewConsole([]string{"cmd.exe", "/K", inner}, dir)
+		return strings.TrimSpace(string(out))
 	case "darwin":
-		cmdStr := posixCmdline(dir, tokens)
-		esc := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(cmdStr)
-		cmd := exec.Command("osascript", "-e", `tell application "Terminal" to do script "`+esc+`"`)
-		if err := cmd.Start(); err != nil {
-			return err
+		out, err := exec.Command("pbpaste").Output()
+		if err != nil {
+			return ""
 		}
-		go func() { _ = cmd.Wait() }()
-		return nil
+		return strings.TrimSpace(string(out))
 	default:
-		cmdStr := posixCmdline(dir, tokens)
-		for _, cand := range [][]string{
-			{"gnome-terminal", "--working-directory=" + dir, "--", "bash", "-lc", cmdStr},
-			{"konsole", "--workdir", dir, "-e", "bash", "-lc", cmdStr},
-			{"xfce4-terminal", "--working-directory=" + dir, "-x", "bash", "-lc", cmdStr},
-		} {
-			p, lerr := exec.LookPath(cand[0])
-			if lerr != nil {
-				continue
+		if out, err := exec.Command("wl-paste", "--no-newline").Output(); err == nil {
+			return strings.TrimSpace(string(out))
+		}
+		out, err := exec.Command("xclip", "-selection", "clipboard", "-o").Output()
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(out))
+	}
+}
+
+// clipboardLaunchDir 从剪贴板取终端启动目录：第一行若为存在的目录则直接采用，
+// 是文件则取其所在目录（资源管理器里复制路径/复制文件均可），否则回退用户主目录。
+func clipboardLaunchDir() string {
+	txt := clipboardText()
+	if i := strings.IndexAny(txt, "\r\n"); i >= 0 {
+		txt = txt[:i]
+	}
+	txt = strings.TrimSpace(txt)
+	if txt != "" && len(txt) <= 500 {
+		if fi, err := os.Stat(txt); err == nil {
+			if fi.IsDir() {
+				return txt
 			}
-			cmd := exec.Command(p, cand[1:]...)
-			if err := cmd.Start(); err == nil {
-				go func() { _ = cmd.Wait() }()
-				return nil
-			}
-		}
-		return errors.New("未找到可用的终端程序")
-	}
-}
-
-// openPSCommand 以 PowerShell 为宿主执行恢复命令（Windows）：
-// 先切到会话目录，再以调用运算符 & 执行 CLI（参数单引号包裹、内部单引号翻倍转义），
-// 整体经 -EncodedCommand（UTF-16LE → Base64）传给 powershell.exe，规避所有引号/转义嵌套。
-func openPSCommand(dir string, exe string, args []string) error {
-	ps, err := exec.LookPath("powershell.exe")
-	if err != nil {
-		if ps2, e2 := exec.LookPath("pwsh.exe"); e2 == nil {
-			ps = ps2
-		} else {
-			return errors.New("未找到 PowerShell，请确认已安装 powershell.exe / pwsh.exe")
+			return filepath.Dir(txt)
 		}
 	}
-	script := "Set-Location -LiteralPath " + psQuote(dir) + "; & " + psQuote(exe)
-	for _, a := range args {
-		script += " " + psQuote(a)
-	}
-	enc := base64.StdEncoding.EncodeToString(utf16le(script))
-	// 优先 Windows Terminal：wt -d <dir> powershell -NoExit -EncodedCommand <enc>
-	if _, err := exec.LookPath("wt.exe"); err == nil {
-		wt := exec.Command("wt.exe", "-d", dir, ps, "-NoExit", "-EncodedCommand", enc)
-		if err := wt.Start(); err == nil {
-			go func() { _ = wt.Wait() }()
-			return nil
-		}
-	}
-	// 回退经典控制台：powershell -NoExit -EncodedCommand 强制新控制台窗口。
-	// 不经 exec.Command——其 nil 标准句柄会被接到 NUL，新窗口只剩光标闪烁；
-	// 由 spawnInNewConsole 直启，系统把标准 I/O 绑定到新建控制台。
-	return spawnInNewConsole([]string{ps, "-NoExit", "-EncodedCommand", enc}, dir)
+	dir, _ := os.UserHomeDir()
+	return dir
 }
 
-// psQuote 用单引号包裹字符串，内部单引号翻倍转义（PowerShell 字符串字面量规则）。
-func psQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
-}
-
-// utf16le 把字符串编码为 UTF-16LE 字节序列（PowerShell -EncodedCommand 要求）。
-func utf16le(s string) []byte {
-	u := utf16.Encode([]rune(s))
-	b := make([]byte, 0, len(u)*2)
-	for _, r := range u {
-		b = append(b, byte(r), byte(r>>8))
+// LaunchClientTerminal 启动指定客户端 CLI（客户端卡片「启动」图标）：默认拉起
+// 内嵌终端窗口（自身 --term 精简实例，xterm.js + winpty + 内嵌 Git Bash），可自由
+// 移动、独立最小化/最大化；无 Git Bash 时回退系统 cmd 外部窗口。工作目录优先
+// 取剪贴板里的路径（目录/文件均支持，见 clipboardLaunchDir）。
+func (a *App) LaunchClientTerminal(clientID string) map[string]any {
+	bin, ok := agentcore.ClientBinOf(clientID)
+	if !ok {
+		return map[string]any{"ok": false, "error": "该客户端未登记 CLI 可执行名"}
 	}
-	return b
+	if _, err := exec.LookPath(bin); err != nil {
+		return map[string]any{"ok": false, "error": "未检测到 " + bin + " CLI，请先安装"}
+	}
+	dir := clipboardLaunchDir()
+	if err := spawnClientTermWindow(dir, []string{bin}, clientID); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true}
 }
 
 // winCmdline 把 argv 拼成 cmd.exe 可执行的命令行（含空格的参数加引号，引号翻倍转义）。
@@ -473,6 +519,8 @@ func winCmdline(tokens []string) string {
 			continue
 		}
 		if strings.ContainsAny(tok, " \t\"&|<>^%") {
+			// 注意：引号不阻止 cmd.exe 的 %VAR% 展开（交互式 cmd 无可靠转义），
+			// 目前会话 ID/路径不含 %，若未来出现含 % 的参数需另想承载方式
 			parts = append(parts, `"`+strings.ReplaceAll(tok, `"`, `""`)+`"`)
 		} else {
 			parts = append(parts, tok)
@@ -481,34 +529,18 @@ func winCmdline(tokens []string) string {
 	return strings.Join(parts, " ")
 }
 
-// posixCmdline 生成 `cd <dir> && exec <argv...>` 的 POSIX shell 命令行（单引号安全引用）。
-func posixCmdline(dir string, tokens []string) string {
-	parts := make([]string, 0, len(tokens)+1)
-	parts = append(parts, "cd "+shQuote(dir))
-	parts = append(parts, "exec")
-	for _, tok := range tokens {
-		parts = append(parts, shQuote(tok))
-	}
-	return strings.Join(parts, " ")
-}
-
-// shQuote 用单引号包住字符串并转义内部单引号（POSIX shell 安全）。
-func shQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // GetMcps 返回 MCP 配置（路由器地址 + 服务项列表）。
 func (a *App) GetMcps() map[string]any {
-	base, servers := agent.GetMcps()
+	base, servers := agentcore.GetMcps()
 	return map[string]any{"baseUrl": base, "servers": servers}
 }
 
-// SaveMcpFile 把“内容”文本原样写入对应的 MCP 配置 JSON 文件。
+// SaveMcpFile 把"内容"文本原样写入对应的 MCP 配置 JSON 文件。
 func (a *App) SaveMcpFile(name string, content string) map[string]any {
 	if strings.TrimSpace(name) == "" {
 		return map[string]any{"ok": false, "error": "名称为空"}
 	}
-	if err := agent.WriteMcpFile(agent.McpFileName(name), content); err != nil {
+	if err := agentcore.WriteMcpFile(agentcore.McpFileName(name), content); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
@@ -517,11 +549,11 @@ func (a *App) SaveMcpFile(name string, content string) map[string]any {
 // SaveMcps 保存 MCP 配置。
 func (a *App) SaveMcps(raw map[string]any) map[string]any {
 	base, _ := raw["baseUrl"].(string)
-	servers := []agent.MCPServer{}
+	servers := []agentcore.MCPServer{}
 	if list, ok := raw["servers"].([]any); ok {
 		for _, item := range list {
 			if m, ok := item.(map[string]any); ok {
-				s := agent.MCPServer{
+				s := agentcore.MCPServer{
 					Name:    str(m, "name"),
 					Desc:    str(m, "desc"),
 					Type:    str(m, "type"),
@@ -539,7 +571,7 @@ func (a *App) SaveMcps(raw map[string]any) map[string]any {
 				// 避免整列表持久化（改名/删除）时抹掉用户手写字段
 				extra := map[string]json.RawMessage{}
 				for k, v := range m {
-					if agent.McpManagedKey(k) {
+					if agentcore.McpManagedKey(k) {
 						continue
 					}
 					if b, err := json.Marshal(v); err == nil {
@@ -553,20 +585,58 @@ func (a *App) SaveMcps(raw map[string]any) map[string]any {
 			}
 		}
 	}
-	if errMsg := agent.SaveMcps(base, servers); errMsg != "" {
+	if errMsg := agentcore.SaveMcps(base, servers); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
 }
 
 // ListTargets 返回可注入/撤销的目标客户端列表。
-func (a *App) ListTargets() []agent.TargetInfo {
-	return agent.ListTargets()
+func (a *App) ListTargets() []agentcore.TargetInfo {
+	return agentcore.ListTargets()
+}
+
+// GetClientVersion 现场探测某客户端 CLI 的版本号（执行 `<bin> --version`）。
+// 列表接口只返回 npm 包版本（读文件，不起进程）；读不到时由前端按需调本接口补。
+func (a *App) GetClientVersion(targetID string) map[string]any {
+	ver, err := agentcore.ProbeClientVersion(targetID)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true, "version": ver}
+}
+
+// InstallClientCLI 安装/更新某客户端 CLI（npm 全局）：update=false 走 `<pkg>`（首次安装），
+// true 走 `<pkg>@latest`（更新）。返回 {ok, version, output, error}；output 为 npm 输出尾部。
+func (a *App) InstallClientCLI(targetID string, update bool) map[string]any {
+	out, ver, err := agentcore.InstallClientCLI(targetID, update)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error(), "version": ver, "output": out}
+	}
+	return map[string]any{"ok": true, "version": ver, "output": out}
+}
+
+// CheckClientUpdates 探测各客户端 npm 包在 registry 上的最新版本（并行、每包 8s 超时）。
+// 返回 {ok, updates: {id: {installed, latest, outdated, error}}}；网络不可用时单包带 error，
+// 前端据此让「更新」保持可用（不打断使用）。
+func (a *App) CheckClientUpdates() map[string]any {
+	return map[string]any{"ok": true, "updates": agentcore.CheckClientUpdates()}
+}
+
+// UninstallClientCLI 卸载某客户端 CLI（npm 全局卸载）。purge=true 时一并清理本机配置残留：
+// 撤销注入的技能 + 删除已登记的配置文件 + 回收空目录；会话记录保留。
+// 返回 {ok, removed, output, error}，removed 为实际删除的路径。
+func (a *App) UninstallClientCLI(targetID string, purge bool) map[string]any {
+	out, removed, err := agentcore.UninstallClientCLI(targetID, purge)
+	if err != nil {
+		return map[string]any{"ok": false, "error": err.Error(), "removed": removed, "output": out}
+	}
+	return map[string]any{"ok": true, "removed": removed, "output": out}
 }
 
 // GetTargetConfig 读取目标客户端的主配置文件内容。
 func (a *App) GetTargetConfig(targetID string) map[string]any {
-	content, exists, filePath, errMsg := agent.GetTargetConfig(targetID)
+	content, exists, filePath, errMsg := agentcore.GetTargetConfig(targetID)
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -575,7 +645,7 @@ func (a *App) GetTargetConfig(targetID string) map[string]any {
 
 // SaveTargetConfig 保存目标客户端的主配置文件内容。
 func (a *App) SaveTargetConfig(targetID, content string) map[string]any {
-	if errMsg := agent.SaveTargetConfig(targetID, content); errMsg != "" {
+	if errMsg := agentcore.SaveTargetConfig(targetID, content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -583,33 +653,16 @@ func (a *App) SaveTargetConfig(targetID, content string) map[string]any {
 
 // GetPiSettings 读取 pi 的全局设置（~/.pi/agent/settings.json）。
 func (a *App) GetPiSettings() map[string]any {
-	content, exists, filePath, errMsg := agent.GetPiSettings()
+	content, exists, filePath, errMsg := clients.GetPiSettings()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// GetGeminiDotEnv 读取 ~/.gemini/.env 内容。
-func (a *App) GetGeminiDotEnv() map[string]any {
-	content, exists, filePath, errMsg := agent.GetGeminiDotEnv()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveGeminiDotEnv 保存 ~/.gemini/.env（纯文本原样写入）。
-func (a *App) SaveGeminiDotEnv(content string) map[string]any {
-	if errMsg := agent.SaveGeminiDotEnv(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
 }
 
 // SavePiSettings 保存 pi 的全局设置（~/.pi/agent/settings.json）。
 func (a *App) SavePiSettings(content string) map[string]any {
-	if errMsg := agent.SavePiSettings(content); errMsg != "" {
+	if errMsg := clients.SavePiSettings(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -617,7 +670,7 @@ func (a *App) SavePiSettings(content string) map[string]any {
 
 // GetPiMcp 读取 pi 的 MCP 服务配置（~/.pi/agent/mcp.json）。
 func (a *App) GetPiMcp() map[string]any {
-	content, exists, filePath, errMsg := agent.GetPiMcp()
+	content, exists, filePath, errMsg := clients.GetPiMcp()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -626,7 +679,7 @@ func (a *App) GetPiMcp() map[string]any {
 
 // SavePiMcp 保存 pi 的 MCP 服务配置（~/.pi/agent/mcp.json）。
 func (a *App) SavePiMcp(content string) map[string]any {
-	if errMsg := agent.SavePiMcp(content); errMsg != "" {
+	if errMsg := clients.SavePiMcp(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -634,7 +687,7 @@ func (a *App) SavePiMcp(content string) map[string]any {
 
 // GetAgyMcp 读取 agy 的 MCP 服务配置（~/.gemini/config/mcp_config.json）。
 func (a *App) GetAgyMcp() map[string]any {
-	content, exists, filePath, errMsg := agent.GetAgyMcp()
+	content, exists, filePath, errMsg := clients.GetAgyMcp()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -643,7 +696,7 @@ func (a *App) GetAgyMcp() map[string]any {
 
 // SaveAgyMcp 保存 agy 的 MCP 服务配置（~/.gemini/config/mcp_config.json）。
 func (a *App) SaveAgyMcp(content string) map[string]any {
-	if errMsg := agent.SaveAgyMcp(content); errMsg != "" {
+	if errMsg := clients.SaveAgyMcp(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -651,7 +704,7 @@ func (a *App) SaveAgyMcp(content string) map[string]any {
 
 // GetCodebuddyModels 读取 codebuddy 的端点模型清单（~/.codebuddy/models.json）。
 func (a *App) GetCodebuddyModels() map[string]any {
-	content, exists, filePath, errMsg := agent.GetCodebuddyModels()
+	content, exists, filePath, errMsg := clients.GetCodebuddyModels()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -660,7 +713,7 @@ func (a *App) GetCodebuddyModels() map[string]any {
 
 // SaveCodebuddyModels 保存 codebuddy 的端点模型清单（~/.codebuddy/models.json）。
 func (a *App) SaveCodebuddyModels(content string) map[string]any {
-	if errMsg := agent.SaveCodebuddyModels(content); errMsg != "" {
+	if errMsg := clients.SaveCodebuddyModels(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -668,7 +721,7 @@ func (a *App) SaveCodebuddyModels(content string) map[string]any {
 
 // GetCodebuddyMcp 读取 codebuddy 的 MCP 服务配置（~/.codebuddy/mcp.json）。
 func (a *App) GetCodebuddyMcp() map[string]any {
-	content, exists, filePath, errMsg := agent.GetCodebuddyMcp()
+	content, exists, filePath, errMsg := clients.GetCodebuddyMcp()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -677,7 +730,7 @@ func (a *App) GetCodebuddyMcp() map[string]any {
 
 // SaveCodebuddyMcp 保存 codebuddy 的 MCP 服务配置（~/.codebuddy/mcp.json）。
 func (a *App) SaveCodebuddyMcp(content string) map[string]any {
-	if errMsg := agent.SaveCodebuddyMcp(content); errMsg != "" {
+	if errMsg := clients.SaveCodebuddyMcp(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -685,7 +738,7 @@ func (a *App) SaveCodebuddyMcp(content string) map[string]any {
 
 // GetPiAgents 读取 pi 的 AGENTS.md（~/.pi/agent/AGENTS.md）。
 func (a *App) GetPiAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetPiAgents()
+	content, exists, filePath, errMsg := clients.GetPiAgents()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -694,7 +747,7 @@ func (a *App) GetPiAgents() map[string]any {
 
 // GetClaudeMarkdown 读取 ~/.claude/CLAUDE.md（Claude Code 全局记忆/指令文件）。
 func (a *App) GetClaudeMarkdown() map[string]any {
-	content, exists, filePath, errMsg := agent.GetClaudeMarkdown()
+	content, exists, filePath, errMsg := clients.GetClaudeMarkdown()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -703,7 +756,7 @@ func (a *App) GetClaudeMarkdown() map[string]any {
 
 // SaveClaudeMarkdown 保存 ~/.claude/CLAUDE.md（纯文本原样写入）。
 func (a *App) SaveClaudeMarkdown(content string) map[string]any {
-	if errMsg := agent.SaveClaudeMarkdown(content); errMsg != "" {
+	if errMsg := clients.SaveClaudeMarkdown(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -711,7 +764,7 @@ func (a *App) SaveClaudeMarkdown(content string) map[string]any {
 
 // SavePiAgents 保存 pi 的 AGENTS.md（~/.pi/agent/AGENTS.md，纯文本原样写入）。
 func (a *App) SavePiAgents(content string) map[string]any {
-	if errMsg := agent.SavePiAgents(content); errMsg != "" {
+	if errMsg := clients.SavePiAgents(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -719,7 +772,7 @@ func (a *App) SavePiAgents(content string) map[string]any {
 
 // GetGrokAgents 读取 grok 的 AGENTS.md（~/.grok/AGENTS.md）。
 func (a *App) GetGrokAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetGrokAgents()
+	content, exists, filePath, errMsg := clients.GetGrokAgents()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -728,7 +781,7 @@ func (a *App) GetGrokAgents() map[string]any {
 
 // SaveGrokAgents 保存 grok 的 AGENTS.md（~/.grok/AGENTS.md，纯文本原样写入）。
 func (a *App) SaveGrokAgents(content string) map[string]any {
-	if errMsg := agent.SaveGrokAgents(content); errMsg != "" {
+	if errMsg := clients.SaveGrokAgents(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -736,7 +789,7 @@ func (a *App) SaveGrokAgents(content string) map[string]any {
 
 // GetKimiAgents 读取 kimi 的 AGENTS.md（~/.kimi-code/AGENTS.md）。
 func (a *App) GetKimiAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetKimiAgents()
+	content, exists, filePath, errMsg := clients.GetKimiAgents()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -745,7 +798,7 @@ func (a *App) GetKimiAgents() map[string]any {
 
 // SaveKimiAgents 保存 kimi 的 AGENTS.md（~/.kimi-code/AGENTS.md，纯文本原样写入）。
 func (a *App) SaveKimiAgents(content string) map[string]any {
-	if errMsg := agent.SaveKimiAgents(content); errMsg != "" {
+	if errMsg := clients.SaveKimiAgents(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -753,7 +806,7 @@ func (a *App) SaveKimiAgents(content string) map[string]any {
 
 // GetOpencodeAgents 读取 opencode 的 AGENTS.md（模版 agent/Json_modles/opencode/AGENTS.md）。
 func (a *App) GetOpencodeAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetOpencodeAgents()
+	content, exists, filePath, errMsg := clients.GetOpencodeAgents()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -762,41 +815,7 @@ func (a *App) GetOpencodeAgents() map[string]any {
 
 // SaveOpencodeAgents 保存 opencode 的 AGENTS.md（写回模版并覆写 ~/.config/opencode/AGENTS.md）。
 func (a *App) SaveOpencodeAgents(content string) map[string]any {
-	if errMsg := agent.SaveOpencodeAgents(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
-}
-
-// GetKiloAgents 读取 kilo 的 AGENTS.md（模版 agent/Json_modles/kilo/AGENTS.md）。
-func (a *App) GetKiloAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetKiloAgents()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveKiloAgents 保存 kilo 的 AGENTS.md（覆写 ~/.config/kilo/AGENTS.md）。
-func (a *App) SaveKiloAgents(content string) map[string]any {
-	if errMsg := agent.SaveKiloAgents(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
-}
-
-// GetGeminiAgents 读取 gemini 的 GEMINI.md（~/.gemini/GEMINI.md）。
-func (a *App) GetGeminiAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetGeminiAgents()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveGeminiAgents 保存 gemini 的 GEMINI.md（~/.gemini/GEMINI.md，纯文本原样写入）。
-func (a *App) SaveGeminiAgents(content string) map[string]any {
-	if errMsg := agent.SaveGeminiAgents(content); errMsg != "" {
+	if errMsg := clients.SaveOpencodeAgents(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -804,7 +823,7 @@ func (a *App) SaveGeminiAgents(content string) map[string]any {
 
 // GetCodexAgents 读取 codex 的 AGENTS.md（模版 agent/Json_modles/codex/AGENTS.md）。
 func (a *App) GetCodexAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetCodexAgents()
+	content, exists, filePath, errMsg := clients.GetCodexAgents()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -813,75 +832,7 @@ func (a *App) GetCodexAgents() map[string]any {
 
 // SaveCodexAgents 保存 codex 的 AGENTS.md（写回模版并覆写 ~/.codex/AGENTS.md）。
 func (a *App) SaveCodexAgents(content string) map[string]any {
-	if errMsg := agent.SaveCodexAgents(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
-}
-
-// GetClineModels 读取 cline 的 models.json（模版 agent/Json_modles/cline/models.json）。
-func (a *App) GetClineModels() map[string]any {
-	content, exists, filePath, errMsg := agent.GetClineModels()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveClineModels 保存 cline 的 models.json（写回模版并覆写 ~/.cline/data/settings/models.json）。
-func (a *App) SaveClineModels(content string) map[string]any {
-	if errMsg := agent.SaveClineModels(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
-}
-
-// GetClineProviders 读取 cline 的 providers.json（模版 agent/Json_modles/cline/providers.json）。
-func (a *App) GetClineProviders() map[string]any {
-	content, exists, filePath, errMsg := agent.GetClineProviders()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveClineProviders 保存 cline 的 providers.json（写回模版并覆写 ~/.cline/data/settings/providers.json）。
-func (a *App) SaveClineProviders(content string) map[string]any {
-	if errMsg := agent.SaveClineProviders(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
-}
-
-// GetClineAgents 读取 cline 的 AGENTS.md（模版 agent/Json_modles/cline/AGENTS.md）。
-func (a *App) GetClineAgents() map[string]any {
-	content, exists, filePath, errMsg := agent.GetClineAgents()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveClineAgents 保存 cline 的 AGENTS.md（写回模版并覆写 ~/.agents/AGENTS.md）。
-func (a *App) SaveClineAgents(content string) map[string]any {
-	if errMsg := agent.SaveClineAgents(content); errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true}
-}
-
-// GetClineGlobalState 读取 Cline 的 globalState.json（~/.cline/data/globalState.json，真实文件直读）。
-func (a *App) GetClineGlobalState() map[string]any {
-	content, exists, filePath, errMsg := agent.GetClineGlobalState()
-	if errMsg != "" {
-		return map[string]any{"ok": false, "error": errMsg}
-	}
-	return map[string]any{"ok": true, "content": content, "exists": exists, "file": filePath}
-}
-
-// SaveClineGlobalState 保存 Cline 的 globalState.json（JSON 校验后原子覆写真实文件，不写参考模版）。
-func (a *App) SaveClineGlobalState(content string) map[string]any {
-	if errMsg := agent.SaveClineGlobalState(content); errMsg != "" {
+	if errMsg := clients.SaveCodexAgents(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -889,7 +840,7 @@ func (a *App) SaveClineGlobalState(content string) map[string]any {
 
 // GetCommandcodeSettings 读取 commandcode 的 settings.json（模版 agent/Json_modles/commandcode/settings.json）。
 func (a *App) GetCommandcodeSettings() map[string]any {
-	content, exists, filePath, errMsg := agent.GetCommandcodeSettings()
+	content, exists, filePath, errMsg := clients.GetCommandcodeSettings()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -898,7 +849,7 @@ func (a *App) GetCommandcodeSettings() map[string]any {
 
 // SaveCommandcodeSettings 保存 commandcode 的 settings.json（写回模版并覆写 ~/.commandcode/settings.json）。
 func (a *App) SaveCommandcodeSettings(content string) map[string]any {
-	if errMsg := agent.SaveCommandcodeSettings(content); errMsg != "" {
+	if errMsg := clients.SaveCommandcodeSettings(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -906,7 +857,7 @@ func (a *App) SaveCommandcodeSettings(content string) map[string]any {
 
 // GetCommandcodeProviders 读取 commandcode 的 providers.json（模版 agent/Json_modles/commandcode/providers.json）。
 func (a *App) GetCommandcodeProviders() map[string]any {
-	content, exists, filePath, errMsg := agent.GetCommandcodeProviders()
+	content, exists, filePath, errMsg := clients.GetCommandcodeProviders()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -915,7 +866,7 @@ func (a *App) GetCommandcodeProviders() map[string]any {
 
 // SaveCommandcodeProviders 保存 commandcode 的 providers.json（写回模版并覆写 ~/.commandcode/providers.json）。
 func (a *App) SaveCommandcodeProviders(content string) map[string]any {
-	if errMsg := agent.SaveCommandcodeProviders(content); errMsg != "" {
+	if errMsg := clients.SaveCommandcodeProviders(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -923,13 +874,19 @@ func (a *App) SaveCommandcodeProviders(content string) map[string]any {
 
 // SyncTargets 手动触发对指定目标客户端的注入（inject）或撤销（undo）。
 // ops 形如 [{targetId, action}]。
-func (a *App) SyncTargets(ops []agent.TargetOp, routerBase string) []agent.TargetResult {
-	return agent.SyncTargets(ops, routerBase)
+func (a *App) SyncTargets(ops []agentcore.TargetOp, routerBase string) []agentcore.TargetResult {
+	return agentcore.SyncTargets(ops, routerBase)
 }
 
 // SyncMcpMapping 按「客户端 ↔ MCP 服务」映射，把选中的 MCP 服务注入选中的客户端。
-func (a *App) SyncMcpMapping(targetIDs []string, serverNames []string) []agent.TargetResult {
-	return agent.SyncMcpMapping(targetIDs, serverNames, a.server.LocalBase())
+func (a *App) SyncMcpMapping(targetIDs []string, serverNames []string) []agentcore.TargetResult {
+	return agentcore.SyncMcpMapping(targetIDs, serverNames, a.server.LocalBase())
+}
+
+// GetMcpInjectedTargets 扫描各客户端的 MCP 配置文件，返回 {服务名: 已注入客户端id列表}，
+// 供 MCP 列表在服务名旁标注客户端小图标。
+func (a *App) GetMcpInjectedTargets() map[string][]string {
+	return agentcore.McpInjectedTargets()
 }
 
 // str 从 map 中读取字符串字段。
@@ -947,7 +904,7 @@ func (a *App) GetConfig() map[string]any {
 // SetUserEnv 写入当前用户级环境变量（HKCU\Environment，广播生效通知；仅 Windows）。
 // Codex env_key 自动映射使用：把路由 Token 写进 env_key 指向的变量。
 func (a *App) SetUserEnv(name, value string) map[string]any {
-	if err := agent.SetUserEnv(name, value); err != nil {
+	if err := agentcore.SetUserEnv(name, value); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
@@ -956,7 +913,7 @@ func (a *App) SetUserEnv(name, value string) map[string]any {
 // GetUserEnv 读取当前用户级环境变量（仅 Windows 持久；其它平台读进程环境变量，只可用于展示）。
 // 返回 ok / exists / value，供 Copilot CLI 等环境变量型客户端面板回显当前值。
 func (a *App) GetUserEnv(name string) map[string]any {
-	v, exists, err := agent.GetUserEnv(name)
+	v, exists, err := agentcore.GetUserEnv(name)
 	if err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
@@ -966,16 +923,17 @@ func (a *App) GetUserEnv(name string) map[string]any {
 // DelUserEnv 删除当前用户级环境变量（广播生效通知；仅 Windows；不存在视为幂等成功）。
 // Copilot CLI 等环境变量型客户端的「清除」按钮使用。
 func (a *App) DelUserEnv(name string) map[string]any {
-	if err := agent.DelUserEnv(name); err != nil {
+	if err := agentcore.DelUserEnv(name); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
 }
 
-// GetCopilotModel 读取 ~/.copilot/settings.json 的 model 键（Copilot CLI 主配置，
-// 等价持久化的 COPILOT_MODEL；JSONC 宽容读取）。model 键缺失时 exists=false。
+// GetCopilotModel 读取 ~/.copilot/settings.json 的 model 键（Copilot CLI 主配置的
+// 模型持久化/回显值；BYOK 校验只认 COPILOT_MODEL 环境变量，本键不参与；JSONC
+// 宽容读取）。model 键缺失时 exists=false。
 func (a *App) GetCopilotModel() map[string]any {
-	model, exists, file, errMsg := agent.GetCopilotModel()
+	model, exists, file, errMsg := clients.GetCopilotModel()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -985,27 +943,28 @@ func (a *App) GetCopilotModel() map[string]any {
 // SaveCopilotModel 写入 / 移除 ~/.copilot/settings.json 的 model 键（空值 = 移除；
 // 严格 JSON 定点替换，文件含注释等非严格 JSON 时拒绝覆写）。
 func (a *App) SaveCopilotModel(model string) map[string]any {
-	if errMsg := agent.SaveCopilotModel(model); errMsg != "" {
+	if errMsg := clients.SaveCopilotModel(model); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
 }
 
-// GetCopilotSettings 读取 ~/.copilot/settings.json 中「接入配置」面板管理的全部键
-// （model / effortLevel / allowedUrls / deniedUrls / permissions.disableBypassPermissionsMode；
-// JSONC 宽容读取，缺省键返回空值）。
+// GetCopilotSettings 读取 ~/.copilot/settings.json 中「配置选项」页签管理的全部键
+// （model / effortLevel / allowedUrls / deniedUrls / permissions.disableBypassPermissionsMode /
+// 沙箱 sandbox.* / IDE ide.* / 通用偏好 theme、banner、keepAlive 等；JSONC 宽容读取，
+// 缺省键返回空值）。
 func (a *App) GetCopilotSettings() map[string]any {
-	s, exists, file, errMsg := agent.GetCopilotSettings()
+	s, exists, file, errMsg := clients.GetCopilotSettings()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true, "exists": exists, "settings": s, "file": file}
 }
 
-// SaveCopilotSettings 批量写入 ~/.copilot/settings.json 的接入配置键
-// （严格 JSON 定点替换；空串 / 空数组 / 缺失跳过时移除对应键；非法档位拒绝）。
+// SaveCopilotSettings 批量写入 ~/.copilot/settings.json 的面板键（严格 JSON 定点替换；
+// 空串 / 空数组移除对应键、嵌套父对象变空自动清理；非法档位拒绝；map 中缺失的键保持不动）。
 func (a *App) SaveCopilotSettings(settings map[string]any) map[string]any {
-	if errMsg := agent.SaveCopilotSettings(settings); errMsg != "" {
+	if errMsg := clients.SaveCopilotSettings(settings); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
@@ -1014,7 +973,7 @@ func (a *App) SaveCopilotSettings(settings map[string]any) map[string]any {
 // GetCopilotPermissions 读取 ~/.copilot/permissions-config.json（按项目位置保存的
 // 工具审批：tool_approvals + allowed_directories）。
 func (a *App) GetCopilotPermissions() map[string]any {
-	content, exists, file, errMsg := agent.GetCopilotPermissions()
+	content, exists, file, errMsg := clients.GetCopilotPermissions()
 	if errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
@@ -1024,15 +983,26 @@ func (a *App) GetCopilotPermissions() map[string]any {
 // SaveCopilotPermissions 校验并保存 ~/.copilot/permissions-config.json（严格 JSON，
 // 顶层必须是对象；首次保存前备份）。
 func (a *App) SaveCopilotPermissions(content string) map[string]any {
-	if errMsg := agent.SaveCopilotPermissions(content); errMsg != "" {
+	if errMsg := clients.SaveCopilotPermissions(content); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg}
 	}
 	return map[string]any{"ok": true}
 }
 
+// GetCopilotPermLocCandidates 返回权限面板「作用位置」候选目录
+// （~/.copilot/config.json trustedFolders ∪ permissions-config.json locations
+// 已有键，去重排序；file 为候选来源 config.json 路径）。
+func (a *App) GetCopilotPermLocCandidates() map[string]any {
+	folders, file, errMsg := clients.GetCopilotPermLocCandidates()
+	if errMsg != "" {
+		return map[string]any{"ok": false, "error": errMsg}
+	}
+	return map[string]any{"ok": true, "folders": folders, "file": file}
+}
+
 func (a *App) SaveConfig(raw map[string]any) map[string]any {
 	// 与 HTTP /api/config POST 一致:保存前先校验配置。
-	// 桌面端此前直接 Normalize+落盘,端口越界/缺 host/服务商信息不合法等
+	// 桌面端此前直接 Normalize+落盘,端口越界/缺 host/供应商信息不合法等
 	// 脏数据会写进 config.json,下次启动才能暴露问题。
 	if errMsg := config.ValidateConfig(raw); errMsg != "" {
 		return map[string]any{"ok": false, "error": errMsg, "restartNeeded": false}
@@ -1042,11 +1012,17 @@ func (a *App) SaveConfig(raw map[string]any) map[string]any {
 	return map[string]any{"ok": result.Ok, "error": result.Error, "restartNeeded": result.RestartNeeded}
 }
 
-// SaveProviderAliases 定点更新指定服务商的 aliases 映射（整组替换），其余配置
-// 原样保留；按 ID 优先、名称次之匹配服务商。供 agy 编辑窗口的模型映射面板使用，
+// SaveProviderAliases 定点更新指定供应商的 aliases 映射（整组替换），其余配置
+// 原样保留；按 ID 优先、名称次之匹配供应商。供 agy 编辑窗口的模型映射面板使用，
 // 避免把整个配置往返传回导致并发覆盖。
 func (a *App) SaveProviderAliases(providerKey string, aliases map[string]string) map[string]any {
 	cfg := a.server.GetConfig()
+	// GetConfig 是按值返回，但 Providers 是切片、和内部配置共享底层数组：
+	// 直接改 cfg.Providers[i] 会写进正在被请求处理读取的那份配置（数据竞争）。
+	// 先复制切片再改，落盘失败时内存也不会和磁盘不一致。
+	provs := make([]types.Provider, len(cfg.Providers))
+	copy(provs, cfg.Providers)
+	cfg.Providers = provs
 	key := strings.TrimSpace(providerKey)
 	found := -1
 	for i := range cfg.Providers {
@@ -1056,7 +1032,7 @@ func (a *App) SaveProviderAliases(providerKey string, aliases map[string]string)
 		}
 	}
 	if found < 0 {
-		return map[string]any{"ok": false, "error": "服务商不存在: " + providerKey}
+		return map[string]any{"ok": false, "error": "供应商不存在: " + providerKey}
 	}
 	if len(aliases) == 0 {
 		cfg.Providers[found].Aliases = map[string]string{}
@@ -1067,7 +1043,7 @@ func (a *App) SaveProviderAliases(providerKey string, aliases map[string]string)
 	return map[string]any{"ok": result.Ok, "error": result.Error, "restartNeeded": result.RestartNeeded}
 }
 
-// GetProviderAliases 读取指定服务商的 aliases 映射（ID 优先、名称次之匹配）。
+// GetProviderAliases 读取指定供应商的 aliases 映射（ID 优先、名称次之匹配）。
 func (a *App) GetProviderAliases(providerKey string) map[string]any {
 	cfg := a.server.GetConfig()
 	key := strings.TrimSpace(providerKey)
@@ -1076,7 +1052,7 @@ func (a *App) GetProviderAliases(providerKey string) map[string]any {
 			return map[string]any{"ok": true, "aliases": cfg.Providers[i].Aliases}
 		}
 	}
-	return map[string]any{"ok": false, "error": "服务商不存在: " + providerKey}
+	return map[string]any{"ok": false, "error": "供应商不存在: " + providerKey}
 }
 
 func (a *App) FetchModels(provider map[string]any) map[string]any {
@@ -1091,11 +1067,12 @@ func (a *App) FetchModelsList(provider map[string]any) map[string]any {
 	return toMap(result)
 }
 
-// GetProviderModels 返回服务商的模型列表（配置内置模型，否则运行时拉取缓存），
-// 不发网络请求，供前端悬停卡片时即时显示模型数量。
+// GetProviderModels 返回供应商「上游返回的模型列表」（运行时拉取缓存，不含配置里的
+// 静态 models，也不含别名），不发网络请求，供卡片统计模型个数；该供应商从未拉取过时
+// 返回空列表，由前端再主动 FetchModels 一次。
 func (a *App) GetProviderModels(provider map[string]any) map[string]any {
 	p := providerFromMap(provider)
-	models := router.GetProviderModels(p)
+	models := router.GetFetchedModels(p.ID)
 	if models == nil {
 		models = []string{}
 	}
@@ -1103,10 +1080,10 @@ func (a *App) GetProviderModels(provider map[string]any) map[string]any {
 }
 
 // GetModelsByFormat 返回通过指定接入方式从路由器拿到的权威模型列表（等同于
-// 目标客户端以该 base 访问 /v1/models 时所见的 ID 集合：跨服务商重名加
-// "@服务商"后缀）。供可视化编辑弹窗的模型下拉使用，避免直接读取已启用服务商静态配置。
-// 同时返回 entries（每项含所属服务商），供 agy 模型映射面板在保存时精确回写
-// 目标模型到其所属服务商（覆盖运行时拉取而非仅静态 p.models 的服务商）。
+// 目标客户端以该 base 访问 /v1/models 时所见的 ID 集合：跨供应商重名加
+// "@供应商"后缀）。供可视化编辑弹窗的模型下拉使用，避免直接读取已启用供应商静态配置。
+// 同时返回 entries（每项含所属供应商），供 agy 模型映射面板在保存时精确回写
+// 目标模型到其所属供应商（覆盖运行时拉取而非仅静态 p.models 的供应商）。
 func (a *App) GetModelsByFormat(format string) map[string]any {
 	cfg := a.server.GetConfig()
 	entries := router.AggregateModels(&cfg)
@@ -1261,9 +1238,9 @@ func providerFromMap(m map[string]any) types.Provider {
 	cfg := config.Normalize(map[string]any{"providers": []any{m}})
 	if len(cfg.Providers) > 0 {
 		p := cfg.Providers[0]
-		// 未保存的服务商若没有 id，每次调用都会生成新的随机 id，导致 FetchModels 缓存
+		// 未保存的供应商若没有 id，每次调用都会生成新的随机 id，导致 FetchModels 缓存
 		// 挂在不稳定的 id 上无法复用。这里用 name+baseUrl+type 派生一个稳定的 id，
-		// 保证同一服务商多次调用一致。
+		// 保证同一供应商多次调用一致。
 		if p.ID == "" {
 			p.ID = stableProviderID(p)
 		}
@@ -1272,13 +1249,47 @@ func providerFromMap(m map[string]any) types.Provider {
 	return types.Provider{}
 }
 
-// stableProviderID 根据服务商特征派生确定性 ID，避免未保存服务商每次请求都换 ID。
+// stableProviderID 根据供应商特征派生确定性 ID，避免未保存供应商每次请求都换 ID。
 func stableProviderID(p types.Provider) string {
 	h := sha256.Sum256([]byte(p.Name + "|" + p.BaseURL + "|" + string(p.Type)))
 	return "p-" + hex.EncodeToString(h[:])[:10]
 }
 
+// newAssetServer 构造带缓存策略的前端资源服务。HTML（/ 与 *.html）强制免缓存：
+// WebView2 对无缓存头的 index.html 会启发式缓存，应用更新后沿用旧 main.js 会与
+// 新后端绑定错位（症状：--term 终端窗口挂载成主界面、新窗口功能整体失灵）。
+// 带内容哈希的 /assets/ 内容不可变，保持浏览器正常缓存。
+func newAssetServer(assets fs.FS) *assetserver.Options {
+	return &assetserver.Options{
+		Assets: assets,
+		Middleware: func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				p := r.URL.Path
+				if p == "/" || p == "/index.html" || strings.HasSuffix(p, ".html") {
+					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				}
+				next.ServeHTTP(w, r)
+			})
+		},
+	}
+}
+
 func main() {
+	// 后台预热内嵌 Git Bash（首次解压十几秒，提前做用户无感）
+	go warmupBundledGitBash()
+
+	// 内嵌终端窗口实例（--term）：独立窗口 xterm.js 渲染，winpty 挂 Git Bash
+	if isTermWindowMode() {
+		runTermWindow()
+		return
+	}
+
+	// 会话阅读窗口实例（--read）：独立窗口渲染会话对话内容（只读），同上分支
+	if isReaderWindowMode() {
+		runReaderWindow()
+		return
+	}
+
 	app := &App{server: core.NewServer()}
 	appRef = app
 
@@ -1327,7 +1338,7 @@ func main() {
 		MinWidth:         960,
 		MinHeight:        633,
 		WindowStartState: options.Minimised,
-		AssetServer:      &assetserver.Options{Assets: frontendAssets},
+		AssetServer:      newAssetServer(frontendAssets),
 		OnStartup: func(ctx context.Context) {
 			app.ctx = ctx
 			log.Println("[APP] started")

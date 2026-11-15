@@ -56,6 +56,7 @@ const (
 	ExtGeminiToolConfig     = "_ext_gemini_tool_config"            // toolConfig（工具选择）
 	ExtGeminiToolsExtra     = "_ext_gemini_tools_extra"            // 非 function 工具（google_search 等）
 	ExtGeminiAllowedFns     = "_ext_gemini_allowed_function_names" // toolConfig.allowedFunctionNames
+	ExtGeminiThoughtSigs    = "_ext_gemini_thought_signatures"     // thoughtSignature（按消息序号跨型往返）
 
 	// ---- Responses 请求侧 ----
 	ExtResponsesReasoning          = "_ext_responses_reasoning"            // reasoning（effort/summary/mode/context）

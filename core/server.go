@@ -29,8 +29,6 @@ const logSaveDebounceMs = 5000
 // 遇到该值时保留服务端现有密钥/令牌，防止「读出掩码配置→原样 POST」把真实值覆盖掉。
 const apiKeyMask = "****"
 
-// safeHTTPClient 已移除：从未被使用，上游请求统一走 router.upstreamHTTPClient。
-
 type Server struct {
 	mu           sync.RWMutex
 	cfg          types.Config
@@ -195,8 +193,8 @@ func (s *Server) SaveConfig(cfg types.Config) types.SaveResult {
 	portChanged := cfg.Port != old.Port || cfg.Host != old.Host
 	s.mu.Unlock()
 
-	// 模型缓存失效：baseUrl/type 变化或已被删除的服务商不再使用旧缓存，
-	// 变化的服务商异步重新拉取模型列表，避免路由继续按旧地址解析。
+	// 模型缓存失效：baseUrl/type 变化或已被删除的供应商不再使用旧缓存，
+	// 变化的供应商异步重新拉取模型列表，避免路由继续按旧地址解析。
 	changed := map[string]bool{}
 	for _, np := range cfg.Providers {
 		for _, op := range old.Providers {
@@ -204,9 +202,9 @@ func (s *Server) SaveConfig(cfg types.Config) types.SaveResult {
 				changed[np.ID] = true
 			}
 		}
-		// 此前关闭/不存在的服务商被重新启用且未内置模型时，一并后台拉取模型列表，
-		// 否则这类服务商路由/模型列表会一直为空（原逻辑只在启动时或 URL/类型变化时拉取）。
-		// 仅影响"新启用且无静态模型"的服务商，其它情况行为不变。
+		// 此前关闭/不存在的供应商被重新启用且未内置模型时，一并后台拉取模型列表，
+		// 否则这类供应商路由/模型列表会一直为空（原逻辑只在启动时或 URL/类型变化时拉取）。
+		// 仅影响"新启用且无静态模型"的供应商，其它情况行为不变。
 		if np.Enabled && len(np.Models) == 0 {
 			wasEnabled := false
 			hadModels := false
@@ -217,7 +215,7 @@ func (s *Server) SaveConfig(cfg types.Config) types.SaveResult {
 					break
 				}
 			}
-			// 新启用、或静态模型从非空被清空：均需后台重拉，否则该服务商
+			// 新启用、或静态模型从非空被清空：均需后台重拉，否则该供应商
 			// 模型列表变空（静态为空且缓存缺失时路由/模型列表解析不到）
 			if !wasEnabled || hadModels {
 				changed[np.ID] = true
@@ -246,7 +244,7 @@ func (s *Server) SaveConfig(cfg types.Config) types.SaveResult {
 	return types.SaveResult{Ok: true, RestartNeeded: portChanged}
 }
 
-// refetchChangedModels 为配置发生变化的服务商清除旧缓存并异步重新拉取模型列表。
+// refetchChangedModels 为配置发生变化的供应商清除旧缓存并异步重新拉取模型列表。
 func (s *Server) refetchChangedModels(ids []string) {
 	// 后台 goroutine 没有 HTTP 层的 recover 兕底，panic 会直接崩掉整个进程
 	defer func() {
@@ -269,7 +267,7 @@ func (s *Server) refetchChangedModels(ids []string) {
 		router.ClearFetchedModel(id)
 		if r := router.FetchModels(*p); r.Ok && len(r.Models) > 0 {
 			router.UpdateFetchedModels(id, r.Models)
-			log.Printf("[SERVER] 已重新拉取服务商「%s」的 %d 个模型", p.Name, len(r.Models))
+			log.Printf("[SERVER] 已重新拉取供应商「%s」的 %d 个模型", p.Name, len(r.Models))
 		}
 	}
 }
@@ -376,7 +374,7 @@ func (s *Server) Stop() error {
 	s.running = false
 	s.mu.Unlock()
 
-	// 优雅关闭：先等在途请求完成（限时兑底强断），再落盘日志。
+	// 优雅关闭：先等在途请求完成（限时兜底强断），再落盘日志。
 	// 之前的 httpServer.Close() 会立即拍断所有在途请求，这些请求随后
 	// AddLog 的条目只留在内存，导致退出/重启时丢日志。
 	if srv != nil {
@@ -415,7 +413,7 @@ func (s *Server) autoFetchModels() {
 		}
 	}()
 	cfg := s.GetConfig()
-	// 为配置中未内置模型列表的服务商拉取一次模型，保持路由与 /v1/models 可用。
+	// 为配置中未内置模型列表的供应商拉取一次模型，保持路由与 /v1/models 可用。
 	// 仅拉取，不做可用性测试。
 	for _, p := range cfg.Providers {
 		if !p.Enabled || len(p.Models) > 0 {
@@ -571,7 +569,7 @@ func (s *Server) handleAdminAPI(w http.ResponseWriter, r *http.Request) {
 		})
 	case path == "/api/models" && r.Method == "GET":
 		// 与 handleAdminHTML 中 /api/models 的跳转目标保持一致：
-		// 返回聚合后的模型列表（含服务商归属），供管理端/脚本直接取用。
+		// 返回聚合后的模型列表（含供应商归属），供管理端/脚本直接取用。
 		cfg := s.GetConfig()
 		writeJSON(w, 200, map[string]any{"data": router.AggregateModels(&cfg)})
 	case path == "/api/stats" && r.Method == "GET":
@@ -581,7 +579,7 @@ func (s *Server) handleAdminAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// preserveMaskedAPIKeys 收到掩码哨兵 apiKeyMask 的字段（服务商 API Key 与
+// preserveMaskedAPIKeys 收到掩码哨兵 apiKeyMask 的字段（供应商 API Key 与
 // 路由令牌 AuthToken）用服务端现有值回填，防止第三方脚本「GET 掩码配置 →
 // POST 原样回写」时把真实密钥/令牌覆盖成 "****"。
 func preserveMaskedAPIKeys(cfg *types.Config, cur types.Config) {

@@ -12,6 +12,9 @@ build/
 logs.json
 config.json
 config.json.bak
+# 原子写（tmp+rename）进程被杀或 rename 失败时遗留的临时文件
+.logs.json.*.tmp
+config.json.tmp*
 
 # 编辑器
 .vscode/
@@ -21,3 +24,7 @@ config.json.bak
 .workbuddy/
 .commandcode/
 .env
+llm-router-res.syso
+
+# 临时脚本/产物
+tmp/

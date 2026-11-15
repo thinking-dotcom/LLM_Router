@@ -1,4 +1,4 @@
-export namespace agent {
+export namespace core {
 	
 	export class Skill {
 	    name: string;
@@ -52,6 +52,38 @@ export namespace agent {
 		    return a;
 		}
 	}
+	export class SessionClient {
+	    id: string;
+	    name: string;
+	    root: string;
+	    rootExists: boolean;
+	    count: number;
+	    totalSize: number;
+	    lastMod: string;
+	    managed: boolean;
+	    note: string;
+	    resumeSupported: boolean;
+	    resumeNote: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionClient(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.root = source["root"];
+	        this.rootExists = source["rootExists"];
+	        this.count = source["count"];
+	        this.totalSize = source["totalSize"];
+	        this.lastMod = source["lastMod"];
+	        this.managed = source["managed"];
+	        this.note = source["note"];
+	        this.resumeSupported = source["resumeSupported"];
+	        this.resumeNote = source["resumeNote"];
+	    }
+	}
 	
 	export class TargetInfo {
 	    id: string;
@@ -65,6 +97,15 @@ export namespace agent {
 	    configFile?: string;
 	    presetFile?: string;
 	    placeholder?: boolean;
+	    bin?: string;
+	    pkg?: string;
+	    installed: boolean;
+	    version?: string;
+	    canInstall: boolean;
+	    canUninstall: boolean;
+	    uninstallPaths?: string;
+	    installCmd?: string;
+	    updateCmd?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TargetInfo(source);
@@ -83,6 +124,15 @@ export namespace agent {
 	        this.configFile = source["configFile"];
 	        this.presetFile = source["presetFile"];
 	        this.placeholder = source["placeholder"];
+	        this.bin = source["bin"];
+	        this.pkg = source["pkg"];
+	        this.installed = source["installed"];
+	        this.version = source["version"];
+	        this.canInstall = source["canInstall"];
+	        this.canUninstall = source["canUninstall"];
+	        this.uninstallPaths = source["uninstallPaths"];
+	        this.installCmd = source["installCmd"];
+	        this.updateCmd = source["updateCmd"];
 	    }
 	}
 	export class TargetOp {
@@ -143,6 +193,8 @@ export namespace types {
 	    path: string;
 	    model: string;
 	    provider: string;
+	    reasoning?: string;
+	    reasoningOut?: string;
 	    status: number;
 	    ms: number;
 	    req?: string;
@@ -159,6 +211,8 @@ export namespace types {
 	        this.path = source["path"];
 	        this.model = source["model"];
 	        this.provider = source["provider"];
+	        this.reasoning = source["reasoning"];
+	        this.reasoningOut = source["reasoningOut"];
 	        this.status = source["status"];
 	        this.ms = source["ms"];
 	        this.req = source["req"];

@@ -274,7 +274,7 @@ func OpenaiFromGeminiInteractions(body any) map[string]any {
 					"function": map[string]any{
 						"name":        tm["name"],
 						"description": tm["description"],
-						"parameters":  tm["parameters"],
+						"parameters":  normFnParams(tm),
 					},
 				})
 			} else if tt != "" {
@@ -292,20 +292,10 @@ func OpenaiFromGeminiInteractions(body any) map[string]any {
 	return out
 }
 
-// interactionsEffortToOpenAI 把 Interactions thinking_level 折算为 OpenAI
-// reasoning_effort 枚举（minimal→low；none 不设置）。
+// interactionsEffortToOpenAI 把 Interactions thinking_level 折算为统一推理档位
+// （映射表 format/reasoning_table.go 的读取方向）。
 func interactionsEffortToOpenAI(lv string) string {
-	switch strings.ToLower(lv) {
-	case "none", "minimal":
-		return "none"
-	case "low":
-		return "low"
-	case "medium":
-		return "medium"
-	case "high":
-		return "high"
-	}
-	return lv
+	return decodeInteractionsLevel(lv).tier
 }
 
 // geminiRoot 去掉 /interactions 后缀用于模型列表等资源端点。
@@ -358,19 +348,10 @@ func interactionsContentBlocks(content any) []any {
 	return blocks
 }
 
-// interactionsThinkingLevel 把统一推理档位（reasoning_effort）折算为
-// Interactions generation_config.thinking_level（minimal/low/medium/high）。
+// interactionsThinkingLevel 把统一推理档位折算为 Interactions thinking_level
+// （minimal/low/medium/high；取值来自映射表的 Interactions 列）。
 func interactionsThinkingLevel(eff string) string {
-	switch eff {
-	case "none", "minimal":
-		return "minimal"
-	case "low":
-		return "low"
-	case "medium":
-		return "medium"
-	default: // high / xhigh / max
-		return "high"
-	}
+	return InteractionsLevelOf(eff)
 }
 
 // ToGeminiInteractions 把归一化 OpenAI Chat 请求装配为 Interactions API 请求体。
@@ -487,7 +468,13 @@ func ToGeminiInteractions(openaiReq map[string]any) map[string]any {
 		}
 	}
 	if eff, _ := openaiReq["reasoning_effort"].(string); eff != "" {
-		gc["thinking_level"] = interactionsThinkingLevel(eff)
+		// Gemma 不支持思考配置（映射表 encode 返回 nil）→ 自动跳过，
+		// 与 ToGemini 的家族折算规则一致。
+		if p := EncodeReasoningNative(ReasoningFamilyInteractions, strOr(openaiReq["model"], ""), eff); p != nil {
+			for k, v := range p.Value {
+				gc[k] = v
+			}
+		}
 	}
 	if tc, ok := openaiReq["tool_choice"]; ok {
 		gc["tool_choice"] = interactionsToolChoice(tc)
@@ -943,20 +930,20 @@ func GeminiInteractionsToOpenai(body map[string]any, openaiReq map[string]any) m
 // interactionUsageFromOpenAI 把 OpenAI 形状 usage 映射为 Interactions usage。
 func interactionUsageFromOpenAI(usage map[string]any) map[string]any {
 	u := map[string]any{}
-	if v, ok := usage["prompt_tokens"].(float64); ok {
-		u["total_input_tokens"] = int(v)
+	if v, ok := numInt(usage, "prompt_tokens"); ok {
+		u["total_input_tokens"] = v
 	}
-	if v, ok := usage["completion_tokens"].(float64); ok {
-		u["total_output_tokens"] = int(v)
+	if v, ok := numInt(usage, "completion_tokens"); ok {
+		u["total_output_tokens"] = v
 	}
 	if ptd, ok := usage["prompt_tokens_details"].(map[string]any); ok {
-		if cv, ok := ptd["cached_tokens"].(float64); ok && cv > 0 {
-			u["total_cached_tokens"] = int(cv)
+		if cv, ok := numInt(ptd, "cached_tokens"); ok && cv > 0 {
+			u["total_cached_tokens"] = cv
 		}
 	}
 	if ctd, ok := usage["completion_tokens_details"].(map[string]any); ok {
-		if rv, ok := ctd["reasoning_tokens"].(float64); ok && rv > 0 {
-			u["total_thought_tokens"] = int(rv)
+		if rv, ok := numInt(ctd, "reasoning_tokens"); ok && rv > 0 {
+			u["total_thought_tokens"] = rv
 		}
 	}
 	if pt, ck := u["total_input_tokens"]; ck {
@@ -1275,11 +1262,9 @@ func (gw *geminiInteractionsSSEWriter) Finish() {
 			gw.writeEvent("step.stop", map[string]any{"index": t.stepIdx})
 		}
 	}
-	// status 由 finish_reason 推断
+	// status 固定 completed：Interactions 客户端在收到含 function_call 步骤的
+	// interaction.completed 后自行发起工具调用轮次，completed 不代表会话结束。
 	status := "completed"
-	if gw.finish == "tool_calls" {
-		status = "completed"
-	}
 	interaction := map[string]any{"id": gw.respID, "status": status, "model": gw.model}
 	if gw.promptTokens > 0 || gw.outputTokens > 0 {
 		u := map[string]any{}

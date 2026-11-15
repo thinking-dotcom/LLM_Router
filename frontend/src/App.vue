@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ui, refresh, refreshStats, refreshActive } from './store'
+import { ui, refresh, refreshStats, refreshActive, refreshLogs } from './store'
 import { t } from './i18n'
 import { loadTargets as loadClientTargets } from './components/sync/store'
 import Overview from './components/Overview.vue'
@@ -9,7 +9,6 @@ import Providers from './components/Providers.vue'
 import Settings from './components/Settings.vue'
 import Skills from './components/Skills.vue'
 import Mcps from './components/Mcps.vue'
-import McpMappingDialog from './components/McpMappingDialog.vue'
 import Clients from './components/Clients.vue'
 import TokenChart from './components/TokenChart.vue'
 import Sessions from './components/Sessions.vue'
@@ -35,6 +34,10 @@ const providersRef = ref(null)
 const skillsRef = ref(null)
 const mcpsRef = ref(null)
 const sessionsRef = ref(null)
+const clientsRef = ref(null)
+// 客户端页顶部工具条「一键更新」：待更新数量与是否正在批量更新（均由 Clients.vue 暴露）
+const clientsOutdated = computed(() => clientsRef.value?.cliOutdatedList?.length || 0)
+const clientsUpdatingAll = computed(() => !!clientsRef.value?.cliUpdatingAll)
 
 // 右区顶部导航：按当前语言标签文字长度升序（文字多的排后面，等长保持原顺序）
 const rightTabs = [
@@ -94,6 +97,8 @@ onMounted(async () => {
   timers.push(setInterval(refresh, 15000))
   timers.push(setInterval(refreshStats, 2000))
   timers.push(setInterval(refreshActive, 1000))
+  // 请求日志独立 2s 轮询（原先只随 15s 的 refresh 刷新，导致日志显示明显滞后）
+  timers.push(setInterval(refreshLogs, 2000))
 })
 onUnmounted(() => {
   document.removeEventListener('keydown', onKeydown)
@@ -102,7 +107,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div id="app">
+  <!-- 挂载点 index.html 已有 div#app（#app 的定位/尺寸样式都挂在它上），
+       这里不能再叫 #app，否则出现双层 #app 嵌套、窗口测高也被内层 100vh 钳死 -->
+  <div class="app-root">
     <main id="board">
       <!-- 左区：概览（以概览宽度为左右分界，固定左侧） -->
       <section class="panel left-pane">
@@ -142,9 +149,12 @@ onUnmounted(() => {
         <div v-show="activeRight === 'skills'" class="right-content p-skills">
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button class="btn btn-xs btn-ghost" :title="skillsRef?.skillsDir" @click="skillsRef?.openDir()">📁 {{ t('skills.dir') }}</button>
-              <button class="btn btn-xs btn-ghost" :title="t('skills.refresh')" @click="skillsRef?.loadSkills()">↻ {{ t('skills.refresh') }}</button>
-              <button class="btn btn-xs p-btn-add" @click="skillsRef?.openSkill()">+ {{ t('common.new') }}</button>
+              <!-- 工具条只留文字按钮（图标已移除，语义靠 title/aria-label 兜底） -->
+              <button class="btn btn-xs" :title="skillsRef?.skillsDir" :aria-label="t('skills.dir')" @click="skillsRef?.openDir()">{{ t('skills.dir') }}</button>
+              <button class="btn btn-xs" :title="t('skills.refresh')" :aria-label="t('skills.refresh')" @click="skillsRef?.loadSkills()">{{ t('skills.refresh') }}</button>
+              <button class="btn btn-xs" :disabled="skillsRef?.syncing" :title="t('skills.injectAllTip')" :aria-label="t('skills.injectAll')" @click="skillsRef?.injectAll()">{{ t('skills.injectAll') }}</button>
+              <button class="btn btn-xs" :disabled="skillsRef?.syncing" :title="t('skills.ejectAllTip')" :aria-label="t('skills.ejectAll')" @click="skillsRef?.ejectAll()">{{ t('skills.ejectAll') }}</button>
+              <button class="btn btn-xs p-btn-add" @click="skillsRef?.openSkill()">{{ t('common.new') }}</button>
             </div>
           </div>
           <div class="panel-body"><Skills ref="skillsRef" /></div>
@@ -154,8 +164,11 @@ onUnmounted(() => {
         <div v-show="activeRight === 'mcps'" class="right-content p-mcps">
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button class="btn btn-xs" @click="ui.mcpMappingDialog.open = true">{{ t('mcp.mapping') }}</button>
-              <button class="btn btn-xs p-btn-add" @click="mcpsRef?.openMcp()">+ {{ t('common.add') }}</button>
+              <!-- 工具条只留文字按钮（图标已移除，语义靠 title/aria-label 兜底） -->
+              <button class="btn btn-xs" :title="mcpsRef?.mcpDir" :aria-label="t('mcp.dir')" @click="mcpsRef?.openDir()">{{ t('mcp.dir') }}</button>
+              <button class="btn btn-xs" :title="t('mcp.ejectAllTip')" @click="mcpsRef?.ejectAll()">{{ t('mcp.ejectAll') }}</button>
+              <button class="btn btn-xs" :title="t('mcp.mappingAllTip')" @click="mcpsRef?.injectAll()">{{ t('mcp.mapping') }}</button>
+              <button class="btn btn-xs p-btn-add" @click="mcpsRef?.openMcp()">{{ t('common.add') }}</button>
             </div>
           </div>
           <div class="panel-body"><Mcps ref="mcpsRef" /></div>
@@ -163,9 +176,19 @@ onUnmounted(() => {
 
         <!-- 客户端 -->
         <div v-show="activeRight === 'sync'" class="right-content p-sync">
-        <div class="page-head"></div>
+        <div class="page-head">
+          <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+            <button class="btn btn-xs" :class="{ 'p-btn-add': clientsOutdated > 0 }"
+              :disabled="!clientsOutdated || clientsUpdatingAll" :title="t('sync.cli.updateAllTip')"
+              @click="clientsRef?.cliUpdateAll()">
+              <i class="fa-solid fa-arrow-up-from-bracket"></i>
+              {{ clientsUpdatingAll ? t('sync.cli.updatingAll') : t('sync.cli.updateAll') }}
+              <template v-if="clientsOutdated && !clientsUpdatingAll">({{ clientsOutdated }})</template>
+            </button>
+          </div>
+        </div>
         <div class="panel-body">
-          <Clients />
+          <Clients ref="clientsRef" />
         </div>
         </div>
 
@@ -184,11 +207,12 @@ onUnmounted(() => {
         <!-- 会话管理 -->
         <div v-show="activeRight === 'sessions'" class="right-content p-sessions">
           <div class="page-head">
+            <!-- 工具条只留图标（语义放 title/aria-label）：打开会话目录、一键清空、刷新
+                 （单条删除在每行行尾垃圾桶图标，见 Sessions.vue 的 .sr-del） -->
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button class="btn btn-xs btn-ghost" :title="t('sessions.refresh')" @click="sessionsRef?.refresh()">↻ {{ t('sessions.refresh') }}</button>
-              <button class="btn btn-xs btn-danger" :class="{ disabled: !sessionsRef?.state?.sel }" @click="sessionsRef?.askDelete()">
-                {{ t('sessions.deleteSelected') }}<template v-if="sessionsRef?.state?.sel"> ({{ sessionsRef?.state.sel }})</template>
-              </button>
+              <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openDirTip')" :aria-label="t('sessions.openDir')" @click="sessionsRef?.openClientDir()"><i class="fa-solid fa-folder-open"></i></button>
+              <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.clearAllTip')" :aria-label="t('sessions.clearAll')" @click="sessionsRef?.askClearAll()"><i class="fa-solid fa-trash-can"></i></button>
+              <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.refresh')" :aria-label="t('sessions.refresh')" @click="sessionsRef?.refresh()"><i class="fa-solid fa-rotate-right"></i></button>
             </div>
           </div>
           <div class="panel-body"><Sessions ref="sessionsRef" /></div>
@@ -199,7 +223,6 @@ onUnmounted(() => {
     <ProviderDialog />
     <DeleteDialog />
     <ClearLogsDialog />
-    <McpMappingDialog />
     <ModelsDialog />
     <Toast />
   </div>
