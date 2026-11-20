@@ -67,7 +67,7 @@ wails dev    # 前端 dev server: http://localhost:5173
 wails build --clean -o llm-router.exe -ldflags "-X main.appVersion=1.2.3"
 ```
 
-程序启动时自动查询 GitHub Release（[`sala-coding/LLM_Router`](https://github.com/sala-coding/LLM_Router)）最新版本：
+程序启动时自动查询 GitHub Release（[`thinking-dotcom/LLM_Router`](https://github.com/thinking-dotcom/LLM_Router)）最新版本：
 
 - 发现新版本 → 自动弹出「路由设置 → 关于」并展开新版本信息栏
 - **下载并安装**：显示下载进度，完成后自动替换当前 exe 并重启

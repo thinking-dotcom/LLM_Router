@@ -21,7 +21,7 @@ import (
 
 // 自动更新源：GitHub Release。版本号由构建参数注入（-ldflags "-X main.appVersion=x.y.z"）。
 const (
-	appRepo       = "sala-coding/LLM_Router"
+	appRepo       = "thinking-dotcom/LLM_Router"
 	appReleaseURL = "https://github.com/" + appRepo + "/releases/latest"
 	appAPIURL     = "https://api.github.com/repos/" + appRepo + "/releases/latest"
 )
