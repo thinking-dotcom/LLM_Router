@@ -138,11 +138,11 @@ const hlHtml = computed(() => {
 </template>
 
 <style scoped>
-/* 编辑器配色：深色对齐 GitHub Dark（与应用深色主题同源），浅色走 GitHub Light。
+/* 编辑器配色：深色为纯黑底 + GitHub Dark 语法色，浅色走 GitHub Light。
    配色是"编辑器自己的主题"，不跟随应用主色，避免主色与语法色互相干扰 */
 .code-area{
   --ed-font:"Cascadia Mono","JetBrains Mono",Consolas,"SF Mono",Menlo,monospace;
-  --ed-bg:#0d1117; --ed-gutter:#010409; --ed-line:#21262d;
+  --ed-bg:#000000; --ed-gutter:#000000; --ed-line:#242424;
   --ed-txt:#e6edf3; --ed-caret:#e6edf3; --ed-ln:#6e7681;
   --ed-key:#79c0ff; --ed-str:#a5d6ff; --ed-num:#79c0ff; --ed-lit:#ff7b72;
   --ed-punct:#8b949e; --ed-com:#8b949e; --ed-head:#7ee787; --ed-sel:rgba(56,139,253,.32);

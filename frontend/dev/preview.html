@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LLM Router · UI Preview</title>
-<link rel="stylesheet" href="/remixicon/fonts/remixicon.css">
-<link rel="stylesheet" href="/style.css">
-<!-- classic script 先执行：先种好 window.go 预览桩，src/main.js 模块（deferred）再取绑定。
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1">
+     <title>LLM Router · UI Preview</title>
+     <link rel="stylesheet" href="/style.css">
+     <!-- classic script 先执行：先种好 window.go 预览桩，src/main.js 模块（deferred）再取绑定。
      mock.js 用时间戳参数加载，绕开浏览器 HTTP 缓存（该桩经常迭代，避免预览到旧桩）。 -->
-<script>document.write('<script src="/dev/mock.js?ts=' + Date.now() + '"><\/script>')</script>
+     <script>document.write('<script src="/dev/mock.js?ts=' + Date.now() + '"><\/script>')</script>
 </head>
+
 <body>
-<div id="app"></div>
-<script type="module" src="/src/main.js"></script>
+     <div id="app"></div>
+     <script type="module" src="/src/main.js"></script>
 </body>
+
 </html>

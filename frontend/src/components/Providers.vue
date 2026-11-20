@@ -158,16 +158,15 @@ async function toggleProvider(p, checked) {
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
 }
 
-// 卡片 ⋯ 菜单
+// 卡片右键菜单
 function openMenu(p, event) {
   if (ui.menu.open && ui.menu.provider?.id === p.id) {
     ui.menu.open = false
     return
   }
-  // 只存纯数值：DOMRect 经 reactive 代理后属性读取不稳定（原型 getter）
-  const r = event.currentTarget.getBoundingClientRect()
+  // 右键按鼠标位置弹出；只存纯数值，避免 DOMRect 经 reactive 代理后读取不稳定
   ui.menu.provider = p
-  ui.menu.rect = { left: r.left, right: r.right, top: r.top, bottom: r.bottom }
+  ui.menu.rect = { left: event.clientX, right: event.clientX, top: event.clientY, bottom: event.clientY }
   ui.menu.open = true
 }
 
@@ -204,7 +203,6 @@ async function copyModelIds(p) {
 function onDocClick(e) {
   if (!ui.menu.open) return
   if (menuEl.value && menuEl.value.contains(e.target)) return
-  if (e.target.closest('.menu-btn')) return
   ui.menu.open = false
 }
 
@@ -236,7 +234,7 @@ defineExpose({ addProvider })
 
     <template v-else>
       <div class="prov-grid">
-        <div v-for="p in providers" :key="p.id" class="prov-card">
+        <div v-for="p in providers" :key="p.id" class="prov-card" @contextmenu.prevent="openMenu(p, $event)">
           <div class="phead">
             <div style="display:flex;align-items:center;gap:6px">
               <span class="prov-dot" :class="dotClass(p)" :title="dotTitle(p)"></span>
@@ -248,10 +246,9 @@ defineExpose({ addProvider })
                 <input type="checkbox" :checked="p.enabled" @change="toggleProvider(p, $event.target.checked)">
                 <span class="slider"></span>
               </label>
-              <span class="menu-btn" :title="t('prov.more')" @click.stop="openMenu(p, $event)"><i class="ri-more-2-fill"></i></span>
             </div>
           </div>
-          <!-- 卡片只给概览（地址 + 模型数），模型 ID 明细走 ⋯ 菜单的「查看模型 / 复制模型 ID」 -->
+          <!-- 卡片只给概览（地址 + 模型数），模型 ID 明细走右键菜单的「查看模型 / 复制模型 ID」 -->
           <div class="pmeta">
             <span class="purl">{{ p.baseUrl || '' }}</span>
             <span class="pmcount">{{ modelCountText(p) }}</span>
@@ -260,7 +257,7 @@ defineExpose({ addProvider })
       </div>
     </template>
 
-    <!-- ⋯ 菜单
+    <!-- 右键菜单
          Teleport 到 body：深色主题 .panel 带 backdrop-filter，会成为 fixed 子元素的
          包含块，留在面板内时菜单按面板原点定位（偏移到面板右下、甚至被 overflow 裁掉），
          脱离面板后 position:fixed 才真正相对视口、与锚点坐标一致 -->

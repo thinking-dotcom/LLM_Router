@@ -192,7 +192,7 @@ func RemoveTomlMcpServer(tomlFile, name string) error {
 	b, err := os.ReadFile(tomlFile)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return errors.New("该客户端的 MCP 配置文件不存在")
+			return errors.New("该智能体的 MCP 配置文件不存在")
 		}
 		return err
 	}

@@ -341,7 +341,7 @@ var (
 func cliSessionList(id string, st SessionStore) ([]cliSession, error) {
 	cs := st.CLI
 	if cs == nil {
-		return nil, errors.New("该客户端未登记 CLI 会话通道: " + id)
+		return nil, errors.New("该智能体未登记 CLI 会话通道: " + id)
 	}
 	cliSessionMu.Lock()
 	if c, ok := cliSessionCache[id]; ok && time.Since(c.at) < cliSessionCacheTTL {
@@ -742,7 +742,7 @@ func joinCmdline(tokens []string) string {
 func ListSessionItems(clientID string) ([]SessionItem, error) {
 	st, rootAbs, ok := sessionStoreOf(clientID)
 	if !ok {
-		return nil, errors.New("该客户端未登记会话目录: " + clientID)
+		return nil, errors.New("该智能体未登记会话目录: " + clientID)
 	}
 	if st.CLI != nil { // 库型存储：只能经 CLI 子命令枚举
 		list, err := cliSessionList(clientID, st)
@@ -824,7 +824,7 @@ func sessionRealPath(rootAbs, p string) (string, string, error) {
 func BuildSessionResume(clientID, path string) (*SessionResumePlan, error) {
 	st, rootAbs, ok := sessionStoreOf(clientID)
 	if !ok {
-		return nil, errors.New("该客户端未登记会话目录: " + clientID)
+		return nil, errors.New("该智能体未登记会话目录: " + clientID)
 	}
 	if st.CLI != nil { // 库型存储：path 即会话 ID，启动目录取会话库里的 directory
 		return buildCLISessionResume(clientID, st, path)
@@ -841,7 +841,7 @@ func BuildSessionResume(clientID, path string) (*SessionResumePlan, error) {
 		return nil, err
 	}
 	if strings.Count(rel, string(filepath.Separator))+1 != st.Depth {
-		return nil, errors.New("路径层级与该客户端的会话结构不符: " + path)
+		return nil, errors.New("路径层级与该智能体的会话结构不符: " + path)
 	}
 	fi, err := os.Stat(abs)
 	if err != nil {
@@ -1392,7 +1392,7 @@ func readSessionJSONField(path, key string) (string, bool) {
 func DeleteSessionItems(clientID string, paths []string) error {
 	st, rootAbs, ok := sessionStoreOf(clientID)
 	if !ok {
-		return errors.New("该客户端未登记会话目录: " + clientID)
+		return errors.New("该智能体未登记会话目录: " + clientID)
 	}
 	if st.CLI != nil { // 库型存储：交给客户端的删除子命令
 		return deleteCLISessions(clientID, st.CLI, paths)
@@ -1408,7 +1408,7 @@ func DeleteSessionItems(clientID string, paths []string) error {
 			return err
 		}
 		if strings.Count(rel, string(filepath.Separator))+1 != st.Depth {
-			return errors.New("路径层级与该客户端的会话结构不符，已拒绝删除: " + p)
+			return errors.New("路径层级与该智能体的会话结构不符，已拒绝删除: " + p)
 		}
 		fi, err := os.Lstat(abs)
 		if err != nil {
@@ -1419,14 +1419,14 @@ func DeleteSessionItems(clientID string, paths []string) error {
 		}
 		if fi.IsDir() {
 			if st.Kind != "dir" {
-				return errors.New("该客户端的会话是文件，目录已拒绝删除: " + p)
+				return errors.New("该智能体的会话是文件，目录已拒绝删除: " + p)
 			}
 			if err := os.RemoveAll(abs); err != nil {
 				return err
 			}
 		} else {
 			if st.Kind == "dir" {
-				return errors.New("该客户端的会话是目录，文件已拒绝删除: " + p)
+				return errors.New("该智能体的会话是目录，文件已拒绝删除: " + p)
 			}
 			if err := os.Remove(abs); err != nil {
 				return err

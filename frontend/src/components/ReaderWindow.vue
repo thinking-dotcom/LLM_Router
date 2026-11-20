@@ -119,31 +119,31 @@ async function copyAll() {
 </template>
 
 <style scoped>
-.reader{position:fixed;inset:0;display:flex;flex-direction:column;background:#0d1117;color:#c9d1d9;font-size:13px}
-.rd-head{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #21262d;background:#161b22}
+.reader{position:fixed;inset:0;display:flex;flex-direction:column;background:#000000;color:#c9d1d9;font-size:13px}
+.rd-head{flex:none;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #242424;background:#0a0a0a}
 .rd-title{flex:1;min-width:0;font-weight:600;color:#e6edf3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rd-count{flex:none;font-size:12px;color:#7d8590}
 /* 右上角复制图标：默认低对比，悬停提亮，复制成功后短暂变绿打勾 */
 .rd-copy{
   flex:none;display:inline-flex;align-items:center;justify-content:center;
   width:26px;height:26px;padding:0;cursor:pointer;
-  border:1px solid #30363d;border-radius:6px;background:#1f2630;color:#9aa4ad;
+  border:1px solid #242424;border-radius:6px;background:#111111;color:#9aa4ad;
   transition:border-color .15s,color .15s,background .15s;
 }
-.rd-copy:hover{border-color:#58a6ff;color:#e6edf3;background:#22303f}
+.rd-copy:hover{border-color:#58a6ff;color:#e6edf3;background:#1a1a1a}
 .rd-copy:active{transform:scale(.96)}
 .rd-copy.ok{border-color:#3fb950;color:#3fb950;background:rgba(63,185,80,.12)}
 .rd-body{flex:1;overflow-y:auto;padding:16px 14px;box-sizing:border-box}
 .rd-tip{margin-top:40px;text-align:center;color:#7d8590;line-height:1.8}
 .rd-fail .rd-err{color:#f85149;font-size:12px}
 
-.rd-msg{max-width:860px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;border:1px solid #21262d;background:#161b22}
-.rd-msg.user{background:#1a2332;border-color:#2b4a6f}
+.rd-msg{max-width:860px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;border:1px solid #242424;background:#0a0a0a}
+.rd-msg.user{background:#101a26;border-color:#243a55}
 .rd-role{font-size:11px;font-weight:600;letter-spacing:.4px;color:#58a6ff;margin-bottom:6px}
 .rd-msg.assistant .rd-role{color:#3fb950}
 .rd-text{white-space:pre-wrap;word-break:break-word;line-height:1.65;color:#c9d1d9}
 .rd-msg.user .rd-text{color:#e6edf3}
 
 .rd-body::-webkit-scrollbar{width:8px}
-.rd-body::-webkit-scrollbar-thumb{background:#30363d;border-radius:4px}
+.rd-body::-webkit-scrollbar-thumb{background:#242424;border-radius:4px}
 </style>

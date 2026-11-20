@@ -4,6 +4,8 @@ import {core} from '../models';
 import {types} from '../models';
 import {main} from '../models';
 
+export function CheckAppUpdate():Promise<Record<string, any>>;
+
 export function CheckClientUpdates():Promise<Record<string, any>>;
 
 export function ClearLogs():Promise<void>;
@@ -13,6 +15,8 @@ export function DelUserEnv(arg1:string):Promise<Record<string, any>>;
 export function DeleteSessionItems(arg1:string,arg2:Array<string>):Promise<Record<string, any>>;
 
 export function DeleteSkill(arg1:string):Promise<Record<string, any>>;
+
+export function DownloadAndInstallUpdate(arg1:string):Promise<Record<string, any>>;
 
 export function EjectAllMcp():Promise<Record<string, any>>;
 

@@ -7,6 +7,15 @@ function loadTheme() {
   try { return localStorage.getItem('theme') || 'dark' } catch (e) { return 'dark' }
 }
 
+// 界面字体大小档位（整体等比缩放，避免控件尺寸不变导致文字溢出）
+export const FONT_SCALES = [0.9, 1, 1.1, 1.2]
+function loadFontScale() {
+  try {
+    const v = Number(localStorage.getItem('fontScale'))
+    return FONT_SCALES.includes(v) ? v : 1
+  } catch (e) { return 1 }
+}
+
 // 全局共享状态
 export const state = reactive({
   config: null,        // 配置对象（含 providers）
@@ -21,11 +30,13 @@ export const state = reactive({
 // UI 状态（tab、主题、弹窗开关）
 export const ui = reactive({
   theme: loadTheme(),
+  fontScale: loadFontScale(),
   tab: 'overview',
   providerDialog: { open: false, provider: null },
   deleteDialog: { open: false, provider: null },
   modelsDialog: { open: false, provider: null },
   clearLogsDialog: { open: false }, // 清空日志确认框
+  settingsPanel: { open: false }, // 路由设置面板（概览标题齿轮图标打开）
   menu: { open: false, provider: null, rect: null }, // 服务商卡片 ⋯ 菜单
 })
 
@@ -40,11 +51,23 @@ export function initTheme() {
     v => { document.documentElement.dataset.theme = v === 'light' ? 'light' : 'dark' },
     { immediate: true }
   )
+  // 字体大小：CSS zoom 对根元素整体缩放，文字与控件同步放大，布局不破
+  watch(
+    () => ui.fontScale,
+    v => { document.documentElement.style.zoom = String(v) },
+    { immediate: true }
+  )
 }
 
 export function applyTheme(theme) {
   ui.theme = theme === 'light' ? 'light' : 'dark'
-  try { localStorage.setItem('theme', ui.theme) } catch (e) {}
+  try { localStorage.setItem('theme', ui.theme) } catch (e) { }
+}
+
+export function applyFontScale(v) {
+  if (!FONT_SCALES.includes(v) || ui.fontScale === v) return
+  ui.fontScale = v
+  try { localStorage.setItem('fontScale', String(v)) } catch (e) { }
 }
 
 // 拉取运行状态 + 配置（15s 轮询与主动刷新共用）

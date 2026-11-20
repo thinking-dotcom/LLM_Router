@@ -44,8 +44,9 @@
       span.textContent = o.text
       it.appendChild(span)
       if (o.on) {
-        var ck = document.createElement('i')
-        ck.className = 'ri-check-line ck'
+        var ck = document.createElement('span')
+        ck.className = 'ck'
+        ck.innerHTML = '<svg class="ico" style="width:11px;height:11px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>'
         it.appendChild(ck)
       }
       if (!o.disabled) {

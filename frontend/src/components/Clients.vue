@@ -11,6 +11,7 @@ import {
   CB_DEFAULT_MODES, CB_CMD_MODES, CC_PM_OPTIONS, CX_PERM_MODES, CX_PM_CLASS,
   CO_PERM_MODES, CO_BYPASS_MODES, CLAUDE_CMD_RULE, CLAUDE_CMD_MODES,
 } from './sync/ui'
+import { ChevronRightIcon, ChevronDownIcon, CheckIcon, XMarkIcon, CommandLineIcon } from '@heroicons/vue/24/outline'
 // Copilot 沙箱三下拉的开关状态（0=全关，1/2/3=OS沙箱/沙箱提权/沙箱本地网络）
 const coSbOpen = ref(0)
 // 配置抽屉滑动动画进行中标记：滑动期间关闭 backdrop-filter（深色主题玻璃模糊）
@@ -337,12 +338,19 @@ async function cliRun(tg, update) {
 const cliUpdatingAll = ref(false)
 const cliOutdatedList = computed(() => (targets.value || []).filter(tg =>
   !tg.placeholder && tg.installed && cliCan(tg) && cliIsOutdated(tg)))
-// 一键更新：把清单里的客户端**串行**更新（串行可让每张卡片各显各的「更新中」，也避免
-// 同时并发多个 npm 进程互相干扰），全部结束后统一刷新版本与更新检查、只弹一条汇总提示。
-async function cliUpdateAll() {
+// 一键更新：先弹应用内确认（更新会覆盖本地修改过的配置文件），确认后再执行
+const cliUpdateAllOpen = ref(false)
+function cliUpdateAll() {
   if (cliUpdatingAll.value) return
+  if (!cliOutdatedList.value.length) { toast(t('sync.cli.updateAllNone')); return }
+  cliUpdateAllOpen.value = true
+}
+// 把清单里的客户端**串行**更新（串行可让每张卡片各显各的「更新中」，也避免
+// 同时并发多个 npm 进程互相干扰），全部结束后统一刷新版本与更新检查、只弹一条汇总提示。
+async function doCliUpdateAll() {
+  cliUpdateAllOpen.value = false
   const list = cliOutdatedList.value
-  if (!list.length) { toast(t('sync.cli.updateAllNone')); return }
+  if (!list.length) return
   cliUpdatingAll.value = true
   let n = 0, fail = 0
   try {
@@ -610,15 +618,16 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
         :title="g.key === 'todo' ? t('sync.groupToggle') : undefined"
         @click="g.key === 'todo' && (todoCollapsed = !todoCollapsed)"
         @keydown.enter.prevent="g.key === 'todo' && (todoCollapsed = !todoCollapsed)">
-        <i v-if="g.key === 'todo'" class="ri-arrow-right-s-line sc-grp-caret"
-          :class="todoCollapsedEff ? '' : 'ri-arrow-down-s-line'"></i>
+        <ChevronRightIcon v-if="g.key === 'todo' && todoCollapsedEff" class="ico sc-grp-caret" />
+        <ChevronDownIcon v-else-if="g.key === 'todo'" class="ico sc-grp-caret" />
         <span>{{ g.title || t('sync.groupTodo') }}</span>
         <span v-if="g.key === 'todo'" class="sc-grp-count">{{ g.items.length }}</span>
       </div>
       <template v-if="g.key !== 'todo' || !todoCollapsedEff">
       <div v-for="tg in g.items" :key="tg.id" class="sync-card"
         :class="{ ph: tg.placeholder, 'sc-busy': cliProgress[tg.id] != null }"
-        :style="{ '--sc-lvl': (cliProgress[tg.id] || 0) + '%' }">
+        :style="{ '--sc-lvl': (cliProgress[tg.id] || 0) + '%' }"
+        @contextmenu.prevent="!tg.placeholder && openTargetConfig(tg)">
         <!-- 安装/更新中：卡片背景即进度条——绿色自左向右填充，宽度（--sc-lvl）随估算进度增长 -->
         <span v-if="cliProgress[tg.id] != null" class="sc-progress" aria-hidden="true"></span>
         <div class="sync-card-main" @click="!tg.placeholder && openTargetConfig(tg)">
@@ -706,14 +715,14 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
                 @before-leave="onDrawerBeforeLeave" @after-leave="onDrawerAfterLeave">
     <div v-if="cfgEdit" class="dialog-overlay open cfg-drawer-ov">
       <div class="dialog cfg-dialog" :class="{ 'cfg-anim': cfgAnim, 'cfg-staged': cfgStaged, 'cfg-dir-enter': cfgDir === 'enter', 'cfg-exit-left': cfgExitLeft }" @scroll.capture.passive="onCfgScroll">
-        <!-- 保存 / 关闭：浮在配置页右缘内侧、垂直居中（上下排列），图标用项目内置的 RemixIcon。
+        <!-- 保存 / 关闭：浮在配置页右缘内侧、垂直居中（上下排列），图标用 Heroicons。
              收起方向：保存 → 向左滑出；关闭 → 向下滑出 -->
         <div class="cfg-drawer-actions" :class="{ 'is-hidden': cfgScrolling }">
           <button class="cfg-drawer-btn save" type="button" :disabled="cfgSaving || cfgLoading" :title="t('sync.saveOnlyTip')" @click="cfgExitLeft = true; saveTargetConfig()">
-            <i class="ri-check-line"></i>
+            <CheckIcon class="ico" />
           </button>
           <button class="cfg-drawer-btn close" type="button" :title="t('sync.closeTip')" @click="cfgExitLeft = false; cfgEdit = false">
-            <i class="ri-close-line"></i>
+            <XMarkIcon class="ico" />
           </button>
         </div>
         <div class="cfg-head">
@@ -2467,6 +2476,20 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
     <!-- 以下其余弹层 Teleport 到 body：深色主题 .panel 带 backdrop-filter，会成为 fixed 子元素
          的包含块，留在面板内时遮罩只覆盖面板、弹窗按面板居中；脱离面板才覆盖整个窗口 -->
     <Teleport to="body">
+    <!-- 一键更新确认：更新会覆盖本地已修改的配置文件 -->
+    <div v-if="cliUpdateAllOpen" class="dialog-overlay open" @click.self="cliUpdateAllOpen = false">
+      <div class="dialog" style="width:340px">
+        <h3>{{ t('sync.cli.updateAllConfirmTitle') }}</h3>
+        <p class="delete-desc">{{ t('sync.cli.updateAllConfirmDesc', { n: cliOutdatedList.length }) }}</p>
+        <div class="dialog-foot">
+          <button class="btn btn-ghost btn-sm" type="button" @click="cliUpdateAllOpen = false">{{ t('dlg.cancel') }}</button>
+          <div class="right">
+            <button class="btn btn-sm" type="button" @click="doCliUpdateAll">{{ t('dlg.confirm') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 清除接入配置确认（应用内弹窗，替代原生 confirm）：Antigravity CLI -->
     <!-- v-if 挂载：Clients.vue 的 scoped 样式对 .dialog-overlay 强制 display:flex!important，不能依赖 open 类切换 -->
     <div v-if="agyClearOpen" class="dialog-overlay open" @click.self="agyClearOpen = false">
@@ -2506,7 +2529,7 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
         <div class="cli-term-list">
           <button v-for="term in cliTermPicker.terminals" :key="term.id" class="cli-term-item" type="button"
             @click="cliLaunchInTerm(term)">
-            <i class="ri-terminal-line"></i><span>{{ termName(term) }}</span>
+            <CommandLineIcon class="ico" /><span>{{ termName(term) }}</span>
           </button>
         </div>
         <div class="dialog-foot">
@@ -2548,7 +2571,7 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
 /* 「需要处理」分组的标题行可点击：展开/收起未安装客户端卡片，收起时只留这一行 */
 .sync-group-head.tog{cursor:pointer;user-select:none;transition:color .12s}
 .sync-group-head.tog:hover{color:var(--text)}
-.sc-grp-caret{font-size:9px;width:12px;text-align:center;flex:none}
+.sc-grp-caret{width:12px;height:12px;flex:none}
 .sc-grp-count{flex:none;padding:0 7px;border:1px solid var(--border);border-radius:999px;font-size:9px;line-height:14px;color:var(--t3)}
 .sync-group-head::after{content:'';flex:1 1 auto;height:1px;background:var(--border)}
 /* 安装/更新中：卡片背景水波 + 水位随进度上涨（--sc-lvl，由卡片 style 注入）。
@@ -2712,7 +2735,7 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
 .cfg-drawer-actions{position:absolute;right:8px;top:50%;transform:translateY(-50%);z-index:40;display:flex;flex-direction:column;gap:6px;transition:opacity .2s var(--ease),transform .2s var(--ease)}
 .cfg-drawer-actions.is-hidden{opacity:0;transform:translateY(-50%) scale(.86);pointer-events:none}
 .cfg-drawer-btn{width:26px;height:26px;padding:0;display:flex;align-items:center;justify-content:center;background:var(--surface);color:var(--t2);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);transition:color .15s,background .15s,border-color .15s,transform .16s var(--ease)}
-.cfg-drawer-btn>i{font-size:12px;line-height:1}
+.cfg-drawer-btn>.ico{width:12px;height:12px}
 .cfg-drawer-btn:hover{color:var(--text);background:var(--bg);border-color:var(--border-hover)}
 .cfg-drawer-btn.save{color:var(--accent)}
 .cfg-drawer-btn.save:hover{color:var(--accent);background:var(--bg)}

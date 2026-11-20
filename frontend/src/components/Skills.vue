@@ -5,6 +5,7 @@ import { toast } from '../toast'
 import api from '../api'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { targetLogo } from './sync/shared'
+import { PencilIcon, TrashIcon } from '@heroicons/vue/24/outline'
 
 // ---------- 技能 ----------
 const skills = ref([])
@@ -165,8 +166,8 @@ defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll, a
           <div class="skill-desc">{{ s.desc || t('skills.noDesc') }}</div>
         </div>
         <div style="flex:none;display:flex;gap:6px">
-          <button class="btn" type="button" :title="t('skills.editTip')" @click.stop="openSkill(s)">{{ t('common.edit') }}</button>
-          <button class="btn btn-danger" type="button" @click.stop="askDelete(s)">{{ t('common.delete') }}</button>
+          <button class="btn btn-icon skill-edit-btn" type="button" :title="t('skills.editTip')" :aria-label="t('common.edit')" @click.stop="openSkill(s)"><PencilIcon class="ico" /></button>
+          <button class="btn btn-icon skill-del-btn" type="button" :title="t('common.delete')" :aria-label="t('common.delete')" @click.stop="askDelete(s)"><TrashIcon class="ico" /></button>
         </div>
       </div>
     </div>
@@ -273,6 +274,11 @@ defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll, a
 .mcps-left{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;border-right:1px solid var(--border);padding-right:12px}
 .skill-row.sel{border-color:var(--accent)}
 .skill-row{cursor:pointer}
+.btn-icon{width:20px;min-width:20px;padding:0;border:none;background:transparent}
+.btn-icon:hover{background:transparent;border:none;filter:brightness(1.25)}
+.btn-icon .ico{width:14px;height:14px}
+.skill-edit-btn .ico{color:#e0a13c}
+.skill-del-btn .ico{color:#e05a5a}
 .mcps-right{flex:1;min-width:0;padding-left:12px;align-self:stretch}
 .mcp-right-head{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-bottom:6px}
 .mcp-right-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}

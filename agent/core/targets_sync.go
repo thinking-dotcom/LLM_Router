@@ -28,11 +28,11 @@ func McpCapableTargetIDs() []string {
 func ClientMcpPath(id string) (string, error) {
 	a, ok := registry[id]
 	if !ok {
-		return "", errors.New("未注册的客户端: " + id)
+		return "", errors.New("未注册的智能体: " + id)
 	}
 	info := a.Info()
 	if !info.McpSupported || info.McpFile == "" {
-		return "", errors.New("该客户端未登记 MCP 配置文件")
+		return "", errors.New("该智能体未登记 MCP 配置文件")
 	}
 	return info.McpFile, nil
 }
@@ -137,7 +137,7 @@ func SyncTargets(ops []TargetOp, routerBase string) []TargetResult {
 	for _, op := range ops {
 		a, ok := registry[op.TargetID]
 		if !ok {
-			res = append(res, TargetResult{TargetID: op.TargetID, Name: op.TargetID, Error: "未注册的目标客户端"})
+			res = append(res, TargetResult{TargetID: op.TargetID, Name: op.TargetID, Error: "未注册的目标智能体"})
 			continue
 		}
 		info := a.Info()

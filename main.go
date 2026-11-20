@@ -47,9 +47,9 @@ type App struct {
 // appRef 供托盘回调访问 App 实例（tray_windows.go 使用）
 var appRef *App
 
-// appVersion 是桌面程序当前版本号。有新版本时由前端在「关于」中显示下载入口。
-// 上游发布最新版本与目的地址后，可在此或通过更新检查逻辑维护。
-const appVersion = "1.0.0"
+// appVersion 是桌面程序当前版本号，发布时通过
+// `wails build -ldflags "-X main.appVersion=x.y.z"` 注入。
+var appVersion = "1.2.0"
 
 func (a *App) GetStatus() map[string]any {
 	return map[string]any{

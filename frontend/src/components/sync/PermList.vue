@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { t } from '../../i18n'
 import { permModeNext } from './shared'
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 
 // 通用「权限规则胶囊列表」：每条规则一行胶囊（可编辑规则文本 + 状态控件）。
 // 两种状态控件由 pick 属性切换：
@@ -85,7 +86,7 @@ function capRowKey(row, i) {
         <input class="perm-cap-edit" :value="row.text" :placeholder="placeholder || 'Bash(npm test)'" @wheel.stop @input="onTextInput(row, $event)" />
         <span class="perm-cap-state" :class="capCls(row.mode)">{{ capWord(row.mode) }}</span>
       </template>
-      <button type="button" class="perm-cap-x" :title="t('sync.delete')" @click.stop="remove(row)"><i class="ri-close-line"></i></button>
+      <button type="button" class="perm-cap-x" :title="t('sync.delete')" @click.stop="remove(row)"><XMarkIcon class="ico" /></button>
     </div>
     <div v-if="!noAdd" class="perm-cap-row perm-cap-add">
       <input class="perm-cap-edit" v-model="input" :placeholder="placeholder || 'Bash(npm test)'" @keyup.enter="add" @wheel.stop />

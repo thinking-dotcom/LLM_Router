@@ -5,6 +5,7 @@ import { toast } from '../toast'
 import api from '../api'
 import { targetLogo } from './sync/shared'
 import { copyText } from '../utils'
+import { PhoneIcon, BookOpenIcon } from '@heroicons/vue/24/outline'
 
 // 会话管理：浏览 / 删除各 AI CLI 客户端落在本机磁盘上的历史会话记录。
 // 主体为当前客户端的会话条目表，每条会话最左侧以该客户端 logo 标识归属；
@@ -400,16 +401,16 @@ defineExpose({ loadClients, refresh, openClientDir, askClearAll })
                     role="button" tabindex="0"
                     @click.stop="openReader(it)" @keydown.enter.prevent="openReader(it)"
                   >
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+                    <BookOpenIcon class="ico" style="width:11px;height:11px;stroke-width:2.2" />
                   </span>
-                  <!-- 恢复会话：电话字体图标，置于标题左侧 -->
-                  <i
-                    class="ri-phone-line sr-logo-ico"
+                  <!-- 恢复会话：电话图标，置于标题左侧 -->
+                  <PhoneIcon
+                    class="ico sr-logo-ico"
                     :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
                     :aria-label="t('sessions.openTerminal')"
                     role="button" tabindex="0"
                     @click.stop="resumeInTerminal(it)" @keydown.enter.prevent="resumeInTerminal(it)"
-                  ></i>
+                  />
                   <span class="sr-id" :class="{ 'is-id': titleOf(it).isId }">{{ titleOf(it).text }}</span>
                 </span>
               </td>
@@ -472,7 +473,7 @@ defineExpose({ loadClients, refresh, openClientDir, askClearAll })
         :title="t('sessions.chooseClient')"
         @click="navOpen = !navOpen"
       >
-        <img src="/logos/chatbot.svg" alt="clients" draggable="false" />
+        <img src="/logos/chatbot.svg" alt="agents" draggable="false" />
       </button>
     </div>
 

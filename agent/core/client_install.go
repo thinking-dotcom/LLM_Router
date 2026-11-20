@@ -265,10 +265,10 @@ var verRe = regexp.MustCompile(`\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.]+)?`)
 func ProbeClientVersion(id string) (string, error) {
 	ci, ok := clientInstalls[id]
 	if !ok {
-		return "", errors.New("未登记该客户端的安装信息：" + id)
+		return "", errors.New("未登记该智能体的安装信息：" + id)
 	}
 	if ci.Bin == "" {
-		return "", errors.New("未登记该客户端的可执行名")
+		return "", errors.New("未登记该智能体的可执行名")
 	}
 	if lookBin(ci.Bin) == "" {
 		return "", fmt.Errorf("未在 PATH 中找到 %s，未安装或未加入 PATH", ci.Bin)
@@ -315,7 +315,7 @@ func beginOp(id string) error {
 	opMu.Lock()
 	defer opMu.Unlock()
 	if opRunning[id] {
-		return errors.New("该客户端正在安装/卸载中，请稍候")
+		return errors.New("该智能体正在安装/卸载中，请稍候")
 	}
 	opRunning[id] = true
 	return nil
@@ -330,10 +330,10 @@ func endOp(id string) {
 func installerOf(id string) (ClientInstall, error) {
 	ci, ok := clientInstalls[id]
 	if !ok {
-		return ci, errors.New("未登记该客户端的安装信息：" + id)
+		return ci, errors.New("未登记该智能体的安装信息：" + id)
 	}
 	if ci.Method == "" || (ci.Method == "npm" && ci.Pkg == "") {
-		return ci, errors.New("该客户端未登记自动安装方式（非 npm 且无官方命令登记），请按官方文档安装")
+		return ci, errors.New("该智能体未登记自动安装方式（非 npm 且无官方命令登记），请按官方文档安装")
 	}
 	return ci, nil
 }
@@ -342,10 +342,10 @@ func installerOf(id string) (ClientInstall, error) {
 func npmPkgOf(id string) (string, error) {
 	ci, ok := clientInstalls[id]
 	if !ok {
-		return "", errors.New("未登记该客户端的安装信息：" + id)
+		return "", errors.New("未登记该智能体的安装信息：" + id)
 	}
 	if ci.Pkg == "" {
-		return "", errors.New("该客户端不是通过 npm 安装的，未登记自动卸载方式，请按官方文档卸载")
+		return "", errors.New("该智能体不是通过 npm 安装的，未登记自动卸载方式，请按官方文档卸载")
 	}
 	return ci.Pkg, nil
 }
@@ -486,12 +486,12 @@ func installByCmd(ci ClientInstall, id string, update bool) (string, string, err
 	argv := ci.installArgv()
 	if update {
 		if len(ci.UpdateArgv) == 0 {
-			return "", "", errors.New("该客户端未登记自动更新命令，请按官方文档更新")
+			return "", "", errors.New("该智能体未登记自动更新命令，请按官方文档更新")
 		}
 		argv = ci.UpdateArgv
 	}
 	if len(argv) == 0 {
-		return "", "", errors.New("该客户端未登记安装命令，请按官方文档安装")
+		return "", "", errors.New("该智能体未登记安装命令，请按官方文档安装")
 	}
 	if err := beginOp(id); err != nil {
 		return "", "", err
@@ -533,11 +533,11 @@ func installByCmd(ci ClientInstall, id string, update bool) (string, string, err
 func UninstallClientCLI(id string, purge bool) (string, []string, error) {
 	ci, ok := clientInstalls[id]
 	if !ok {
-		return "", nil, errors.New("未登记该客户端的安装信息：" + id)
+		return "", nil, errors.New("未登记该智能体的安装信息：" + id)
 	}
 	paths := ci.uninstallPaths()
 	if ci.Pkg == "" && len(paths) == 0 {
-		return "", nil, errors.New("该客户端未登记自动卸载方式（非 npm 安装且不知其二进制位置），请按官方文档卸载")
+		return "", nil, errors.New("该智能体未登记自动卸载方式（非 npm 安装且不知其二进制位置），请按官方文档卸载")
 	}
 	if err := beginOp(id); err != nil {
 		return "", nil, err

@@ -22,8 +22,9 @@ function fixPaneWidth() {
   const w = Math.ceil(el.getBoundingClientRect().width)
   el.style.width = prev
   if (w > 0) {
-    // 加上 panel-body 左右内边距(22px)与边框(2px)；CSS max-width 上限仍然生效
-    pane.style.width = (w + 24) + 'px'
+    // 加上 panel-body 左右内边距(22px)与边框(2px)，并留出更宽松的余量让概览更舒展；
+    // CSS max-width 上限仍然生效
+    pane.style.width = Math.max(400, w + 72) + 'px'
     paneFixed = true
   }
 }
@@ -46,7 +47,7 @@ onMounted(() => setTimeout(fixPaneWidth, 300))
 const EP_FORMATS = [
   { key: 'openai', label: 'ep.fmtOpenai' },
   { key: 'anthropic', label: 'Anthropic' },
-  { key: 'gemini', label: 'Gemini' },
+  { key: 'gemini', label: 'Google' },
 ]
 const epFmt = ref('openai')
 
@@ -141,11 +142,14 @@ async function openAdmin(e) {
     <!-- 状态条 -->
     <div class="overview-status" :class="running ? 'on' : 'off'">
       <div class="os-ring">
-        <svg width="38" height="38" viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="none" stroke="var(--border)" stroke-width="1.5"/></svg>
-        <div class="os-dot"></div>
-        <span class="os-wave"></span>
-        <span class="os-wave w2"></span>
-        <span class="os-wave w3"></span>
+        <svg v-if="running" viewBox="0 0 38 38" fill="none" aria-hidden="true">
+          <circle cx="19" cy="19" r="16" stroke="currentColor" stroke-width="2"/>
+          <path d="M12 19.5l4.6 4.6L26 14.6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <svg v-else viewBox="0 0 38 38" fill="none" aria-hidden="true">
+          <circle cx="19" cy="19" r="16" stroke="currentColor" stroke-width="2"/>
+          <path d="M14 14l10 10M24 14L14 24" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+        </svg>
       </div>
       <div class="os-info">
         <div class="os-label">{{ t('server.status') }}</div>

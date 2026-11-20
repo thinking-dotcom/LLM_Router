@@ -5,6 +5,8 @@ import { toast } from '../toast'
 import api from '../api'
 import { delay, copyText } from '../utils'
 import { targetLogo } from './sync/shared'
+import { CheckCircleIcon, ArrowPathIcon, PlayIcon, DocumentDuplicateIcon, PencilIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { PowerIcon } from '@heroicons/vue/24/solid'
 
 // ---------- MCP ----------
 const mcps = ref([])
@@ -280,18 +282,18 @@ function rowKey(s) {
           <div class="skill-desc">{{ s.desc || s.command || s.url || '' }}</div>
         </div>
         <button class="btn btn-icon mcp-enabled-btn" :class="{ off: s.enabled === false }" :title="s.enabled === false ? t('mcp.enable') : t('mcp.disable')" @click.stop="toggleMcp(s)">
-          <i :class="s.enabled === false ? 'ri-toggle-line' : 'ri-toggle-fill'"></i>
+          <PowerIcon class="ico" />
         </button>
         <button class="btn btn-icon mcp-test-btn" :class="{ ok: mcpTestResult[s.name] === 'ok', fail: mcpTestResult[s.name] === 'fail' }" :disabled="!!mcpTesting[s.name]"
           :title="mcpTestResult[s.name] === 'ok' ? t('mcp.testOkTitle') : mcpTestResult[s.name] === 'fail' ? t('mcp.testFailTitle') : t('mcp.test')"
           @click.stop="testMcp(s)">
-          <i v-if="mcpTestResult[s.name]" class="ri-checkbox-circle-line"></i>
-          <i v-else-if="mcpTesting[s.name]" class="ri-loader-4-line ri-spin"></i>
-          <i v-else class="ri-play-line"></i>
+          <CheckCircleIcon v-if="mcpTestResult[s.name]" class="ico" />
+          <ArrowPathIcon v-else-if="mcpTesting[s.name]" class="ico spin" />
+          <PlayIcon v-else class="ico" />
         </button>
-        <button class="btn btn-icon mcp-copy-btn" :title="t('common.copy')" @click.stop="copyMcpJson(s, $event)"><i class="fa-solid fa-copy"></i></button>
-        <button class="btn btn-icon mcp-edit-btn" :title="t('common.edit')" @click.stop="openMcp(s)"><i class="ri-pencil-line"></i></button>
-        <button class="btn btn-icon mcp-del-btn" :title="t('common.delete')" @click.stop="askDelete(s)"><i class="ri-delete-bin-line"></i></button>
+        <button class="btn btn-icon mcp-copy-btn" :title="t('common.copy')" @click.stop="copyMcpJson(s, $event)"><DocumentDuplicateIcon class="ico" /></button>
+        <button class="btn btn-icon mcp-edit-btn" :title="t('common.edit')" @click.stop="openMcp(s)"><PencilIcon class="ico" /></button>
+        <button class="btn btn-icon mcp-del-btn" :title="t('common.delete')" @click.stop="askDelete(s)"><TrashIcon class="ico" /></button>
       </div>
     </div>
     <!-- 右：选中 MCP 被注入的客户端（点卡片打开其 MCP 配置文件位置） -->
@@ -368,18 +370,16 @@ function rowKey(s) {
 /* MCP 卡片图标按钮：只留图标，无边框/背景，各自语义色；测试结果圆形勾绿/红 */
 .btn-icon{width:20px;min-width:20px;padding:0;border:none;background:transparent}
 .btn-icon:hover{background:transparent;border:none;filter:brightness(1.25)}
-.btn-icon i{font-size:14px;line-height:1}
-.ri-spin{animation:ri-spin 1s linear infinite}
-@keyframes ri-spin{to{transform:rotate(360deg)}}
+.btn-icon .ico{width:14px;height:14px}
 .skill-row.disabled{opacity:.5}
-.mcp-enabled-btn i{color:#3fbf6f}       /* 启用：绿 */
-.mcp-enabled-btn.off i{color:#8a94a3}   /* 禁用：灰 */
-.mcp-test-btn i{color:#4aa3ff}          /* 测试：蓝 */
-.mcp-copy-btn i{color:#9b8cff}          /* 复制：紫 */
-.mcp-edit-btn i{color:#e0a13c}          /* 编辑：橙 */
-.mcp-del-btn i{color:#e05a5a}           /* 删除：红 */
-.mcp-test-btn.ok i{color:#3fbf6f}
-.mcp-test-btn.fail i{color:#e05a5a}
+.mcp-enabled-btn .ico{color:#3fbf6f}       /* 启用：绿 */
+.mcp-enabled-btn.off .ico{color:#8a94a3}   /* 禁用：灰 */
+.mcp-test-btn .ico{color:#4aa3ff}          /* 测试：蓝 */
+.mcp-copy-btn .ico{color:#9b8cff}          /* 复制：紫 */
+.mcp-edit-btn .ico{color:#e0a13c}          /* 编辑：橙 */
+.mcp-del-btn .ico{color:#e05a5a}           /* 删除：红 */
+.mcp-test-btn.ok .ico{color:#3fbf6f}
+.mcp-test-btn.fail .ico{color:#e05a5a}
 .mcps-right{flex:1;min-width:0;padding-left:12px;align-self:stretch}
 .mcp-right-head{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-bottom:6px}
 .mcp-right-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}

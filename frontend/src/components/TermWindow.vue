@@ -120,7 +120,7 @@ onMounted(async () => {
     // 由 xterm 按 winpty 规则解释，否则 resize 重画内容会叠层
     windowsMode: true,
     theme: {
-      background: '#0d1117',
+      background: '#000000',
       foreground: '#c9d1d9',
       cursor: '#58a6ff',
       selectionBackground: '#264f78',
@@ -198,8 +198,8 @@ function closeWin() { window.close() }
 </template>
 
 <style scoped>
-.termwin{position:fixed;inset:0;display:flex;flex-direction:column;background:#0d1117;color:#c9d1d9;font-size:13px}
-.tw-head{flex:none;display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid #21262d;background:#161b22}
+.termwin{position:fixed;inset:0;display:flex;flex-direction:column;background:#000000;color:#c9d1d9;font-size:13px}
+.tw-head{flex:none;display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid #242424;background:#0a0a0a}
 .tw-dot{flex:none;width:8px;height:8px;border-radius:50%;background:#7d8590}
 .tw-dot.live{background:#3fb950}
 .tw-dot.exit,.tw-dot.fail{background:#f85149}
@@ -209,14 +209,14 @@ function closeWin() { window.close() }
 .tw-status.warn{color:#f0883e}
 .tw-btn{
   flex:none;padding:3px 12px;cursor:pointer;font-size:12px;
-  border:1px solid #30363d;border-radius:6px;background:#21262d;color:#c9d1d9;
+  border:1px solid #242424;border-radius:6px;background:#181818;color:#c9d1d9;
   transition:border-color .15s,color .15s;
 }
 .tw-btn:hover{border-color:#58a6ff;color:#e6edf3}
 .tw-wrap{flex:1;min-height:0;padding:4px 6px;box-sizing:border-box;position:relative}
 .tw-term{width:100%;height:100%}
-.tw-mask{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(13,17,23,.72)}
-.tw-mask-box{max-width:80%;padding:18px 24px;border:1px solid #30363d;border-radius:10px;background:#161b22;text-align:center}
+.tw-mask{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.75)}
+.tw-mask-box{max-width:80%;padding:18px 24px;border:1px solid #242424;border-radius:10px;background:#0a0a0a;text-align:center}
 .tw-mask-title{font-weight:600;color:#f85149;margin-bottom:8px}
 .tw-mask-err{color:#7d8590;line-height:1.6;word-break:break-word}
 </style>

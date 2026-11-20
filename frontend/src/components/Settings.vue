@@ -1,10 +1,12 @@
 <script setup>
 import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { state, ui, refresh, applyTheme } from '../store'
+import { state, ui, refresh, applyTheme, applyFontScale } from '../store'
 import { t, i18nState, setLanguage } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
 import { placePopup } from '../utils'
+import { LockClosedIcon } from '@heroicons/vue/24/outline'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 
 const providers = computed(() => state.config?.providers || [])
 
@@ -36,7 +38,11 @@ const reasoningOptions = ['none', 'low', 'medium', 'high', 'max']
 const openGroups = reactive({ system: false, appearance: false, about: false })
 
 // 关于信息（程序名 / 当前版本 / 更新信息）
-const appInfo = ref({ name: '', version: '', latestVersion: '', downloadURL: '', updateAvailable: false })
+const appInfo = ref({ name: '', version: '', latestVersion: '', downloadURL: '', releaseURL: '', notes: '', updateAvailable: false })
+const updateChecking = ref(false)
+const updateBusy = ref(false)
+const updatePercent = ref(0)
+const updatePhase = ref('') // '' | 'download' | 'install'
 
 // 兜底下拉
 const ddOpen = ref(false)
@@ -45,9 +51,7 @@ const ddBtnEl = ref(null)
 
 const defLabelText = computed(() => {
   const defLabel = providers.value.find(p => p.id === defaultProvider.value)
-  return defLabel
-    ? (defLabel.enabled === false ? `${defLabel.name}（${t('prov.disabled')}）` : defLabel.name)
-    : t('set.none')
+  return defLabel ? defLabel.name : t('set.none')
 })
 // 候选模型：已入选的不再出现在下拉里
 const fbFilter = ref('')
@@ -115,12 +119,20 @@ onMounted(() => {
     api.GetTrayEnabled().then(v => { tray.value = !!v }).catch(() => {})
   }
   if (api.GetAppInfo) {
-    api.GetAppInfo().then(v => { if (v) appInfo.value = { ...appInfo.value, ...v } }).catch(() => {})
+    api.GetAppInfo().then(v => {
+      if (v) appInfo.value = { ...appInfo.value, name: v.name || appInfo.value.name, version: v.version || appInfo.value.version }
+    }).catch(() => {})
   }
   loadRouterModels()
+  // 启动后自动检查更新；发现新版本时自动弹出设置面板并展开「关于」
+  checkUpdate(true)
+  EventsOn('app:update:progress', onUpdateProgress)
   document.addEventListener('click', onDocClick)
 })
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+onUnmounted(() => {
+  EventsOff('app:update:progress')
+  document.removeEventListener('click', onDocClick)
+})
 
 // 兜底下拉
 function toggleDefaultMenu() {
@@ -149,6 +161,14 @@ function onDocClick(e) {
   ddOpen.value = false
 }
 
+// 字体大小档位（整体缩放，立即生效并持久化）
+const fontScaleOptions = [
+  { v: 0.9, key: 'set.fsSmall' },
+  { v: 1, key: 'set.fsNormal' },
+  { v: 1.1, key: 'set.fsLarge' },
+  { v: 1.2, key: 'set.fsXL' },
+]
+
 // 主题 / 语言
 function setTheme(theme) {
   applyTheme(theme)
@@ -159,9 +179,65 @@ function chooseLang(lang) {
   setLanguage(lang)
 }
 
-// 点击下载入口：跳转到目的下载地址（为空时不做任何事）
-async function openDownload() {
+// 检查更新：autoOpen=true 时（启动检查）发现新版自动弹出设置面板并展开「关于」
+async function checkUpdate(autoOpen = false) {
+  if (updateChecking.value || !api.CheckAppUpdate) return
+  updateChecking.value = true
+  try {
+    const r = await api.CheckAppUpdate()
+    if (r && r.ok) {
+      appInfo.value = { ...appInfo.value, ...r, version: r.currentVersion || appInfo.value.version }
+      if (autoOpen && r.updateAvailable) {
+        openGroups.about = true
+        ui.settingsPanel.open = true
+      }
+    } else if (!autoOpen) {
+      toast(t('set.checkFailed', { msg: r?.error || '?' }))
+    }
+  } catch (e) {
+    if (!autoOpen) toast(t('set.checkFailed', { msg: e?.message || '?' }))
+  } finally {
+    updateChecking.value = false
+  }
+}
+
+function onUpdateProgress(p) {
+  if (!updateBusy.value) return
+  const pct = Number(p?.percent)
+  updatePhase.value = 'download'
+  if (Number.isFinite(pct) && pct >= 0) updatePercent.value = Math.min(100, pct)
+  else if (p?.total > 0) updatePercent.value = Math.min(100, Math.round((p.received / p.total) * 100))
+}
+
+// 下载并安装更新：下载完成后由后端替换 exe 并自动重启
+async function installUpdate() {
+  if (updateBusy.value) return
   const url = (appInfo.value.downloadURL || '').trim()
+  if (!url) { toast(t('set.updateNoAsset')); return }
+  updateBusy.value = true
+  updatePhase.value = 'download'
+  updatePercent.value = 0
+  try {
+    const r = await api.DownloadAndInstallUpdate(url)
+    if (!r || r.ok === false) {
+      updateBusy.value = false
+      updatePhase.value = ''
+      toast(t('set.updateFailed', { msg: r?.error || '?' }))
+      return
+    }
+    updatePhase.value = 'install'
+    updatePercent.value = 100
+    toast(t('set.updateRestart'))
+  } catch (e) {
+    updateBusy.value = false
+    updatePhase.value = ''
+    toast(t('set.updateFailed', { msg: e?.message || '?' }))
+  }
+}
+
+// 打开 Release 页面（浏览器下载）
+async function openReleasePage() {
+  const url = (appInfo.value.releaseURL || appInfo.value.downloadURL || '').trim()
   if (!url) return
   try {
     const r = await api.OpenURL(url)
@@ -170,9 +246,6 @@ async function openDownload() {
     window.runtime?.BrowserOpenURL(url)
   }
 }
-
-// 是否有更新可下载（latestVersion 非空且给了下载地址）
-const updateReady = computed(() => !!appInfo.value.latestVersion && !!appInfo.value.downloadURL)
 
 // 开机自启 / 托盘常驻：切换即时生效，失败回滚开关状态
 async function toggleAutoStart(checked) {
@@ -255,13 +328,13 @@ async function save() {
             </div>
           </div>
           <div class="field">
-            <label>{{ t('set.reasoning') }}<span class="hint">{{ t('set.reasoningHint') }}</span></label>
+            <label>{{ t('set.reasoning') }}</label>
             <div class="theme-options">
               <button v-for="opt in reasoningOptions" :key="opt" class="theme-opt" :class="{ active: reasoningDepth === opt }" type="button" @click="reasoningDepth = opt">{{ t('set.rz_' + opt) }}</button>
             </div>
           </div>
           <div class="field">
-            <label>{{ t('set.headerRules') }}<span class="hint">{{ t('set.headerRulesHint') }}</span></label>
+            <label>{{ t('set.headerRules') }}</label>
             <div class="hr-table">
               <div class="hr-tr hr-head">
                 <span>{{ t('set.headerName') }}</span>
@@ -274,12 +347,12 @@ async function save() {
                 <span class="hr-mono">{{ b.name }}</span>
                 <span class="hr-desc">{{ t(b.descKey) }}</span>
                 <span>{{ t('set.autoGateway') }}</span>
-                <span class="hr-lock"><i class="ri-lock-line"></i></span>
+                <span class="hr-lock"><LockClosedIcon class="ico" /></span>
               </div>
               <div v-for="(r, i) in headerRules" :key="i" class="hr-tr">
                 <input v-model="r.name" :placeholder="t('set.headerNamePh')" spellcheck="false" autocomplete="off">
                 <input v-model="r.value" class="hr-mono" :placeholder="t('set.headerValuePh')" spellcheck="false" autocomplete="off">
-                <select v-model="r.provider" :title="t('set.headerRulesHint')">
+                <select v-model="r.provider">
                   <option value="">{{ t('set.allProviders') }}</option>
                   <option v-for="p in providers" :key="p.id || p.name" :value="p.name">{{ p.name }}</option>
                 </select>
@@ -289,7 +362,7 @@ async function save() {
             <button class="dd-btn fb-add" style="margin-top:6px" type="button" @click="addHeaderRule">+ {{ t('set.headerRuleAdd') }}</button>
           </div>
           <div class="field">
-            <label>{{ t('set.token') }}<span class="hint">{{ t('set.tokenHint') }}</span></label>
+            <label>{{ t('set.token') }}</label>
             <div class="field-key" :class="{ revealed: tokenRevealed }">
               <input v-model="authToken" :type="tokenRevealed ? 'text' : 'password'" autocomplete="off">
               <button class="eye-btn" type="button" @click="tokenRevealed = !tokenRevealed">
@@ -299,11 +372,11 @@ async function save() {
             </div>
           </div>
           <div class="field-row toggle-row">
-            <div class="field"><label>{{ t('set.autoStart') }}<span class="hint">{{ t('set.autoStartHint') }}</span></label></div>
+            <div class="field"><label>{{ t('set.autoStart') }}</label></div>
             <label class="toggle"><input type="checkbox" v-model="autoStart" @change="toggleAutoStart(autoStart)"><span class="slider"></span></label>
           </div>
           <div class="field-row toggle-row">
-            <div class="field"><label>{{ t('set.tray') }}<span class="hint">{{ t('set.trayHint') }}</span></label></div>
+            <div class="field"><label>{{ t('set.tray') }}</label></div>
             <label class="toggle"><input type="checkbox" v-model="tray" @change="toggleTray(tray)"><span class="slider"></span></label>
           </div>
           <button class="btn btn-green" style="width:100%;margin-top:2px" @click="save">{{ t('set.save') }}</button>
@@ -320,7 +393,7 @@ async function save() {
       <div class="set-group-body">
         <div class="set-group-inner">
           <div class="field">
-            <label>{{ t('set.theme') }}<span class="hint">{{ t('set.themeHint') }}</span></label>
+            <label>{{ t('set.theme') }}</label>
             <div class="theme-options">
               <button class="theme-opt" :class="{ active: ui.theme === 'dark' }" type="button" @click="setTheme('dark')">{{ t('set.dark') }}</button>
               <button class="theme-opt" :class="{ active: ui.theme === 'light' }" type="button" @click="setTheme('light')">{{ t('set.light') }}</button>
@@ -331,6 +404,12 @@ async function save() {
             <div class="theme-options">
               <button class="theme-opt t-lang" :class="{ active: i18nState.lang === 'zh' }" type="button" @click="chooseLang('zh')">{{ t('set.zh') }}</button>
               <button class="theme-opt t-lang" :class="{ active: i18nState.lang === 'en' }" type="button" @click="chooseLang('en')">{{ t('set.en') }}</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>{{ t('set.fontSize') }}</label>
+            <div class="theme-options">
+              <button v-for="o in fontScaleOptions" :key="o.v" class="theme-opt" :class="{ active: ui.fontScale === o.v }" type="button" @click="applyFontScale(o.v)">{{ t(o.key) }}</button>
             </div>
           </div>
         </div>
@@ -349,9 +428,25 @@ async function save() {
           <div class="about-row">
             <span class="about-label">{{ t('set.currentVersion') }}</span>
             <span class="about-version">{{ appInfo.version || '—' }}</span>
-            <span v-if="updateReady" class="about-update" @click="openDownload" :title="t('set.download')">{{ appInfo.latestVersion }} <i class="ri-arrow-down-line"></i></span>
+            <button type="button" class="btn btn-xs about-check" :disabled="updateChecking" @click="checkUpdate(false)">
+              {{ updateChecking ? t('set.checking') : t('set.checkUpdate') }}
+            </button>
           </div>
-          <div v-if="appInfo.updateAvailable && !updateReady" class="about-new">{{ t('set.newVersion') }}: {{ appInfo.latestVersion }}</div>
+          <div v-if="appInfo.updateAvailable" class="about-update-box">
+            <div class="aub-title">{{ t('set.updateFound') }} <b>v{{ appInfo.latestVersion }}</b></div>
+            <div v-if="appInfo.notes" class="aub-notes">{{ appInfo.notes }}</div>
+            <div class="aub-actions">
+              <button type="button" class="btn btn-xs btn-primary" :disabled="updateBusy || !appInfo.downloadURL" @click="installUpdate">
+                {{ updateBusy ? t('set.updating') : t('set.updateInstall') }}
+              </button>
+              <button type="button" class="btn btn-xs" @click="openReleasePage">{{ t('set.updateOpenPage') }}</button>
+            </div>
+            <div v-if="updateBusy" class="aub-progress"><div class="aub-bar" :style="{ width: updatePercent + '%' }"></div></div>
+            <div v-if="updateBusy" class="aub-status">
+              {{ updatePhase === 'install' ? t('set.updateInstalling') : t('set.updateDownloading', { pct: updatePercent }) }}
+            </div>
+          </div>
+          <div v-else-if="appInfo.latestVersion" class="about-new">{{ t('set.upToDate') }}</div>
         </div>
       </div>
     </div>

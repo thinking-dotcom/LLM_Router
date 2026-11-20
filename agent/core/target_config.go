@@ -14,7 +14,7 @@ import (
 func GetTargetConfig(targetID string) (content string, exists bool, filePath string, errMsg string) {
 	a, ok := registry[targetID]
 	if !ok {
-		return "", false, "", "未注册的目标客户端"
+		return "", false, "", "未注册的目标智能体"
 	}
 	info := a.Info()
 	fp := info.ConfigFile
@@ -22,7 +22,7 @@ func GetTargetConfig(targetID string) (content string, exists bool, filePath str
 		fp = info.McpFile
 	}
 	if fp == "" {
-		return "", false, "", "该客户端暂无可编辑的配置文件路径"
+		return "", false, "", "该智能体暂无可编辑的配置文件路径"
 	}
 	b, err := os.ReadFile(fp)
 	if err != nil {
@@ -47,18 +47,18 @@ func GetTargetConfig(targetID string) (content string, exists bool, filePath str
 func SaveTargetConfig(targetID, content string) string {
 	a, ok := registry[targetID]
 	if !ok {
-		return "未注册的目标客户端"
+		return "未注册的目标智能体"
 	}
 	info := a.Info()
 	if info.Placeholder {
-		return "该客户端尚未接入（占位），暂不支持编辑"
+		return "该智能体尚未接入（占位），暂不支持编辑"
 	}
 	fp := info.ConfigFile
 	if fp == "" {
 		fp = info.McpFile
 	}
 	if fp == "" {
-		return "该客户端暂无可编辑的配置文件路径"
+		return "该智能体暂无可编辑的配置文件路径"
 	}
 	muCfgFile.Lock()
 	defer muCfgFile.Unlock()

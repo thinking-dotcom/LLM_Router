@@ -44,7 +44,7 @@ func removeMcpJSONFile(path, serverName string) error {
 	b, rerr := os.ReadFile(path)
 	if rerr != nil {
 		if os.IsNotExist(rerr) {
-			return errors.New("该客户端的 MCP 配置文件不存在")
+			return errors.New("该智能体的 MCP 配置文件不存在")
 		}
 		return rerr
 	}
@@ -66,7 +66,7 @@ func removeMcpJSONFile(path, serverName string) error {
 		}
 		doc = strict
 	}
-	var errNotInFile = errors.New("该客户端配置中没有此服务")
+	var errNotInFile = errors.New("该智能体配置中没有此服务")
 	for _, key := range []string{"mcpServers", "mcp"} {
 		if _, ok := top[key]; !ok {
 			continue
