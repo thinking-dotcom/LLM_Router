@@ -127,8 +127,9 @@ func saveInjectedSkillNames(skillsDir string, names map[string]bool) error {
 	return writeFileAtomic(filepath.Join(skillsDir, skillsInjectedMarker), append(b, '\n'), 0o644)
 }
 
-// injectSkills 是注入 skills 的通用实现：把每个 data/skills/<name> 复制到
-// 目标的 skills 目录下。
+// injectSkills 是注入 skills 的通用实现：目录型技能用目录联接/junction 指向
+// data/skills 源目录（源改动实时生效、零复制）；根目录散放的单文件 .md 技能
+// 仍复制为 <技能名>.md（junction 不能链接单文件）。
 func injectSkills(skillsDir string, skills []Skill) error {
 	if skillsDir == "" {
 		return nil
@@ -147,14 +148,18 @@ func injectSkills(skillsDir string, skills []Skill) error {
 		if statErr != nil && os.IsNotExist(statErr) {
 			continue
 		}
-		// 单文件技能（根目录散放的 .md）目标写成 <技能名>.md 保留扩展名；
-		// 目录型技能仍复制为同名子目录
+		// 单文件技能（根目录散放的 .md）目标写成 <技能名>.md 保留扩展名并复制；
+		// 目录型技能改为创建指向源目录的链接
 		dst := filepath.Join(skillsDir, s.Name)
 		if statErr == nil && fi.Mode().IsRegular() {
 			dst += ".md"
-		}
-		if err := copyDirRecursive(src, dst); err != nil {
-			return err
+			if err := copyDirRecursive(src, dst); err != nil {
+				return err
+			}
+		} else {
+			if err := createDirLink(src, dst); err != nil {
+				return err
+			}
 		}
 		injected = append(injected, s.Name)
 	}
@@ -194,10 +199,10 @@ func undoSkills(skillsDir string) error {
 			if !validSkillName(s.Name) {
 				continue
 			}
-			if err := removeIfExists(filepath.Join(skillsDir, s.Name)); err != nil {
+			if err := removeDirLink(filepath.Join(skillsDir, s.Name)); err != nil {
 				return err
 			}
-			if err := removeIfExists(filepath.Join(skillsDir, s.Name+".md")); err != nil {
+			if err := removeDirLink(filepath.Join(skillsDir, s.Name+".md")); err != nil {
 				return err
 			}
 		}
@@ -208,10 +213,10 @@ func undoSkills(skillsDir string) error {
 		if !validSkillName(n) {
 			continue
 		}
-		if err := removeIfExists(filepath.Join(skillsDir, n)); err != nil {
+		if err := removeDirLink(filepath.Join(skillsDir, n)); err != nil {
 			return err
 		}
-		if err := removeIfExists(filepath.Join(skillsDir, n+".md")); err != nil {
+		if err := removeDirLink(filepath.Join(skillsDir, n+".md")); err != nil {
 			return err
 		}
 	}
@@ -286,6 +291,16 @@ func mcpServerToAny(s MCPServer) map[string]any {
 		m = map[string]any{"type": "http", "url": s.URL}
 	default: // sse
 		m = map[string]any{"type": "sse", "url": s.URL}
+	}
+	// 保留用户自定义键（env/headers/transport 等），否则注入后配置残缺
+	for k, v := range s.Extra {
+		if mcpManagedKeys[k] {
+			continue
+		}
+		var val any
+		if json.Unmarshal(v, &val) == nil {
+			m[k] = val
+		}
 	}
 	return m
 }

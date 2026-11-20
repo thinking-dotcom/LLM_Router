@@ -159,8 +159,7 @@ func SyncTargets(ops []TargetOp, routerBase string) []TargetResult {
 			} else {
 				skills := ListSkills()
 				r.InjectedSkills = len(skills)
-				_, servers := GetMcps()
-				r.InjectedMcp = len(servers)
+				r.InjectedMcp = len(EnabledMcps())
 			}
 		}
 		res = append(res, r)
@@ -177,7 +176,8 @@ func injectTarget(a TargetAdapter, routerBase string) error {
 		}
 	}
 	if info.McpSupported {
-		_, servers := GetMcps()
+		// 仅注入启用状态的 MCP 服务（禁用项跳过）
+		servers := EnabledMcps()
 		// 无 MCP 服务时跳过注入：TOML/YAML 注入器把空列表当「全量清除」，
 		// 注入路径不得清空用户自有的 MCP 配置（与 JSON 合并语义一致）
 		if len(servers) > 0 {
@@ -212,7 +212,7 @@ func SyncMcpMapping(targetIDs []string, serverNames []string, routerBase string)
 	for _, n := range serverNames {
 		wantServer[n] = true
 	}
-	_, servers := GetMcps()
+	servers := EnabledMcps()
 	filtered := make([]MCPServer, 0, len(servers))
 	for _, s := range servers {
 		if wantServer[s.Name] {

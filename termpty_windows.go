@@ -26,6 +26,7 @@ type termProcess struct {
 	pumpDone chan struct{} // 输出泵结束（管道断开），保证 onExit 晚于最后一块输出
 	exited   atomic.Bool   // waiter 置位；stop 据此决定是否还需要 TerminateProcess
 	stopOnce sync.Once
+	mu       sync.Mutex // 保证 TerminateProcess 不与 proc 的 CloseHandle 交叉
 }
 
 // envBlock 把 k=v 列表编成 winpty_spawn 需要的 UTF-16 环境块（双 \0 结尾）。
@@ -93,8 +94,10 @@ func (t *termProcess) waiter(onExit func(int)) {
 	_ = windows.GetExitCodeProcess(t.proc, &code)
 	t.s.close()
 	<-t.pumpDone
+	t.mu.Lock()
 	t.exited.Store(true)
 	windows.CloseHandle(t.proc)
+	t.mu.Unlock()
 	onExit(int(int32(code)))
 }
 
@@ -106,6 +109,8 @@ func (t *termProcess) resize(cols, rows uint16) error { return t.s.resize(cols, 
 // 失去控制台后大多自行退出，不做进程树遍历（与关闭外部终端窗口等价）；
 // WINPTY_SPAWN_FLAG_AUTO_SHUTDOWN 让 agent 随之收尾。
 func (t *termProcess) stop() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if t.exited.Load() {
 		return
 	}

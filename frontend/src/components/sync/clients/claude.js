@@ -31,7 +31,7 @@ export function normalizeClaudeEnvModels() {
     const mc = getPath(cfgObj.value, 'modelContext') || {}
     const rows = []
     for (const [k, v] of Object.entries(env)) {
-      if (!/^ANTHROPIC_.*MODEL$/.test(k)) continue
+      if (!/^ANTHROPIC_.*MODEL(?:_\d+)?$/.test(k)) continue
       const mid = String(v)
       rows.push({ envKey: k, modelId: mid, contextWindow: String(mc?.[mid]?.contextWindow ?? '') })
     }
@@ -43,7 +43,7 @@ export function syncClaudeEnvModelsToObj() {
   const env = { ...(getPath(cfgObj.value, 'env') || {}) }
   // 先移除面板管理的旧 env 键，再按当前行重写，保证删除行真正生效
   for (const k of Object.keys(env)) {
-    if (/^ANTHROPIC_.*MODEL$/.test(k)) delete env[k]
+    if (/^ANTHROPIC_.*MODEL(?:_\d+)?$/.test(k)) delete env[k]
   }
   const activeModels = new Set()
   const curCtx = getPath(cfgObj.value, 'modelContext')

@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -24,23 +23,13 @@ const (
 	seErrNoAssoc   = 31
 )
 
-// spawnTermWindow 用系统 cmd 打开终端窗口执行命令，并请求管理员权限。
-//
-// 已不再是默认路径：Git Bash 可用时客户端/会话启动走内嵌终端窗口
-// （spawnClientTermWindow → termwindow.go），此处保留为找不到 Git Bash
-// 或内嵌启动失败时的兜底。通过 ShellExecuteW 的 "runas" 动词启动 cmd.exe
-// 触发 UAC；用户在提权确认框点「否」时返回可读错误，由调用方提示。
-func spawnTermWindow(cwd, innerCmdline, title string) error {
-	params := buildTermCmdLine(cwd, innerCmdline, title)
-	if params == "" {
-		return fmt.Errorf("空命令，无法启动终端")
-	}
-
-	verb, err := syscall.UTF16PtrFromString("runas")
+// shellExecute 以给定动词启动可执行文件（ShellExecuteW），供系统终端统一使用。
+func shellExecute(exe, verbName, params, cwd string) error {
+	verb, err := syscall.UTF16PtrFromString(verbName)
 	if err != nil {
 		return err
 	}
-	file, err := syscall.UTF16PtrFromString("cmd.exe")
+	file, err := syscall.UTF16PtrFromString(exe)
 	if err != nil {
 		return err
 	}
@@ -54,7 +43,6 @@ func spawnTermWindow(cwd, innerCmdline, title string) error {
 			return err
 		}
 	}
-
 	ret, _, _ := procShellExecuteW.Call(
 		0,
 		uintptr(unsafe.Pointer(verb)),
@@ -67,6 +55,15 @@ func spawnTermWindow(cwd, innerCmdline, title string) error {
 		return fmt.Errorf("启动终端失败：%s", shellExecErrText(ret))
 	}
 	return nil
+}
+
+// spawnTermWindow 用系统 cmd 打开终端窗口执行命令，并请求管理员权限。
+func spawnTermWindow(cwd, innerCmdline, title string) error {
+	params := buildTermCmdLine(cwd, innerCmdline, title)
+	if params == "" {
+		return fmt.Errorf("空命令，无法启动终端")
+	}
+	return shellExecute("cmd.exe", "runas", params, cwd)
 }
 
 // shellExecErrText 把 ShellExecuteW 的失败码翻成可读文案。
@@ -83,19 +80,8 @@ func shellExecErrText(code uintptr) string {
 	}
 }
 
-// spawnClientTermWindow 启动一个执行 tokens 命令的终端（内嵌优先）：
-// 找到 Git Bash 就拉起自身 --term 内嵌实例（winpty + bash --login -i），
-// 未找到 Git Bash 或内嵌实例启动失败时回退系统 cmd 外部窗口。返回 nil = 已启动。
+// spawnClientTermWindow 启动一个执行 tokens 命令的系统终端（自动检测到的首个）。
+// 旧调用（会话恢复等）保持兼容；需要用户选择的路径走 launchInSystemTerminal。
 func spawnClientTermWindow(cwd string, tokens []string, title string) error {
-	if len(tokens) == 0 || strings.TrimSpace(tokens[0]) == "" {
-		return fmt.Errorf("空命令，无法启动终端")
-	}
-	if bashExe, err := findGitBash(); err == nil {
-		if err := spawnTermInstance(bashExe, cwd, title, tokens); err == nil {
-			return nil
-		} else {
-			log.Printf("[TERM] 内嵌终端实例启动失败，回退外部 cmd：%v", err)
-		}
-	}
-	return spawnTermWindow(cwd, winCmdline(tokens), title)
+	return launchInDefaultTerminal(cwd, tokens, title)
 }

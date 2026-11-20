@@ -129,7 +129,7 @@ onUnmounted(() => {
         <div v-show="activeRight === 'logs'" class="right-content p-logs">
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button class="btn btn-xs" @click="ui.clearLogsDialog.open = true">{{ t('logs.clear') }}</button>
+              <button class="btn btn-xs btn-ico log-tool-btn" :title="t('logs.clear')" :aria-label="t('logs.clear')" @click="ui.clearLogsDialog.open = true"><i class="ri-delete-bin-line"></i></button>
             </div>
           </div>
           <div class="panel-body"><Logs /></div>
@@ -139,7 +139,7 @@ onUnmounted(() => {
         <div v-show="activeRight === 'providers'" class="right-content p-providers">
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button class="btn btn-xs p-title-btn p-btn-add" @click="addProvider">+ {{ t('common.add') }}</button>
+              <button class="btn btn-xs btn-ico p-title-btn p-btn-add prov-tool-btn" :title="t('prov.add')" :aria-label="t('prov.add')" @click="addProvider"><i class="ri-add-circle-line"></i></button>
             </div>
           </div>
           <div class="panel-body"><Providers ref="providersRef" /></div>
@@ -149,12 +149,13 @@ onUnmounted(() => {
         <div v-show="activeRight === 'skills'" class="right-content p-skills">
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <!-- 工具条只留文字按钮（图标已移除，语义靠 title/aria-label 兜底） -->
-              <button class="btn btn-xs" :title="skillsRef?.skillsDir" :aria-label="t('skills.dir')" @click="skillsRef?.openDir()">{{ t('skills.dir') }}</button>
-              <button class="btn btn-xs" :title="t('skills.refresh')" :aria-label="t('skills.refresh')" @click="skillsRef?.loadSkills()">{{ t('skills.refresh') }}</button>
-              <button class="btn btn-xs" :disabled="skillsRef?.syncing" :title="t('skills.injectAllTip')" :aria-label="t('skills.injectAll')" @click="skillsRef?.injectAll()">{{ t('skills.injectAll') }}</button>
-              <button class="btn btn-xs" :disabled="skillsRef?.syncing" :title="t('skills.ejectAllTip')" :aria-label="t('skills.ejectAll')" @click="skillsRef?.ejectAll()">{{ t('skills.ejectAll') }}</button>
-              <button class="btn btn-xs p-btn-add" @click="skillsRef?.openSkill()">{{ t('common.new') }}</button>
+              <!-- 技能工具条：统一图标按钮，语义靠 title/aria-label 兜底 -->
+              <button class="btn btn-xs btn-ico skill-tool-btn s-dir" :title="t('skills.dir')" :aria-label="t('skills.dir')" @click="skillsRef?.openDir()"><i class="ri-folder-open-line"></i></button>
+              <button class="btn btn-xs btn-ico skill-tool-btn s-refresh" :title="t('skills.refresh')" :aria-label="t('skills.refresh')" @click="skillsRef?.loadSkills()"><i class="ri-refresh-line"></i></button>
+              <button class="btn btn-xs btn-ico skill-tool-btn s-inject" :disabled="skillsRef?.syncing" :title="t('skills.injectAllTip')" :aria-label="t('skills.injectAll')" @click="skillsRef?.injectAll()"><i class="ri-login-box-line"></i></button>
+              <button class="btn btn-xs btn-ico skill-tool-btn s-eject" :disabled="skillsRef?.syncing" :title="t('skills.ejectAllTip')" :aria-label="t('skills.ejectAll')" @click="skillsRef?.ejectAll()"><i class="ri-logout-box-line"></i></button>
+              <button class="btn btn-xs btn-ico skill-tool-btn s-delete" :disabled="skillsRef?.deletingAll" :title="t('skills.deleteAll')" :aria-label="t('skills.deleteAll')" @click="skillsRef?.askDeleteAll()"><i class="ri-delete-bin-line"></i></button>
+              <button class="btn btn-xs btn-ico skill-tool-btn s-add" :title="t('skills.newSkill')" :aria-label="t('skills.newSkill')" @click="skillsRef?.openSkill()"><i class="ri-add-circle-line"></i></button>
             </div>
           </div>
           <div class="panel-body"><Skills ref="skillsRef" /></div>
@@ -164,11 +165,13 @@ onUnmounted(() => {
         <div v-show="activeRight === 'mcps'" class="right-content p-mcps">
           <div class="page-head">
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <!-- 工具条只留文字按钮（图标已移除，语义靠 title/aria-label 兜底） -->
-              <button class="btn btn-xs" :title="mcpsRef?.mcpDir" :aria-label="t('mcp.dir')" @click="mcpsRef?.openDir()">{{ t('mcp.dir') }}</button>
-              <button class="btn btn-xs" :title="t('mcp.ejectAllTip')" @click="mcpsRef?.ejectAll()">{{ t('mcp.ejectAll') }}</button>
-              <button class="btn btn-xs" :title="t('mcp.mappingAllTip')" @click="mcpsRef?.injectAll()">{{ t('mcp.mapping') }}</button>
-              <button class="btn btn-xs p-btn-add" @click="mcpsRef?.openMcp()">{{ t('common.add') }}</button>
+              <!-- MCP 工具条：统一图标按钮，语义靠 title/aria-label 兜底 -->
+              <button class="btn btn-xs btn-ico mcp-tool-btn t-dir" :title="t('mcp.dir')" :aria-label="t('mcp.dir')" @click="mcpsRef?.openDir()"><i class="ri-folder-open-line"></i></button>
+              <button class="btn btn-xs btn-ico mcp-tool-btn t-refresh" :title="t('mcp.refresh')" :aria-label="t('mcp.refresh')" @click="mcpsRef?.loadMcps()"><i class="ri-refresh-line"></i></button>
+              <button class="btn btn-xs btn-ico mcp-tool-btn t-test" :title="t('mcp.testAll')" :aria-label="t('mcp.testAll')" :disabled="!!mcpsRef?.testingAll" @click="mcpsRef?.testAll()"><i class="ri-test-tube-line" :class="{ 'ri-spin': !!mcpsRef?.testingAll }"></i></button>
+              <button class="btn btn-xs btn-ico mcp-tool-btn t-eject" :title="t('mcp.ejectAllTip')" :aria-label="t('mcp.ejectAll')" @click="mcpsRef?.ejectAll()"><i class="ri-logout-box-line"></i></button>
+              <button class="btn btn-xs btn-ico mcp-tool-btn t-inject" :title="t('mcp.mappingAllTip')" :aria-label="t('mcp.mapping')" @click="mcpsRef?.injectAll()"><i class="ri-login-box-line"></i></button>
+              <button class="btn btn-xs btn-ico mcp-tool-btn t-add" :title="t('mcp.add')" :aria-label="t('mcp.add')" @click="mcpsRef?.openMcp()"><i class="ri-add-circle-line"></i></button>
             </div>
           </div>
           <div class="panel-body"><Mcps ref="mcpsRef" /></div>
@@ -178,12 +181,11 @@ onUnmounted(() => {
         <div v-show="activeRight === 'sync'" class="right-content p-sync">
         <div class="page-head">
           <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-            <button class="btn btn-xs" :class="{ 'p-btn-add': clientsOutdated > 0 }"
+            <button class="btn btn-xs btn-ico sync-update-btn" :class="{ 'p-btn-add': clientsOutdated > 0, busy: clientsUpdatingAll }"
               :disabled="!clientsOutdated || clientsUpdatingAll" :title="t('sync.cli.updateAllTip')"
               @click="clientsRef?.cliUpdateAll()">
-              <i class="fa-solid fa-arrow-up-from-bracket"></i>
-              {{ clientsUpdatingAll ? t('sync.cli.updatingAll') : t('sync.cli.updateAll') }}
-              <template v-if="clientsOutdated && !clientsUpdatingAll">({{ clientsOutdated }})</template>
+              <i class="ri-upload-cloud-2-line" :class="{ 'ri-spin': clientsUpdatingAll }"></i>
+              <span v-if="clientsOutdated && !clientsUpdatingAll" class="sync-update-count">{{ clientsOutdated }}</span>
             </button>
           </div>
         </div>
@@ -210,9 +212,9 @@ onUnmounted(() => {
             <!-- 工具条只留图标（语义放 title/aria-label）：打开会话目录、一键清空、刷新
                  （单条删除在每行行尾垃圾桶图标，见 Sessions.vue 的 .sr-del） -->
             <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-              <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.openDirTip')" :aria-label="t('sessions.openDir')" @click="sessionsRef?.openClientDir()"><i class="fa-solid fa-folder-open"></i></button>
-              <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.clearAllTip')" :aria-label="t('sessions.clearAll')" @click="sessionsRef?.askClearAll()"><i class="fa-solid fa-trash-can"></i></button>
-              <button class="btn btn-xs btn-ghost btn-ico" :title="t('sessions.refresh')" :aria-label="t('sessions.refresh')" @click="sessionsRef?.refresh()"><i class="fa-solid fa-rotate-right"></i></button>
+              <button class="btn btn-xs btn-ghost btn-ico sess-tool-btn ss-dir" :title="t('sessions.openDirTip')" :aria-label="t('sessions.openDir')" @click="sessionsRef?.openClientDir()"><i class="ri-folder-open-line"></i></button>
+              <button class="btn btn-xs btn-ghost btn-ico sess-tool-btn ss-clear" :title="t('sessions.clearAllTip')" :aria-label="t('sessions.clearAll')" @click="sessionsRef?.askClearAll()"><i class="ri-delete-bin-line"></i></button>
+              <button class="btn btn-xs btn-ghost btn-ico sess-tool-btn ss-refresh" :title="t('sessions.refresh')" :aria-label="t('sessions.refresh')" @click="sessionsRef?.refresh()"><i class="ri-refresh-line"></i></button>
             </div>
           </div>
           <div class="panel-body"><Sessions ref="sessionsRef" /></div>

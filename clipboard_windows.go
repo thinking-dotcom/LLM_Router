@@ -3,6 +3,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 	"time"
 	"unsafe"
@@ -42,6 +43,10 @@ type dropFiles struct {
 // （被其它进程长期占用等，罕见），调用方退回 powershell 兜底；剪贴板为空属
 // 正常情况，返回 ("", true)。
 func clipboardTextWin() (text string, ok bool) {
+	// Win32 剪贴板 API 线程亲和：Open/Get/Close 必须在同一线程。
+	// 重试含 Sleep，goroutine 会被调度到其它线程，不锁线程会随机打开失败。
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	opened := false
 	for i := 0; i < 10; i++ {
 		if r, _, _ := procOpenClipboard.Call(uintptr(0)); r != 0 {

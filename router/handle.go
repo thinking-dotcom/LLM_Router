@@ -613,25 +613,10 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 	}
 	// 别名 → 真实模型名。此处提前解析，供同型直通写回 body/URL；
 	// 归一化转换路径在 BuildOutboundRequest 内部也会再解析一次，结果一致。
-	// 支持通配别名（gemini-* 等）：精确/忽略大小写优先，通配模式兜底。
+	// 支持通配别名（gemini-* 等）：精确/忽略大小写优先，通配模式按最具体者确定性兜底
 	resolved := outModel
-	if alias, ok := provider.Aliases[outModel]; ok {
+	if alias, ok := ResolveAlias(provider.Aliases, outModel, false); ok {
 		resolved = alias
-	} else {
-		wild := ""
-		for k, v := range provider.Aliases {
-			if strings.EqualFold(k, outModel) {
-				resolved = v
-				break
-			}
-			if strings.Contains(k, "*") && MatchModel(k, outModel) {
-				// 记录首个通配命中（同一供应商内若存在多条重名模式，取其一）
-				wild = v
-			}
-		}
-		if resolved == outModel && wild != "" {
-			resolved = wild
-		}
 	}
 
 	// 日志/统计记录实际生效的模型名（别名改写后）：客户端发的是内置 ID（如
@@ -857,10 +842,10 @@ func HandleLLM(w http.ResponseWriter, r *http.Request, config *types.Config, log
 	if sameType {
 		if inbound.Stream {
 			// 同型直通流：逐字节转发原生 SSE（保留事件名与原生字段）
-			return handleRawStream(w, r, upstreamResp, provider, &entry, start, logger)
+			return handleRawStream(w, r, upstreamResp, provider, inbound.Format, &entry, start, logger)
 		}
 		// 同型直通非流：原样转发原生 JSON
-		return handleRawNonStream(r, upstreamResp, provider, &entry, start, logger)
+		return handleRawNonStream(r, upstreamResp, provider, inbound.Format, &entry, start, logger)
 	}
 	if inbound.Stream {
 		// 防护：部分上游（聚合代理/本地服务）忽略 stream 字段，返回 200 +

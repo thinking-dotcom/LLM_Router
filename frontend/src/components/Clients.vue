@@ -370,13 +370,37 @@ function cliUninTip(tg) {
   if (cliBusy.value[tg.id]) return t('sync.cli.busy')
   return t('sync.cli.uninstall') + '：' + cliUninCmdText(tg)
 }
-// 启动图标：立即在系统终端拉起该客户端 CLI（失败弹提示，成功不打扰）
-async function cliLaunchTerm(tg) {
+// 启动图标：弹系统终端列表，由用户选一个启动客户端 CLI
+const cliTermPicker = ref(null) // { target, terminals }
+async function cliPickTerm(tg) {
   try {
-    const r = await api.LaunchClientTerminal(tg.id)
+    const list = await api.ListSystemTerminals()
+    if (!Array.isArray(list) || !list.length) {
+      toast(t('common.fail', { msg: t('sync.term.none') }))
+      return
+    }
+    cliTermPicker.value = { target: tg, terminals: list }
+  } catch (e) {
+    toast(t('common.fail', { msg: e?.message || '?' }))
+  }
+}
+function termName(term) {
+  const key = 'sync.term.' + term.id
+  const text = t(key)
+  return text === key ? term.name : text
+}
+async function cliLaunchInTerm(term) {
+  const p = cliTermPicker.value
+  if (!p || cliBusy.value[p.target.id]) return
+  cliBusy.value[p.target.id] = 'launch'
+  cliTermPicker.value = null
+  try {
+    const r = await api.LaunchClientTerminalIn(p.target.id, term.id)
     if (!r || !r.ok) toast(t('common.fail', { msg: (r && r.error) || '?' }))
   } catch (e) {
     toast(t('common.fail', { msg: e?.message || '?' }))
+  } finally {
+    delete cliBusy.value[p.target.id]
   }
 }
 // 卸载将执行的操作：npm 客户端显示 npm 命令，单二进制客户端显示要删除的二进制路径
@@ -586,8 +610,8 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
         :title="g.key === 'todo' ? t('sync.groupToggle') : undefined"
         @click="g.key === 'todo' && (todoCollapsed = !todoCollapsed)"
         @keydown.enter.prevent="g.key === 'todo' && (todoCollapsed = !todoCollapsed)">
-        <i v-if="g.key === 'todo'" class="fa-solid sc-grp-caret"
-          :class="todoCollapsedEff ? 'fa-chevron-right' : 'fa-chevron-down'"></i>
+        <i v-if="g.key === 'todo'" class="ri-arrow-right-s-line sc-grp-caret"
+          :class="todoCollapsedEff ? '' : 'ri-arrow-down-s-line'"></i>
         <span>{{ g.title || t('sync.groupTodo') }}</span>
         <span v-if="g.key === 'todo'" class="sc-grp-count">{{ g.items.length }}</span>
       </div>
@@ -613,7 +637,7 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
                  启动仅已安装且登记了 CLI 的客户端显示；卸载仅已安装且支持自动卸载的通道显示 -->
             <div class="sync-card-tools">
               <button v-if="!tg.placeholder && tg.installed && tg.bin" type="button" class="sync-card-run"
-                :title="t('sync.cli.launch', { bin: tg.bin })" @click.stop="cliLaunchTerm(tg)">
+                :title="t('sync.cli.launch', { bin: tg.bin })" @click.stop="cliPickTerm(tg)">
                 <svg viewBox="0 0 12 12" aria-hidden="true">
                   <rect x="1.2" y="1.7" width="9.6" height="8.6" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" />
                   <path d="M3.4 4.5 5 6 3.4 7.5M6.3 7.7h2.3" fill="none" stroke="currentColor" stroke-width="1.2"
@@ -682,14 +706,14 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
                 @before-leave="onDrawerBeforeLeave" @after-leave="onDrawerAfterLeave">
     <div v-if="cfgEdit" class="dialog-overlay open cfg-drawer-ov">
       <div class="dialog cfg-dialog" :class="{ 'cfg-anim': cfgAnim, 'cfg-staged': cfgStaged, 'cfg-dir-enter': cfgDir === 'enter', 'cfg-exit-left': cfgExitLeft }" @scroll.capture.passive="onCfgScroll">
-        <!-- 保存 / 关闭：浮在配置页右缘内侧、垂直居中（上下排列），图标用项目内置的 Font Awesome。
+        <!-- 保存 / 关闭：浮在配置页右缘内侧、垂直居中（上下排列），图标用项目内置的 RemixIcon。
              收起方向：保存 → 向左滑出；关闭 → 向下滑出 -->
         <div class="cfg-drawer-actions" :class="{ 'is-hidden': cfgScrolling }">
           <button class="cfg-drawer-btn save" type="button" :disabled="cfgSaving || cfgLoading" :title="t('sync.saveOnlyTip')" @click="cfgExitLeft = true; saveTargetConfig()">
-            <i class="fa-solid fa-check"></i>
+            <i class="ri-check-line"></i>
           </button>
           <button class="cfg-drawer-btn close" type="button" :title="t('sync.closeTip')" @click="cfgExitLeft = false; cfgEdit = false">
-            <i class="fa-solid fa-xmark"></i>
+            <i class="ri-close-line"></i>
           </button>
         </div>
         <div class="cfg-head">
@@ -2474,6 +2498,23 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
       </div>
     </div>
 
+    <!-- 选择系统终端启动客户端 CLI -->
+    <div v-if="cliTermPicker" class="dialog-overlay open" @click.self="cliTermPicker = null">
+      <div class="dialog" style="width:340px">
+        <h3>{{ t('sync.term.pickTitle', { name: cliTermPicker.target.name }) }}</h3>
+        <p class="delete-desc">{{ t('sync.term.pickDesc') }}</p>
+        <div class="cli-term-list">
+          <button v-for="term in cliTermPicker.terminals" :key="term.id" class="cli-term-item" type="button"
+            @click="cliLaunchInTerm(term)">
+            <i class="ri-terminal-line"></i><span>{{ termName(term) }}</span>
+          </button>
+        </div>
+        <div class="dialog-foot">
+          <button class="btn btn-ghost btn-sm" type="button" @click="cliTermPicker = null">{{ t('dlg.cancel') }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 卸载客户端 CLI 确认：不可逆，分「仅卸载 CLI」与「卸载并清除全部残留」两档 -->
     <div v-if="cliUninstallTarget" class="dialog-overlay open" @click.self="cliUninstallTarget = null">
       <div class="dialog" style="width:380px">
@@ -2642,6 +2683,9 @@ defineExpose({ cliUpdateAll, cliOutdatedList, cliUpdatingAll })
 
 /* ===== 弹窗 ===== */
 .dialog-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;display:flex !important;align-items:center;justify-content:center}
+.cli-term-list{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.cli-term-item{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--t1);cursor:pointer;font-size:12px;text-align:left}
+.cli-term-item:hover{border-color:var(--accent);background:var(--surface-3)}
 /* 配置抽屉：贴主窗口右缘、全高，滑入滑出（Transition name=cfg-drawer）。
    animation:none 压掉全局 .dialog 的 slideUp 入场动画——它会与抽屉的
    translateX 过渡同时播放（Y 轴位移+缩放+淡入打架），是弹出卡顿主因之一 */

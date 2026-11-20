@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -278,15 +279,15 @@ func saveConfig(cfg types.Config, path string) error {
 	// （半截文件下次启动会被误判为"损坏"并清空用户配置）。
 	// 0600：config.json 含各上游 API Key，Unix 上防止其它本机用户可读（Windows 忽略权限位）。
 	tmp := fmt.Sprintf("%s.tmp%d", path, saveSeq.Add(1))
+	defer os.Remove(tmp) // 成功 rename 后 tmp 已不存在；失败路径统一清理残留
 	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
-		// rename 失败（极少见）时退化为直接写，至少不丢数据；成功后清掉残留 tmp
+		// rename 失败（极少见）时退化为直接写，至少不丢数据
 		if werr := os.WriteFile(path, append(data, '\n'), 0o600); werr != nil {
 			return werr
 		}
-		_ = os.Remove(tmp)
 	}
 	return nil
 }
@@ -300,6 +301,9 @@ func ValidateConfig(raw any) string {
 	}
 	// 端口可选：未提供时由 Normalize 补默认值 3000；仅当显式给出且越界才报错。
 	if p, ok := m["port"].(float64); ok {
+		if p != math.Trunc(p) {
+			return "端口必须是 1-65535 的整数"
+		}
 		if pp := int(p); pp < 1 || pp > 65535 {
 			return "端口必须是 1-65535 的整数"
 		}

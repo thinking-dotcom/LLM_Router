@@ -85,7 +85,7 @@ function capRowKey(row, i) {
         <input class="perm-cap-edit" :value="row.text" :placeholder="placeholder || 'Bash(npm test)'" @wheel.stop @input="onTextInput(row, $event)" />
         <span class="perm-cap-state" :class="capCls(row.mode)">{{ capWord(row.mode) }}</span>
       </template>
-      <button type="button" class="perm-cap-x" :title="t('sync.delete')" @click.stop="remove(row)"><i class="fa-solid fa-xmark"></i></button>
+      <button type="button" class="perm-cap-x" :title="t('sync.delete')" @click.stop="remove(row)"><i class="ri-close-line"></i></button>
     </div>
     <div v-if="!noAdd" class="perm-cap-row perm-cap-add">
       <input class="perm-cap-edit" v-model="input" :placeholder="placeholder || 'Bash(npm test)'" @keyup.enter="add" @wheel.stop />

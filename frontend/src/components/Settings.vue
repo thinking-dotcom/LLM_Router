@@ -274,7 +274,7 @@ async function save() {
                 <span class="hr-mono">{{ b.name }}</span>
                 <span class="hr-desc">{{ t(b.descKey) }}</span>
                 <span>{{ t('set.autoGateway') }}</span>
-                <span class="hr-lock"><i class="fa-solid fa-lock"></i></span>
+                <span class="hr-lock"><i class="ri-lock-line"></i></span>
               </div>
               <div v-for="(r, i) in headerRules" :key="i" class="hr-tr">
                 <input v-model="r.name" :placeholder="t('set.headerNamePh')" spellcheck="false" autocomplete="off">
@@ -349,7 +349,7 @@ async function save() {
           <div class="about-row">
             <span class="about-label">{{ t('set.currentVersion') }}</span>
             <span class="about-version">{{ appInfo.version || '—' }}</span>
-            <span v-if="updateReady" class="about-update" @click="openDownload" :title="t('set.download')">{{ appInfo.latestVersion }} <i class="fa-solid fa-arrow-down"></i></span>
+            <span v-if="updateReady" class="about-update" @click="openDownload" :title="t('set.download')">{{ appInfo.latestVersion }} <i class="ri-arrow-down-line"></i></span>
           </div>
           <div v-if="appInfo.updateAvailable && !updateReady" class="about-new">{{ t('set.newVersion') }}: {{ appInfo.latestVersion }}</div>
         </div>

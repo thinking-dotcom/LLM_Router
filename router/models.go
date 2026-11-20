@@ -54,7 +54,8 @@ func FetchModels(provider types.Provider) types.FetchModelsResult {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 		resp.Body.Close()
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			lastErr = fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body))
+			// 错误体可能回显请求 URL（Gemini 的 ?key=APIKEY），与传输层错误一致先脱敏
+			lastErr = redactURL(fmt.Sprintf("HTTP %d: %s", resp.StatusCode, string(body)))
 			continue
 		}
 		var parsed map[string]any

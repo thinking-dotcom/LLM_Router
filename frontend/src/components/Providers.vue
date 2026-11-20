@@ -248,7 +248,7 @@ defineExpose({ addProvider })
                 <input type="checkbox" :checked="p.enabled" @change="toggleProvider(p, $event.target.checked)">
                 <span class="slider"></span>
               </label>
-              <span class="menu-btn" :title="t('prov.more')" @click.stop="openMenu(p, $event)"><i class="fa-solid fa-ellipsis"></i></span>
+              <span class="menu-btn" :title="t('prov.more')" @click.stop="openMenu(p, $event)"><i class="ri-more-2-fill"></i></span>
             </div>
           </div>
           <!-- 卡片只给概览（地址 + 模型数），模型 ID 明细走 ⋯ 菜单的「查看模型 / 复制模型 ID」 -->

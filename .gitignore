@@ -2,7 +2,8 @@
 vendor/
 node_modules/
 frontend/node_modules/
-
+format
+transrules
 # 构建产物
 frontend/dist/
 build/

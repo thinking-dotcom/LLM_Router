@@ -300,10 +300,78 @@ func geminiResponseUsage(body map[string]any) *types.Usage {
 	return usageFromCounts(pt, ct)
 }
 
+// geminiInteractionsUsageObject 兼容 Interactions 的用量位置：流事件在
+// interaction.usage，非流响应在顶层 usage；两者字段均为 total_*_tokens。
+func geminiInteractionsUsageObject(evt map[string]any) map[string]any {
+	if u, ok := evt["usage"].(map[string]any); ok {
+		return u
+	}
+	if it, ok := evt["interaction"].(map[string]any); ok {
+		if u, ok := it["usage"].(map[string]any); ok {
+			return u
+		}
+	}
+	return nil
+}
+
+func geminiInteractionsStreamScanner() func(map[string]any) *types.Usage {
+	var pt, ct int
+	return func(evt map[string]any) *types.Usage {
+		if u := geminiInteractionsUsageObject(evt); u != nil {
+			if v, ok := numInt(u, "total_input_tokens"); ok {
+				pt = v
+			}
+			if v, ok := numInt(u, "total_output_tokens"); ok {
+				ct = v
+			}
+		}
+		return usageFromCounts(pt, ct)
+	}
+}
+
+func geminiInteractionsResponseUsage(body map[string]any) *types.Usage {
+	u := geminiInteractionsUsageObject(body)
+	if u == nil {
+		return nil
+	}
+	pt, _ := numInt(u, "total_input_tokens")
+	ct, _ := numInt(u, "total_output_tokens")
+	return usageFromCounts(pt, ct)
+}
+
+// rawUsageScanner / rawResponseUsage 按「接入格式 + 上游类型」选用量摄取器。
+// 不能只看 provider.Type：gemini-interactions 同型直通的上游也是 gemini，
+// 但响应里没有 usageMetadata，只有 interaction.usage.total_*。
+func rawUsageScanner(inboundFormat string, ptype types.ProviderType) func(map[string]any) *types.Usage {
+	switch {
+	case inboundFormat == "gemini-interactions":
+		return geminiInteractionsStreamScanner()
+	case ptype == types.ProviderAnthropic:
+		return anthropicStreamScanner()
+	case ptype == types.ProviderResponse:
+		return responsesStreamScanner()
+	default:
+		return geminiStreamScanner()
+	}
+}
+
+func rawResponseUsage(inboundFormat string, ptype types.ProviderType, body map[string]any) *types.Usage {
+	switch {
+	case inboundFormat == "gemini-interactions":
+		return geminiInteractionsResponseUsage(body)
+	case ptype == types.ProviderAnthropic:
+		return anthropicResponseUsage(body)
+	case ptype == types.ProviderResponse:
+		return responsesResponseUsage(body)
+	default:
+		return geminiResponseUsage(body)
+	}
+}
+
 // handleRawStream 处理同型直通的流式响应：把上游 Anthropic/Gemini 原生 SSE
 // 逐字节转发给同格式客户端（保留事件名、thinking 增量、usage 位置等），
 // 同时用协议对应扫描器摄取 Token 用量供统计。
-func handleRawStream(w http.ResponseWriter, r *http.Request, upstreamResp *http.Response, provider *types.Provider, entry *types.LogEntry, start time.Time, logger func(types.LogEntry)) *http.Response {
+func handleRawStream(w http.ResponseWriter, r *http.Request, upstreamResp *http.Response, provider *types.Provider, inboundFormat string, entry *types.LogEntry, start time.Time, logger func(types.LogEntry)) *http.Response {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -311,15 +379,7 @@ func handleRawStream(w http.ResponseWriter, r *http.Request, upstreamResp *http.
 	w.WriteHeader(200)
 
 	flusher, canFlush := w.(http.Flusher)
-	var scan func(map[string]any) *types.Usage
-	switch string(provider.Type) {
-	case "anthropic":
-		scan = anthropicStreamScanner()
-	case "response":
-		scan = responsesStreamScanner()
-	default:
-		scan = geminiStreamScanner()
-	}
+	scan := rawUsageScanner(inboundFormat, provider.Type)
 	lastUsage, readErr := passthroughRawStream(w, upstreamResp.Body, canFlush, flusher, scan)
 
 	// 中断的流只算失败请求，不记 usage，避免 Token 统计被虚增。
@@ -344,7 +404,7 @@ func handleRawStream(w http.ResponseWriter, r *http.Request, upstreamResp *http.
 // handleRawNonStream 处理同型直通的非流式响应：把上游 Anthropic/Gemini 原生
 // JSON 原样转发给客户端（保留 thinking 块、usageMetadata 等原生字段），
 // 并按协议提取用量供统计。
-func handleRawNonStream(r *http.Request, upstreamResp *http.Response, provider *types.Provider, entry *types.LogEntry, start time.Time, logger func(types.LogEntry)) *http.Response {
+func handleRawNonStream(r *http.Request, upstreamResp *http.Response, provider *types.Provider, inboundFormat string, entry *types.LogEntry, start time.Time, logger func(types.LogEntry)) *http.Response {
 	bodyBytes, err := io.ReadAll(io.LimitReader(upstreamResp.Body, 50<<20))
 	if err != nil {
 		if r.Context().Err() != nil {
@@ -370,14 +430,7 @@ func handleRawNonStream(r *http.Request, upstreamResp *http.Response, provider *
 
 	var parsed map[string]any
 	if json.Unmarshal(bodyBytes, &parsed) == nil {
-		switch string(provider.Type) {
-		case "anthropic":
-			entry.Usage = anthropicResponseUsage(parsed)
-		case "response":
-			entry.Usage = responsesResponseUsage(parsed)
-		default:
-			entry.Usage = geminiResponseUsage(parsed)
-		}
+		entry.Usage = rawResponseUsage(inboundFormat, provider.Type, parsed)
 	}
 	entry.Status = upstreamResp.StatusCode
 	entry.Resp = truncateRunes(string(bodyBytes), 2000)

@@ -42,6 +42,7 @@ func TestAdminAPITransportGuard(t *testing.T) {
 	t.Run("loopback origin allowed", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/logs", nil)
+		req.RemoteAddr = "127.0.0.1:51000"
 		req.Host = "127.0.0.1:3000"
 		req.Header.Set("Origin", "http://127.0.0.1:3000")
 		s.handleAdminAPI(rec, req)
@@ -50,6 +51,18 @@ func TestAdminAPITransportGuard(t *testing.T) {
 		}
 		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://127.0.0.1:3000" {
 			t.Fatalf("loopback origin should be echoed, got %q", got)
+		}
+	})
+
+	t.Run("forged loopback origin from lan blocked", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/logs", nil)
+		req.RemoteAddr = "192.168.1.20:51000"
+		req.Host = "192.168.1.20:3000"
+		req.Header.Set("Origin", "http://127.0.0.1:3000")
+		s.handleAdminAPI(rec, req)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 for forged loopback origin", rec.Code)
 		}
 	})
 }

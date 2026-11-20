@@ -119,17 +119,22 @@ async function loadClients(pick) {
   await selectClient(id)
 }
 
-async function selectClient(id) {
-  if (loading.value) return
+async function selectClient(id, mark = false) {
+  if (loading.value) return false
   activeId.value = id
   items.value = []
   loading.value = true
   try {
     const r = await api.GetSessionItems(id)
-    if (r && r.ok) items.value = r.items || []
-    else toast(t('common.fail', { msg: r?.error || '' }))
+    if (r && r.ok) {
+      items.value = r.items || []
+      if (mark) markRecent(id)
+      return true
+    }
+    toast(t('common.fail', { msg: r?.error || '' }))
   } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) }
-  loading.value = false
+  finally { loading.value = false }
+  return false
 }
 
 // 客户端图标点击：已接入（managed）才进入会话条目；未接入置灰，点击提示原因。
@@ -139,9 +144,9 @@ function pickClient(c) {
     toast(c.note || t('sessions.unmanaged'))
     return
   }
-  markRecent(c.id)
   navOpen.value = false
-  selectClient(c.id)
+  // 加载中被吞掉的切换不应提前改动 MRU，否则界面与导航顺序不一致
+  selectClient(c.id, true)
 }
 
 // 客户端胶囊悬停提示：名称 + 会话统计（总大小）或缺失根目录说明。
@@ -399,7 +404,7 @@ defineExpose({ loadClients, refresh, openClientDir, askClearAll })
                   </span>
                   <!-- 恢复会话：电话字体图标，置于标题左侧 -->
                   <i
-                    class="fa-solid fa-phone sr-logo-ico"
+                    class="ri-phone-line sr-logo-ico"
                     :title="activeClient?.resumeSupported ? t('sessions.openTerminal') : (activeClient?.resumeNote || t('sessions.noResume'))"
                     :aria-label="t('sessions.openTerminal')"
                     role="button" tabindex="0"

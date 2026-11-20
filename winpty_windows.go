@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"unsafe"
@@ -185,12 +186,21 @@ func (s *winptySession) spawn(bashExe, cwd string, envBlock *uint16) error {
 	var errPtr uintptr
 	appP := windows.StringToUTF16Ptr(bashExe)
 	cmdP := windows.StringToUTF16Ptr(`"` + bashExe + `" --login -i`)
+	// Call 只接收 uintptr，GC 不跟踪这些指针；defer KeepAlive 保证内存
+	// 到 spawn 完成后才可能被回收，避免传入已释放的缓冲区。
+	defer runtime.KeepAlive(appP)
+	defer runtime.KeepAlive(cmdP)
+	var cwdPtr, envPtr unsafe.Pointer
 	var cwdP, envP uintptr
 	if cwd != "" {
-		cwdP = uintptr(unsafe.Pointer(windows.StringToUTF16Ptr(cwd)))
+		cwdPtr = unsafe.Pointer(windows.StringToUTF16Ptr(cwd))
+		cwdP = uintptr(cwdPtr)
+		defer runtime.KeepAlive(cwdPtr)
 	}
 	if envBlock != nil {
-		envP = uintptr(unsafe.Pointer(envBlock))
+		envPtr = unsafe.Pointer(envBlock)
+		envP = uintptr(envPtr)
+		defer runtime.KeepAlive(envPtr)
 	}
 	cfg, _, _ := s.api.spawnConfigNew.Call(
 		1, // WINPTY_SPAWN_FLAG_AUTO_SHUTDOWN：子进程退出后 agent 自动收尾

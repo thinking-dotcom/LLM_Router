@@ -139,20 +139,14 @@ func copyDirRecursive(src, dst string) error {
 	})
 }
 
-// removeIfExists 若路径存在则递归删除（用于撤销 skills 注入）。
-func removeIfExists(path string) error {
-	if _, err := os.Lstat(path); os.IsNotExist(err) {
-		return nil
-	}
-	return os.RemoveAll(path)
-}
-
 // backupIfAbsent 若目标文件尚无备份则创建备份，用于保留编辑保存前的原始状态，
 // 供手动回退（主配置保存时使用）。
 func backupIfAbsent(path string) (backupPath string, _ error) {
 	backupPath = path + ".bak"
 	if _, err := os.Stat(backupPath); err == nil {
 		return backupPath, nil // 已有备份，保留首次原始状态
+	} else if !os.IsNotExist(err) {
+		return backupPath, err // 权限/IO 错误不能继续，否则会覆盖首次备份
 	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return backupPath, nil // 目标文件本就不存在，无内容可备份

@@ -4,6 +4,12 @@ import { state } from '../store'
 import { t } from '../i18n'
 import { fmtNum } from '../utils'
 
+// 推理值含义：用简化表格展示（data-tip-html 由即时提示模块渲染）
+const reasoningTipHtml = computed(() => {
+  const rows = t('logs.reasoningTip') || []
+  const body = (Array.isArray(rows) ? rows : []).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')
+  return `<table class="ui-tip-table"><tbody>${body}</tbody></table>`
+})
 const flashKeys = ref(new Set())
 let prevLogKeys = new Set()
 // 闪烁清理定时器句柄（组件卸载时清理）
@@ -44,8 +50,12 @@ const logs = computed(() => {
     // 映射表转换后真正发往上游的字段值（reasoningOut）
     const rzRaw = String(e.reasoning || '')
     const rzInj = rzRaw.endsWith('*')
-    const rzText = rzInj ? rzRaw.slice(0, -1) : rzRaw
-    const rzOut = String(e.reasoningOut || '')
+    const rzVal = rzInj ? rzRaw.slice(0, -1) : rzRaw
+    // 原始推理也只展示值（后端可能给「字段=值」）；注入标记 * 照常保留
+    const rzText = rzVal.includes('=') ? rzVal.slice(rzVal.lastIndexOf('=') + 1) : rzVal
+    // 上游推理只展示值：后端给的是「字段=值」文本，这里截取最后一个 = 之后的值
+    const rzOutRaw = String(e.reasoningOut || '')
+    const rzOut = rzOutRaw.includes('=') ? rzOutRaw.slice(rzOutRaw.lastIndexOf('=') + 1) : rzOutRaw
     // 秒为单位：<10s 保留一位小数（整数省小数点），>=10s 取整，避免长文本撑破固定列宽
     const s = ms / 1000
     const msText = ms > 0 ? (s >= 10 ? String(Math.round(s)) : s.toFixed(1).replace(/\.0$/, '')) + 's' : '—'
@@ -120,7 +130,7 @@ onUnmounted(() => clearTimeout(flashTimer))
               <td class="lr-time">{{ r.mm }}</td>
               <td class="lr-model" :title="r.name">{{ r.name }}</td>
               <td class="lr-prov" :title="r.provider">{{ r.provider || '—' }}</td>
-              <td class="lr-rz" :class="{ 'rz-inj': r.rzInj, 'rz-none': !r.rzText }" :title="t('logs.reasoningTip')">
+              <td class="lr-rz" :class="{ 'rz-inj': r.rzInj, 'rz-none': !r.rzText }" :title="t('logs.reasoningTipTitle')" :data-tip-html="reasoningTipHtml">
                 <template v-if="r.rzText">{{ r.rzText }}<i v-if="r.rzInj">*</i></template>
                 <template v-else>—</template>
               </td>

@@ -358,6 +358,9 @@ func (s *Server) periodicLogCleanup(stopCh <-chan struct{}) {
 			}
 			s.logs = filtered
 			s.mu.Unlock()
+			// 清理结果立即落盘，否则进程在下次日志/退出前被杀时，
+			// logs.json 仍保留已过期的记录，与内存口径不一致。
+			s.saveLogs()
 		}
 	}
 }
@@ -379,8 +382,16 @@ func (s *Server) Stop() error {
 	// AddLog 的条目只留在内存，导致退出/重启时丢日志。
 	if srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = srv.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
 		cancel()
+		if err != nil {
+			// 超时后仍有在途请求：强制断连，避免旧 handler 继续写响应/日志，
+			// 并与随后的 Restart 形成新旧请求并存。
+			log.Printf("[server] graceful shutdown timed out, force close: %v", err)
+			if cerr := srv.Close(); cerr != nil {
+				log.Printf("[server] force close failed: %v", cerr)
+			}
+		}
 	}
 	if stopCh != nil {
 		close(stopCh)
@@ -632,19 +643,19 @@ func (s *Server) adminAllowed(r *http.Request) bool {
 // Origin 头：仅放行回环来源。无 Origin 的普通导航或非浏览器客户端不会带 Origin，
 // 此时要求 Host 是回环地址，防止 DNS rebinding 把 evil.com:3000 当作管理端访问。
 func (s *Server) adminTransportAllowed(r *http.Request) bool {
+	// 连接本身必须来自回环，且对所有请求生效。若只在无 Origin 分支校验，
+	// 监听 0.0.0.0 且未设令牌时，局域网客户端只要伪造一个回环 Origin
+	// （curl -H 'Origin: http://127.0.0.1'）即可读写管理接口。
+	if !isLoopbackAddr(r.RemoteAddr) {
+		return false
+	}
 	if o := r.Header.Get("Origin"); o != "" {
 		return loopbackOrigin(o)
 	}
 	if strings.HasPrefix(r.URL.Path, "/api/") && r.Header.Get("Sec-Fetch-Site") == "cross-site" {
 		return false
 	}
-	if !isLoopbackHost(r.Host) {
-		return false
-	}
-	// 无 Origin 的请求（非浏览器直接 TCP 客户端）Host 头可任意伪造，单靠它不足以
-	// 证明请求来自本机。追加校验对端 RemoteAddr 必须为回环：即便监听 0.0.0.0 且
-	// 未设 authToken，局域网机器也无法靠伪造 Host 头访问管理接口。
-	return isLoopbackAddr(r.RemoteAddr)
+	return isLoopbackHost(r.Host)
 }
 
 // isLoopbackAddr 判断请求对端地址是否为本机回环（127.0.0.1 / ::1 及 IPv4-mapped 形式）。

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { t } from '../i18n'
 import { toast } from '../toast'
 import api from '../api'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { targetLogo } from './sync/shared'
 
 // ---------- 技能 ----------
@@ -89,9 +90,36 @@ async function doDelete() {
 // 注入：把 data/skills 全部技能整体复制进各支持客户端的技能目录（后端按注入
 // 清单登记副本）；踢出：按清单从客户端技能目录移除副本，客户端自有文件不动。
 const syncing = ref(false)
+const syncProgress = ref({ done: 0, total: 0, name: '', active: false })
+function onSyncProgress(done, total, name) {
+  syncProgress.value = { done, total, name, active: true }
+}
+onBeforeUnmount(() => EventsOff('skills:sync-progress'))
+// 一键删除：确认后删除全部技能（同样本程序 data/skills 下的副本，可重新新建）
+const deleteAllConfirmOpen = ref(false)
+const deletingAll = ref(false)
+function askDeleteAll() { if (skills.value.length) deleteAllConfirmOpen.value = true }
+async function doDeleteAll() {
+  deleteAllConfirmOpen.value = false
+  if (deletingAll.value) return
+  deletingAll.value = true
+  let ok = 0, fail = 0
+  try {
+    for (const s of skills.value.slice()) {
+      try {
+        const r = await api.DeleteSkill(s.name)
+        if (r && r.ok) ok++; else fail++
+      } catch (e) { fail++ }
+    }
+    toast(t('skills.deleteAllDone', { ok, fail }))
+    if (selectedName.value) selectedName.value = ''
+    await loadSkills()
+  } finally { deletingAll.value = false }
+}
 async function bulkSync(inject) {
   if (syncing.value) return
   syncing.value = true
+  syncProgress.value = { done: 0, total: 0, name: '', active: true }
   try {
     const r = await api.SyncAllSkills(inject)
     const rows = (r && r.results) || []
@@ -101,7 +129,10 @@ async function bulkSync(inject) {
     toast(inject ? t('skills.injectOk', { n: okN }) + fail : t('skills.ejectOk', { n: okN }) + fail)
     if (rows.length) syncResults.value = { inject, rows }
     loadAgentSkills() // 右侧注入分布随注入/踢出刷新
-  } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) } finally { syncing.value = false }
+  } catch (e) { toast(t('common.fail', { msg: e?.message || '' })) } finally {
+    syncProgress.value = { ...syncProgress.value, active: false }
+    syncing.value = false
+  }
 }
 function injectAll() { bulkSync(true) }
 // 踢出会删客户端目录里的文件，先弹确认
@@ -110,12 +141,19 @@ function ejectAll() { ejectConfirmOpen.value = true }
 function ejectAllDo() { ejectConfirmOpen.value = false; bulkSync(false) }
 // 结果弹窗：逐客户端展示技能目录与成败（syncResults 为 null 时关闭）
 const syncResults = ref(null)
-onMounted(loadSkills)
-defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll })
+onMounted(() => {
+  loadSkills()
+  EventsOn('skills:sync-progress', onSyncProgress)
+})
+defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll, askDeleteAll, deletingAll })
 </script>
 
 <template>
   <div>
+  <div v-if="syncProgress.active && syncProgress.total" class="sync-progress">
+    <div class="sync-progress-bar"><i :style="{ width: Math.round(syncProgress.done / syncProgress.total * 100) + '%' }"></i></div>
+    <span class="sync-progress-text">{{ syncProgress.done }}/{{ syncProgress.total }} · {{ syncProgress.name }}</span>
+  </div>
   <div class="mcps-split">
     <!-- 左：技能列表（点行选中，右侧联动显示其注入分布） -->
     <div class="mcps-left">
@@ -134,7 +172,7 @@ defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll })
     </div>
     <!-- 右：选中技能已注入的客户端（点卡片在文件管理器中打开该客户端里的技能目录） -->
     <div class="mcps-right">
-      <div class="mcp-right-head">{{ t('skills.rightTitle') }}</div>
+      <div class="mcp-right-head">{{ selectedName ? t('skills.rightTitleOf', { name: selectedName }) : t('skills.rightTitle') }}</div>
       <template v-if="selectedName">
         <div v-if="injectedClients.length" class="mcp-right-grid">
           <div v-for="g in injectedClients" :key="g.path" class="mcp-right-card"
@@ -191,6 +229,21 @@ defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll })
       </div>
     </div>
 
+    <!-- 一键删除全部技能确认 -->
+    <div v-if="deleteAllConfirmOpen" class="dialog-overlay open" @click.self="deleteAllConfirmOpen=false">
+      <div class="dialog" style="width:min(420px, calc(100% - 24px))">
+        <h3>{{ t('skills.deleteAll') }}</h3>
+        <p class="delete-desc">{{ t('skills.deleteAllConfirm') }}</p>
+        <div class="dialog-foot">
+          <span></span>
+          <div class="right">
+            <button class="btn btn-ghost btn-sm" type="button" @click="deleteAllConfirmOpen=false">{{ t('dlg.cancel') }}</button>
+            <button class="btn btn-danger btn-sm" type="button" @click="doDeleteAll">{{ t('dlg.confirmDeleteBtn') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 删除确认（应用内样式） -->
     <div class="dialog-overlay" :class="{ open: !!deleting }" @click.self="deleting=null">
       <div class="dialog" style="width:min(420px, calc(100% - 24px))">
@@ -210,6 +263,11 @@ defineExpose({ openSkill, openDir, loadSkills, skillsDir, injectAll, ejectAll })
 </template>
 
 <style scoped>
+/* 一键注入进度条 */
+.sync-progress{display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--s2)}
+.sync-progress-bar{flex:1;height:5px;border-radius:99px;background:rgba(127,140,160,.25);overflow:hidden}
+.sync-progress-bar i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .2s}
+.sync-progress-text{flex:none;font-size:10px;color:var(--t2);font-variant-numeric:tabular-nums}
 /* 左右分栏（与 MCP 服务页同款）：左技能列表 / 右选中技能的注入客户端分布 */
 .mcps-split{display:flex;align-items:stretch;min-height:100%}
 .mcps-left{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;border-right:1px solid var(--border);padding-right:12px}

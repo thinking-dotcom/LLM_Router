@@ -51,12 +51,16 @@ export function applyTheme(theme) {
 // 进行中时复用同一个 Promise，避免并发重复请求与旧快照乱序覆盖新状态；
 // force=true（保存后主动刷新）时跳过复用，确保拿到最新配置而非在途旧快照
 let refreshInflight = null
+let refreshSeq = 0
 export async function refresh(force) {
   if (refreshInflight && !force) return refreshInflight
+  const seq = ++refreshSeq
   const task = (async () => {
     if (!api.GetStatus || !api.GetConfig) return
     try {
       const [s, c] = await Promise.all([api.GetStatus(), api.GetConfig()])
+      // force 刷新会另起请求；旧响应晚到时不得覆盖较新状态
+      if (seq !== refreshSeq) return
       state.running = s.running
       state.config = c
       state.serverError = s.error || ''

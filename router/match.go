@@ -33,3 +33,33 @@ func MatchModel(pattern, model string) bool {
 	}
 	return false
 }
+
+// ResolveAlias 确定性地把模型名解析到别名目标：精确（忽略大小写）优先，
+// 否则按「模式长度降序、字典序」选最具体的通配项。Go map 遍历顺序随机，
+// 直接取首个命中会让同一请求在不同时刻落到不同的上游模型。
+func ResolveAlias(aliases map[string]string, model string, skipWildcard bool) (string, bool) {
+	if v, ok := aliases[model]; ok {
+		return v, true
+	}
+	for k, v := range aliases {
+		if strings.EqualFold(k, model) {
+			return v, true
+		}
+	}
+	if skipWildcard {
+		return "", false
+	}
+	best, found := "", false
+	for k := range aliases {
+		if !strings.Contains(k, "*") || !MatchModel(k, model) {
+			continue
+		}
+		if !found || len(k) > len(best) || (len(k) == len(best) && k < best) {
+			best, found = k, true
+		}
+	}
+	if !found {
+		return "", false
+	}
+	return aliases[best], true
+}

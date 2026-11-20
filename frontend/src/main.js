@@ -3,6 +3,7 @@ import App from './App.vue'
 import { initTheme } from './store'
 import api from './api'
 import './selectMenu'
+import './tooltip'
 
 initTheme()
 // 独立窗口实例（--read 阅读器 / --term 内嵌终端）：Wails 固定加载根路径

@@ -222,6 +222,14 @@ export function LaunchClientTerminal(arg1) {
   return window['go']['main']['App']['LaunchClientTerminal'](arg1);
 }
 
+export function LaunchClientTerminalIn(arg1, arg2) {
+  return window['go']['main']['App']['LaunchClientTerminalIn'](arg1, arg2);
+}
+
+export function ListSystemTerminals() {
+  return window['go']['main']['App']['ListSystemTerminals']();
+}
+
 export function ListTargets() {
   return window['go']['main']['App']['ListTargets']();
 }
@@ -404,6 +412,10 @@ export function TermStop() {
 
 export function TermWrite(arg1) {
   return window['go']['main']['App']['TermWrite'](arg1);
+}
+
+export function TestMcpServer(arg1) {
+  return window['go']['main']['App']['TestMcpServer'](arg1);
 }
 
 export function UninstallClientCLI(arg1, arg2) {

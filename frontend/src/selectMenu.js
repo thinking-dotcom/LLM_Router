@@ -45,7 +45,7 @@
       it.appendChild(span)
       if (o.on) {
         var ck = document.createElement('i')
-        ck.className = 'fa-solid fa-check ck'
+        ck.className = 'ri-check-line ck'
         it.appendChild(ck)
       }
       if (!o.disabled) {

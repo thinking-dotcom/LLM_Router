@@ -105,19 +105,18 @@ func mergeMimoMcp(mcpFile string, servers []core.MCPServer) error {
 		if err := json.Unmarshal(strict, &root); err != nil {
 			return fmt.Errorf("解析 %s 失败，已拒绝覆写以免丢失现有配置: %w", mcpFile, err)
 		}
-		rawMcp, hasMcp := root["mcp"]
-		existing, mcpOK := rawMcp.(map[string]any)
-		if hasMcp && !mcpOK {
-			// 顶层 mcp 已存在但类型不符（字符串/数组等）：直接覆盖会丢用户原值
-			return fmt.Errorf("解析 %s 失败，mcp 顶层键类型不匹配，已拒绝覆写以免丢失现有配置", mcpFile)
+		if rawMcp, hasMcp := root["mcp"]; hasMcp {
+			if _, mcpOK := rawMcp.(map[string]any); !mcpOK {
+				// 顶层 mcp 已存在但类型不符（字符串/数组等）：直接覆盖会丢用户原值
+				return fmt.Errorf("解析 %s 失败，mcp 顶层键类型不匹配，已拒绝覆写以免丢失现有配置", mcpFile)
+			}
 		}
-		if existing == nil {
-			existing = map[string]any{}
-		}
+		// 与严格 JSON 分支一致用替换语义：取消勾选的服务不能残留
+		obj := map[string]any{}
 		for _, s := range servers {
-			existing[s.Name] = mimoServerToAny(s)
+			obj[s.Name] = mimoServerToAny(s)
 		}
-		root["mcp"] = existing
+		root["mcp"] = obj
 		rendered, merr := json.MarshalIndent(root, "", "  ")
 		if merr != nil {
 			return merr

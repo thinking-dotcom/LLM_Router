@@ -38,6 +38,12 @@ func ListSkills() []Skill {
 // 支持的存放方式（更宽松，便于把技能直接放进 data/skills）：
 //  1. 子目录 / SKILL.md（Claude Code 约定）；
 //  2. 根目录下直接散放的 .md 文件（以去后缀文件名作为技能名）。
+// readFileOK 判断文件可读（存在且能打开），用于识别 junction 等特殊目录。
+func readFileOK(p string) bool {
+	_, err := os.ReadFile(p)
+	return err == nil
+}
+
 func readSkillsDir(root string) []Skill {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -45,41 +51,28 @@ func readSkillsDir(root string) []Skill {
 	}
 	out := []Skill{}
 	for _, e := range entries {
-		if e.IsDir() {
-			name := e.Name()
-			if !validSkillName(name) {
-				continue
+		name := e.Name()
+		dir := filepath.Join(root, name)
+		// 目录型技能：e.IsDir() 为真，或 Windows 目录联接（junction）在
+		// os.ReadDir 里表现为非目录但可通过路径读到其下的 SKILL.md
+		if e.IsDir() || readFileOK(filepath.Join(dir, skillFileName)) {
+			if validSkillName(name) {
+				if content, err := os.ReadFile(filepath.Join(dir, skillFileName)); err == nil {
+					out = append(out, Skill{Name: name, Path: dir, Desc: skillDesc(string(content))})
+					continue
+				}
 			}
-			dir := filepath.Join(root, name)
-			content, err := os.ReadFile(filepath.Join(dir, skillFileName))
-			if err != nil {
-				continue
-			}
-			out = append(out, Skill{
-				Name:    name,
-				Path:    dir,
-				Desc:    skillDesc(string(content)),
-				Content: "",
-			})
-			continue
 		}
 		// 根目录直接散放的 .md 文件
-		if ext := strings.ToLower(filepath.Ext(e.Name())); ext == ".md" {
-			base := strings.TrimSuffix(e.Name(), filepath.Ext(e.Name()))
+		if ext := strings.ToLower(filepath.Ext(name)); ext == ".md" {
+			base := strings.TrimSuffix(name, filepath.Ext(name))
 			if !validSkillName(base) {
 				continue
 			}
-			fp := filepath.Join(root, e.Name())
-			content, err := os.ReadFile(fp)
-			if err != nil {
-				continue
+			fp := filepath.Join(root, name)
+			if content, err := os.ReadFile(fp); err == nil {
+				out = append(out, Skill{Name: base, Path: fp, Desc: skillDesc(string(content))})
 			}
-			out = append(out, Skill{
-				Name:    base,
-				Path:    fp,
-				Desc:    skillDesc(string(content)),
-				Content: "",
-			})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -89,11 +82,15 @@ func readSkillsDir(root string) []Skill {
 // GetSkillContent 返回指定技能的 SKILL.md 内容；不存在返回空。
 // name 需为合法目录名（与 SaveSkill/DeleteSkill 相同校验，防路径穿越）。
 func GetSkillContent(name string) string {
-	if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+	if !validSkillName(name) {
 		return ""
 	}
 	dir := filepath.Join(SkillsDir(), name)
 	b, err := os.ReadFile(filepath.Join(dir, skillFileName))
+	if err != nil {
+		// 根目录散放的 .md 技能（ListSkills 会列出）按 <name>.md 读取
+		b, err = os.ReadFile(filepath.Join(SkillsDir(), name+".md"))
+	}
 	if err != nil {
 		return ""
 	}
@@ -106,8 +103,16 @@ func SaveSkill(name, content string) string {
 	if name == "" {
 		return "技能名称不能为空"
 	}
-	if strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+	if !validSkillName(name) {
 		return "技能名称不合法"
+	}
+	// 已存在的根目录 .md 技能写回原文件，避免生成同名目录造成重复条目
+	fp := filepath.Join(SkillsDir(), name+".md")
+	if fi, err := os.Stat(fp); err == nil && fi.Mode().IsRegular() {
+		if err := writeFileAtomic(fp, []byte(content), 0o644); err != nil {
+			return "写入技能失败: " + err.Error()
+		}
+		return ""
 	}
 	dir := filepath.Join(SkillsDir(), name)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -122,11 +127,16 @@ func SaveSkill(name, content string) string {
 
 // DeleteSkill 删除指定技能目录。返回错误字符串（空 = 成功）。
 func DeleteSkill(name string) string {
-	if name == "" || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+	if !validSkillName(name) {
 		return "技能名称不合法"
 	}
 	dir := filepath.Join(SkillsDir(), name)
 	if err := os.RemoveAll(dir); err != nil {
+		return "删除技能失败: " + err.Error()
+	}
+	// 同时清理根目录散放的 .md 技能（ListSkills 会列出这类技能）
+	fp := filepath.Join(SkillsDir(), name+".md")
+	if err := os.Remove(fp); err != nil && !os.IsNotExist(err) {
 		return "删除技能失败: " + err.Error()
 	}
 	return ""
@@ -185,26 +195,42 @@ type SkillSyncResult struct {
 // 按注入清单移除本程序复制进去的技能副本）。只动 skills、不涉及 MCP；
 // 同一目录多个客户端只处理一次；返回按客户端名排序的结果。
 func BulkSyncSkills(inject bool) []SkillSyncResult {
+	return BulkSyncSkillsProgress(inject, nil)
+}
+
+// BulkSyncSkillsProgress 与 BulkSyncSkills 相同，并在每个客户端处理前后调用
+// progress(done, total, name)，供上层（Wails 事件）推送进度。
+func BulkSyncSkillsProgress(inject bool, progress func(done, total int, name string)) []SkillSyncResult {
 	skills := ListSkills()
 	out := []SkillSyncResult{}
 	seen := map[string]bool{}
+	// 先统计实际要处理的客户端数，用于进度分母
+	type job struct{ id, name, dir string }
+	jobs := []job{}
 	for _, a := range registry {
 		ti := a.Info()
 		if !ti.SkillsSupported || ti.SkillsDir == "" || seen[ti.SkillsDir] {
 			continue
 		}
 		seen[ti.SkillsDir] = true
-		r := SkillSyncResult{ID: ti.ID, Name: ti.Name, Dir: ti.SkillsDir, OK: true}
+		jobs = append(jobs, job{ti.ID, ti.Name, ti.SkillsDir})
+	}
+	total := len(jobs)
+	for i, j := range jobs {
+		r := SkillSyncResult{ID: j.id, Name: j.name, Dir: j.dir, OK: true}
 		if inject {
-			if err := injectSkills(ti.SkillsDir, skills); err != nil {
+			if err := injectSkills(j.dir, skills); err != nil {
 				r.OK, r.Error = false, err.Error()
 			} else {
 				r.Count = len(skills)
 			}
-		} else if err := undoSkills(ti.SkillsDir); err != nil {
+		} else if err := undoSkills(j.dir); err != nil {
 			r.OK, r.Error = false, err.Error()
 		}
 		out = append(out, r)
+		if progress != nil {
+			progress(i+1, total, j.name)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out

@@ -11,7 +11,7 @@ const mcps = ref([])
 const mcpBase = ref('')
 // 表单即标准 MCP 服务参数：stdio → command/args/env；sse/http → url/headers；
 // 其余自定义键（transport 等）收进「其它字段」，保存时平铺回配置文件
-const mcpForm = reactive({ idx: -1, name: '', desc: '', type: 'stdio', command: '', argsText: '[]', envText: '', url: '', headersText: '', extraText: '' })
+const mcpForm = reactive({ idx: -1, name: '', desc: '', type: 'stdio', enabled: true, command: '', argsText: '[]', envText: '', url: '', headersText: '', extraText: '' })
 const mcpEdit = ref(false)
 // 类型自定义下拉（原生 select 的弹出列表无法自定义样式）
 const MCP_TYPES = ['stdio', 'sse', 'http']
@@ -25,9 +25,39 @@ async function loadMcps() {
   try { const r = (await api.GetMcps()) || {}; mcpBase.value = r.baseUrl || ''; mcps.value = r.servers || [] } catch (e) { mcps.value = [] }
   try { injected.value = (await api.GetMcpInjectedTargets()) || {} } catch (e) { injected.value = {} }
 }
+// 测试 MCP 是否可正常启动并响应握手：结果用图标颜色表示，不再弹提示
+const mcpTesting = ref({})
+const mcpTestResult = ref({}) // 服务名 → 'ok' | 'fail'
+const testingAll = ref(false)
+async function testMcp(s) {
+  if (mcpTesting.value[s.name]) return
+  mcpTesting.value[s.name] = true
+  delete mcpTestResult.value[s.name]
+  let result = 'fail'
+  try {
+    const r = await api.TestMcpServer(s.name)
+    result = r && r.ok ? 'ok' : 'fail'
+  } catch (e) { result = 'fail' }
+  finally {
+    delete mcpTesting.value[s.name]
+    mcpTestResult.value[s.name] = result
+  }
+}
+// 一键测试：并发测试全部 MCP 服务
+async function testAll() {
+  if (testingAll.value || !mcps.value.length) return
+  testingAll.value = true
+  try { await Promise.all(mcps.value.map(s => testMcp(s))) }
+  finally { testingAll.value = false }
+}
 function clientName(id) { return clientNames.value[id] || id }
 const selectedName = ref('')
 function selectMcp(name) { selectedName.value = name }
+// 启用/禁用：禁用项不参与任何注入；切换后静默持久化
+async function toggleMcp(s) {
+  s.enabled = s.enabled === false
+  await persist()
+}
 // 复制该 MCP 的标准 mcpServers JSON（含 name 外壳，可直接粘贴进客户端配置文件）
 function copyMcpJson(s, ev) {
   const entry = { type: s.type }
@@ -97,6 +127,7 @@ function openMcp(s = null) {
   if (s) {
     mcpOriginalName = s.name
     mcpForm.idx = mcps.value.indexOf(s); mcpForm.name = s.name; mcpForm.desc = s.desc || ''
+    mcpForm.enabled = s.enabled !== false
     mcpForm.type = s.type || 'stdio'
     mcpForm.command = s.command || ''
     mcpForm.argsText = JSON.stringify(s.args || [], null, 2)
@@ -111,11 +142,17 @@ function openMcp(s = null) {
   }
   else {
     mcpOriginalName = ''
-    mcpForm.idx = -1; mcpForm.name = ''; mcpForm.desc = ''; mcpForm.type = 'stdio'
+    mcpForm.idx = -1; mcpForm.name = ''; mcpForm.desc = ''; mcpForm.enabled = true; mcpForm.type = 'stdio'
     mcpForm.command = ''; mcpForm.argsText = '[]'; mcpForm.envText = ''
     mcpForm.url = ''; mcpForm.headersText = ''; mcpForm.extraText = ''
   }
   mcpEdit.value = true
+}
+// JSON 文本框失焦时自动格式化：合法则回写缩进文本，非法保持原样（保存时再报错）
+function formatJsonField(key) {
+  const s = (mcpForm[key] || '').trim()
+  if (!s) return
+  try { mcpForm[key] = JSON.stringify(JSON.parse(s), null, 2) } catch (e) {}
 }
 // 解析参数配置文本框（JSON 数组），失败返回 null
 function parseArgs() {
@@ -151,7 +188,7 @@ async function saveMcp() {
   if (type === 'stdio' && !mcpForm.command.trim()) { toast(t('mcp.commandRequired')); return }
   if (type !== 'stdio' && !mcpForm.url.trim()) { toast(t('mcp.urlRequired')); return }
   // 组装标准 MCP 服务参数并写入对应 JSON 文件
-  const doc = { name: mcpForm.name.trim(), desc: mcpForm.desc.trim(), type }
+  const doc = { name: mcpForm.name.trim(), desc: mcpForm.desc.trim(), type, enabled: mcpForm.enabled !== false }
   if (type === 'stdio') {
     doc.command = mcpForm.command.trim()
     if (args.length) doc.args = args
@@ -220,7 +257,7 @@ onMounted(async () => {
     clientNames.value = m
   } catch (e) {}
 })
-defineExpose({ openMcp, injectAll, ejectAll, openDir, mcpDir })
+defineExpose({ openMcp, injectAll, ejectAll, openDir, loadMcps, testAll, testingAll, mcpDir })
 
 // 列表行稳定唯一 key：名称不保证全局唯一，用对象自增 id
 const rowIds = new WeakMap()
@@ -237,19 +274,29 @@ function rowKey(s) {
     <!-- 左：MCP 列表（点行选中，右侧联动显示其注入分布） -->
     <div class="mcps-left">
       <div v-if="!mcps.length" class="empty-tip">{{ t('mcp.empty') }}</div>
-      <div v-for="s in mcps" :key="rowKey(s)" class="skill-row" :class="{ sel: selectedName === s.name }">
+      <div v-for="s in mcps" :key="rowKey(s)" class="skill-row" :class="{ sel: selectedName === s.name, disabled: s.enabled === false }">
         <div class="skill-main" @click="selectMcp(s.name)">
           <div class="skill-name">{{ s.name }} <span class="mcp-type">{{ s.type }}</span></div>
           <div class="skill-desc">{{ s.desc || s.command || s.url || '' }}</div>
         </div>
-        <button class="btn" @click.stop="copyMcpJson(s, $event)">{{ t('common.copy') }}</button>
-        <button class="btn" @click.stop="openMcp(s)">{{ t('common.edit') }}</button>
-        <button class="btn btn-danger" @click.stop="askDelete(s)">{{ t('common.delete') }}</button>
+        <button class="btn btn-icon mcp-enabled-btn" :class="{ off: s.enabled === false }" :title="s.enabled === false ? t('mcp.enable') : t('mcp.disable')" @click.stop="toggleMcp(s)">
+          <i :class="s.enabled === false ? 'ri-toggle-line' : 'ri-toggle-fill'"></i>
+        </button>
+        <button class="btn btn-icon mcp-test-btn" :class="{ ok: mcpTestResult[s.name] === 'ok', fail: mcpTestResult[s.name] === 'fail' }" :disabled="!!mcpTesting[s.name]"
+          :title="mcpTestResult[s.name] === 'ok' ? t('mcp.testOkTitle') : mcpTestResult[s.name] === 'fail' ? t('mcp.testFailTitle') : t('mcp.test')"
+          @click.stop="testMcp(s)">
+          <i v-if="mcpTestResult[s.name]" class="ri-checkbox-circle-line"></i>
+          <i v-else-if="mcpTesting[s.name]" class="ri-loader-4-line ri-spin"></i>
+          <i v-else class="ri-play-line"></i>
+        </button>
+        <button class="btn btn-icon mcp-copy-btn" :title="t('common.copy')" @click.stop="copyMcpJson(s, $event)"><i class="fa-solid fa-copy"></i></button>
+        <button class="btn btn-icon mcp-edit-btn" :title="t('common.edit')" @click.stop="openMcp(s)"><i class="ri-pencil-line"></i></button>
+        <button class="btn btn-icon mcp-del-btn" :title="t('common.delete')" @click.stop="askDelete(s)"><i class="ri-delete-bin-line"></i></button>
       </div>
     </div>
     <!-- 右：选中 MCP 被注入的客户端（点卡片打开其 MCP 配置文件位置） -->
     <div class="mcps-right">
-      <div class="mcp-right-head">{{ t('mcp.rightTitle') }}</div>
+      <div class="mcp-right-head">{{ selectedName ? t('mcp.rightTitleOf', { name: selectedName }) : t('mcp.rightTitle') }}</div>
       <template v-if="selectedName">
         <div v-if="(injected[selectedName] || []).length" class="mcp-right-grid">
           <div v-for="cid in injected[selectedName]" :key="cid" class="mcp-right-card"
@@ -284,15 +331,15 @@ function rowKey(s) {
         <template v-if="mcpForm.type === 'stdio'">
           <div class="field"><label>{{ t('mcp.command') }}</label><input v-model="mcpForm.command" :placeholder="t('mcp.commandPh')" style="font-family:var(--mono)"></div>
           <div class="field-row">
-            <div class="field"><label>{{ t('mcp.argsCfg') }}</label><textarea v-model="mcpForm.argsText" rows="3" style="font-family:var(--mono);resize:vertical" :placeholder="'[&quot;-y&quot;, &quot;mcp-server&quot;]'"></textarea></div>
-            <div class="field"><label>{{ t('mcp.envCfg') }}</label><textarea v-model="mcpForm.envText" rows="3" style="font-family:var(--mono);resize:vertical" :placeholder="'{&quot;API_KEY&quot;: &quot;…&quot;}'"></textarea></div>
+            <div class="field"><label>{{ t('mcp.argsCfg') }}</label><textarea v-model="mcpForm.argsText" rows="3" style="font-family:var(--mono);resize:vertical" :placeholder="'[&quot;-y&quot;, &quot;mcp-server&quot;]'" @blur="formatJsonField('argsText')"></textarea></div>
+            <div class="field"><label>{{ t('mcp.envCfg') }}</label><textarea v-model="mcpForm.envText" rows="3" style="font-family:var(--mono);resize:vertical" :placeholder="'{&quot;API_KEY&quot;: &quot;…&quot;}'" @blur="formatJsonField('envText')"></textarea></div>
           </div>
         </template>
         <template v-else>
           <div class="field"><label>{{ t('mcp.url') }}</label><input v-model="mcpForm.url" placeholder="https://…" style="font-family:var(--mono)"></div>
-          <div class="field"><label>{{ t('mcp.headersCfg') }}</label><textarea v-model="mcpForm.headersText" rows="3" style="font-family:var(--mono);resize:vertical" :placeholder="'{&quot;Authorization&quot;: &quot;Bearer …&quot;}'"></textarea></div>
+          <div class="field"><label>{{ t('mcp.headersCfg') }}</label><textarea v-model="mcpForm.headersText" rows="3" style="font-family:var(--mono);resize:vertical" :placeholder="'{&quot;Authorization&quot;: &quot;Bearer …&quot;}'" @blur="formatJsonField('headersText')"></textarea></div>
         </template>
-        <div class="field"><label>{{ t('mcp.extraCfg') }}</label><textarea v-model="mcpForm.extraText" rows="2" style="font-family:var(--mono);resize:vertical" :placeholder="t('mcp.extraPh')"></textarea></div>
+        <div class="field"><label>{{ t('mcp.extraCfg') }}</label><textarea v-model="mcpForm.extraText" rows="2" style="font-family:var(--mono);resize:vertical" :placeholder="t('mcp.extraPh')" @blur="formatJsonField('extraText')"></textarea></div>
       </div>
     </div>
 
@@ -318,6 +365,21 @@ function rowKey(s) {
 .mcps-split{display:flex;align-items:stretch;min-height:100%}
 .mcps-left{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;border-right:1px solid var(--border);padding-right:12px}
 .skill-row.sel{border-color:var(--accent)}
+/* MCP 卡片图标按钮：只留图标，无边框/背景，各自语义色；测试结果圆形勾绿/红 */
+.btn-icon{width:20px;min-width:20px;padding:0;border:none;background:transparent}
+.btn-icon:hover{background:transparent;border:none;filter:brightness(1.25)}
+.btn-icon i{font-size:14px;line-height:1}
+.ri-spin{animation:ri-spin 1s linear infinite}
+@keyframes ri-spin{to{transform:rotate(360deg)}}
+.skill-row.disabled{opacity:.5}
+.mcp-enabled-btn i{color:#3fbf6f}       /* 启用：绿 */
+.mcp-enabled-btn.off i{color:#8a94a3}   /* 禁用：灰 */
+.mcp-test-btn i{color:#4aa3ff}          /* 测试：蓝 */
+.mcp-copy-btn i{color:#9b8cff}          /* 复制：紫 */
+.mcp-edit-btn i{color:#e0a13c}          /* 编辑：橙 */
+.mcp-del-btn i{color:#e05a5a}           /* 删除：红 */
+.mcp-test-btn.ok i{color:#3fbf6f}
+.mcp-test-btn.fail i{color:#e05a5a}
 .mcps-right{flex:1;min-width:0;padding-left:12px;align-self:stretch}
 .mcp-right-head{font-size:10px;color:var(--t3);letter-spacing:.04em;margin-bottom:6px}
 .mcp-right-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px}

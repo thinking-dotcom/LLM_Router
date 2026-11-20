@@ -17,6 +17,7 @@ type MCPServer struct {
 	Command string   `json:"command,omitempty"` // stdio 命令行程序
 	Args    []string `json:"args,omitempty"`
 	URL     string   `json:"url,omitempty"` // sse / http 地址
+	Enabled bool     `json:"enabled"`       // 是否参与注入（缺省视为 true）
 	// Extra 保存配置文件里不被上述字段管制的自定义键（env/headers/transport 等）。
 	// 非空时逐字保留，保证列表改名/删除等整体持久化不再抹掉用户手写字段。
 	Extra map[string]json.RawMessage `json:"-"`
@@ -25,7 +26,7 @@ type MCPServer struct {
 // mcpManagedKeys 是 MCPServer 受管字段（Extra 之外），序列化/反序列化时跳过。
 var mcpManagedKeys = map[string]bool{
 	"name": true, "desc": true, "type": true,
-	"command": true, "args": true, "url": true,
+	"command": true, "args": true, "url": true, "enabled": true,
 }
 
 // McpManagedKey 判断键是否由 MCPServer 的受管字段承载（供 main 绑定层识别
@@ -42,6 +43,10 @@ func (s *MCPServer) UnmarshalJSON(b []byte) error {
 	*s = MCPServer(p)
 	var all map[string]json.RawMessage
 	if json.Unmarshal(b, &all) == nil {
+		// 旧配置没有 enabled 字段：缺省视为启用
+		if _, ok := all["enabled"]; !ok {
+			s.Enabled = true
+		}
 		for k, v := range all {
 			if mcpManagedKeys[k] {
 				continue
@@ -57,7 +62,7 @@ func (s *MCPServer) UnmarshalJSON(b []byte) error {
 
 // MarshalJSON 输出受管字段 + 自定义键（顶层平铺），保证往返不丢字段。
 func (s MCPServer) MarshalJSON() ([]byte, error) {
-	m := map[string]any{"name": s.Name, "type": s.Type}
+	m := map[string]any{"name": s.Name, "type": s.Type, "enabled": s.Enabled}
 	if s.Desc != "" {
 		m["desc"] = s.Desc
 	}
@@ -260,6 +265,18 @@ func GetMcps() (string, []MCPServer) {
 	base := loadMcpBaseURL()
 	servers := readMcpDirServers()
 	return base, servers
+}
+
+// EnabledMcps 返回参与注入的 MCP 服务（禁用项跳过）。
+func EnabledMcps() []MCPServer {
+	_, all := GetMcps()
+	out := make([]MCPServer, 0, len(all))
+	for _, s := range all {
+		if s.Enabled {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // SaveMcps 保存 MCP 配置：baseUrl 写入 mcps.json；每个服务写成独立

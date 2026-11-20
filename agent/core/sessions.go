@@ -798,6 +798,29 @@ type SessionResumePlan struct {
 // 根目录内、层级与注册表相符），并按注册表 Resume 模板组装「在终端中恢复该
 // 会话」的命令。返回错误的情况：未登记客户端、路径越界/层级不符/条目不存在、
 // 该客户端不支持按会话恢复（如 Copilot 仅支持 --continue）。
+// sessionRealPath 解析路径中的符号链接（含中间目录 junction）后再校验归属。
+// 仅对 Abs+Rel 做字符串判断时，会话根目录内指向外部的链接可绕过校验，
+// 导致删除/恢复操作落到会话目录之外的文件。
+func sessionRealPath(rootAbs, p string) (string, string, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return "", "", err
+	}
+	realRoot, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", "", errors.New("会话不存在或不可读: " + p)
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", "", errors.New("会话不存在或不可读: " + p)
+	}
+	rel, err := filepath.Rel(realRoot, real)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return "", "", errors.New("路径不在会话目录内: " + p)
+	}
+	return real, rel, nil
+}
+
 func BuildSessionResume(clientID, path string) (*SessionResumePlan, error) {
 	st, rootAbs, ok := sessionStoreOf(clientID)
 	if !ok {
@@ -807,13 +830,15 @@ func BuildSessionResume(clientID, path string) (*SessionResumePlan, error) {
 		return buildCLISessionResume(clientID, st, path)
 	}
 	rootAbs = filepath.Clean(rootAbs)
+	// 校验走解析符号链接后的真实路径；命令参数仍用调用方传入的绝对路径，
+	// 避免 EvalSymlinks 改写路径形态影响 {file} 占位符。
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err
 	}
-	rel, err := filepath.Rel(rootAbs, abs)
-	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-		return nil, errors.New("路径不在会话目录内: " + path)
+	_, rel, err := sessionRealPath(rootAbs, path)
+	if err != nil {
+		return nil, err
 	}
 	if strings.Count(rel, string(filepath.Separator))+1 != st.Depth {
 		return nil, errors.New("路径层级与该客户端的会话结构不符: " + path)
@@ -1374,20 +1399,23 @@ func DeleteSessionItems(clientID string, paths []string) error {
 	}
 	rootAbs = filepath.Clean(rootAbs)
 	for _, p := range paths {
-		abs, err := filepath.Abs(p)
+		// 幂等：路径本身不存在视为删除成功，需在符号链接解析前判断
+		if _, err := os.Lstat(p); err != nil && os.IsNotExist(err) {
+			continue
+		}
+		abs, rel, err := sessionRealPath(rootAbs, p)
 		if err != nil {
 			return err
-		}
-		rel, err := filepath.Rel(rootAbs, abs)
-		if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
-			return errors.New("路径不在会话目录内，已拒绝删除: " + p)
 		}
 		if strings.Count(rel, string(filepath.Separator))+1 != st.Depth {
 			return errors.New("路径层级与该客户端的会话结构不符，已拒绝删除: " + p)
 		}
 		fi, err := os.Lstat(abs)
 		if err != nil {
-			continue // 已不存在视为删除成功（幂等）
+			if os.IsNotExist(err) {
+				continue // 已不存在视为删除成功（幂等）
+			}
+			return err
 		}
 		if fi.IsDir() {
 			if st.Kind != "dir" {

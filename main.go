@@ -227,7 +227,12 @@ func (a *App) GetSkillsDir() string {
 // 的全部技能整体复制进各支持客户端的技能目录，或从客户端技能目录移除本程序
 // 注入的技能副本（按注入清单，客户端自有的其它文件不受影响）。
 func (a *App) SyncAllSkills(inject bool) map[string]any {
-	return map[string]any{"ok": true, "results": agentcore.BulkSyncSkills(inject)}
+	results := agentcore.BulkSyncSkillsProgress(inject, func(done, total int, name string) {
+		if a.ctx != nil {
+			wailsruntime.EventsEmit(a.ctx, "skills:sync-progress", done, total, name)
+		}
+	})
+	return map[string]any{"ok": true, "results": results}
 }
 
 // OpenSkillsDir 在系统文件管理器中打开技能目录（目录不存在时先创建）
@@ -491,10 +496,37 @@ func clipboardLaunchDir() string {
 	return dir
 }
 
-// LaunchClientTerminal 启动指定客户端 CLI（客户端卡片「启动」图标）：默认拉起
-// 内嵌终端窗口（自身 --term 精简实例，xterm.js + winpty + 内嵌 Git Bash），可自由
-// 移动、独立最小化/最大化；无 Git Bash 时回退系统 cmd 外部窗口。工作目录优先
-// 取剪贴板里的路径（目录/文件均支持，见 clipboardLaunchDir）。
+// ListSystemTerminals 返回当前系统可用的终端列表（PATH + 系统环境变量检测），
+// 供客户端卡片终端图标弹出选择。
+func (a *App) ListSystemTerminals() []SystemTerminal {
+	all := detectSystemTerminals()
+	out := make([]SystemTerminal, 0, len(all))
+	for _, t := range all {
+		out = append(out, t.SystemTerminal)
+	}
+	return out
+}
+
+// LaunchClientTerminalIn 用用户选择的系统终端启动客户端 CLI。
+func (a *App) LaunchClientTerminalIn(clientID, terminalID string) map[string]any {
+	bin, ok := agentcore.ClientBinOf(clientID)
+	if !ok {
+		return map[string]any{"ok": false, "error": "该客户端未登记 CLI 可执行名"}
+	}
+	if _, err := exec.LookPath(bin); err != nil {
+		return map[string]any{"ok": false, "error": "未检测到 " + bin + " CLI，请先安装"}
+	}
+	t, ok := findSystemTerminal(terminalID)
+	if !ok {
+		return map[string]any{"ok": false, "error": "所选终端当前不可用"}
+	}
+	if err := launchInSystemTerminal(t, clipboardLaunchDir(), clientID, []string{bin}); err != nil {
+		return map[string]any{"ok": false, "error": err.Error()}
+	}
+	return map[string]any{"ok": true}
+}
+
+// LaunchClientTerminal 兼容旧调用：用检测到的首个系统终端启动。
 func (a *App) LaunchClientTerminal(clientID string) map[string]any {
 	bin, ok := agentcore.ClientBinOf(clientID)
 	if !ok {
@@ -503,8 +535,7 @@ func (a *App) LaunchClientTerminal(clientID string) map[string]any {
 	if _, err := exec.LookPath(bin); err != nil {
 		return map[string]any{"ok": false, "error": "未检测到 " + bin + " CLI，请先安装"}
 	}
-	dir := clipboardLaunchDir()
-	if err := spawnClientTermWindow(dir, []string{bin}, clientID); err != nil {
+	if err := spawnClientTermWindow(clipboardLaunchDir(), []string{bin}, clientID); err != nil {
 		return map[string]any{"ok": false, "error": err.Error()}
 	}
 	return map[string]any{"ok": true}
@@ -553,12 +584,17 @@ func (a *App) SaveMcps(raw map[string]any) map[string]any {
 	if list, ok := raw["servers"].([]any); ok {
 		for _, item := range list {
 			if m, ok := item.(map[string]any); ok {
+				enabled := true
+				if v, ok := m["enabled"].(bool); ok {
+					enabled = v
+				}
 				s := agentcore.MCPServer{
 					Name:    str(m, "name"),
 					Desc:    str(m, "desc"),
 					Type:    str(m, "type"),
 					Command: str(m, "command"),
 					URL:     str(m, "url"),
+					Enabled: enabled,
 				}
 				if arr, ok := m["args"].([]any); ok {
 					for _, arg := range arr {
@@ -1265,7 +1301,7 @@ func newAssetServer(assets fs.FS) *assetserver.Options {
 		Middleware: func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				p := r.URL.Path
-				if p == "/" || p == "/index.html" || strings.HasSuffix(p, ".html") {
+				if p == "/" || p == "/index.html" || strings.HasSuffix(p, ".html") || strings.HasSuffix(p, "style.css") {
 					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 				}
 				next.ServeHTTP(w, r)

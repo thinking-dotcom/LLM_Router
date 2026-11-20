@@ -164,15 +164,10 @@ func resolveProviderInner(model string, config *types.Config) (*types.Provider, 
 		if !p.Enabled {
 			continue
 		}
-		for alias := range p.Aliases {
-			// 与步骤 1 的 atHint 保护一致：携带 @服务商 后缀时跳过通配别名，
-			// 避免其它服务商的通配别名吞掉整串（如 claude-* 匹配 claude-x@provider）
-			if atHint && strings.Contains(alias, "*") {
-				continue
-			}
-			if MatchModel(alias, model) {
-				return p, false
-			}
+		// 与步骤 1 的 atHint 保护一致：携带 @服务商 后缀时跳过通配别名，
+		// 避免其它服务商的通配别名吞掉整串（如 claude-* 匹配 claude-x@provider）
+		if _, ok := ResolveAlias(p.Aliases, model, atHint); ok {
+			return p, false
 		}
 	}
 
